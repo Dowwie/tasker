@@ -1,353 +1,125 @@
-# Task Decomposition Protocol v2
+# Tasker
 
-A **schema-validated, state-managed** approach to task decomposition.
+A Claude Code-powered task decomposition and execution framework. Transforms software specifications into executable DAGs of atomic, verifiable tasks.
 
-## Why v2?
+## Overview
 
-The original design has weaknesses that compound in practice:
+Tasker implements a **Task Decomposition Protocol** that:
+- Breaks specifications into behavioral atoms (Input/Process/State/Output)
+- Maps atoms to physical files and artifacts
+- Sequences tasks into dependency-aware waves
+- Executes tasks via isolated Claude Code subagents
 
-| Problem | Original | v2 Solution |
-|---------|----------|-------------|
-| **State detection** | Scan filesystem for file existence | Explicit `state.json` with phase tracking |
-| **Artifact validation** | None - trust agent output | JSON schemas with validation gates |
-| **Task inventory** | Monolithic markdown file | Individual JSON files per task |
-| **Progress tracking** | Mutable progress.md | Append-only event log in state.json |
-| **Error recovery** | Manual cleanup | Built-in rollback tracking |
-| **Ready task computation** | Hardcoded wave order | Dynamic DAG resolution |
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         COMMANDS                                │
-│                                                                 │
-│          /plan                              /execute            │
-│            │                                    │               │
-│            ▼                                    ▼               │
-│    ┌───────────────┐                   ┌───────────────┐       │
-│    │ Ask for spec, │                   │ Ask for plan  │       │
-│    │ target dir,   │                   │ dir, target   │       │
-│    │ constraints   │                   │ dir           │       │
-│    └───────┬───────┘                   └───────┬───────┘       │
-│            │                                    │               │
-│            ▼                                    ▼               │
-├────────────────────────────────────────────────────────────────┤
-│                    scripts/state.py                             │
-│           (Single source of truth for all state)                │
-├────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Planning Commands:              Execution Commands:            │
-│    init, validate, advance         ready-tasks, start-task,    │
-│    load-tasks                      complete-task, fail-task    │
-│                                                                 │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-           ┌────────────────┴────────────────┐
-           │                                 │
-           ▼                                 ▼
-  ┌─────────────────┐               ┌─────────────────┐
-  │  Planning Mode  │               │ Execution Mode  │
-  │  (Phases 0-5)   │               │   (Phase 6)     │
-  │                 │               │                 │
-  │  Agents:        │               │  Subagents:     │
-  │  • logic-arch   │               │  • task-executor│
-  │  • physical-arch│               │    (isolated)   │
-  │  • task-author  │               │                 │
-  │  • plan-auditor │               │  Hook:          │
-  │                 │               │  • token logging│
-  │  Output:        │               │                 │
-  │  • JSON artifacts│              │  Output:        │
-  │  • Task files   │               │  • Code in target│
-  │  • state.json   │               │  • Updated state│
-  └─────────────────┘               └─────────────────┘
-```
-
-## Key Improvements
-
-### 1. Schema-Validated Artifacts
-
-Agents output JSON that **must validate** against schemas:
+## Quick Start
 
 ```bash
-# Agent outputs capability-map.json
-python3 scripts/state.py validate capability_map
+# Install dependencies
+uv sync
 
-# Returns exit code 0 (valid) or 1 (invalid)
-# Invalid = agent must fix before advancing
+# In Claude Code, plan a project:
+/plan
+
+# Then execute the plan:
+/execute
 ```
 
-No more "file exists but is garbage" problems.
+## Commands
 
-### 2. Individual Task Files
+| Command | Description |
+|---------|-------------|
+| `/plan` | Decompose a spec into a task DAG (phases 0-5) |
+| `/execute` | Run tasks via isolated subagents |
+| `/execute T005` | Execute a specific task |
+| `/execute --batch` | Execute all ready tasks without prompts |
 
-Instead of one giant inventory:
-```
-project-planning/tasks/
-├── T001.json    # Can work on this
-├── T002.json    # While someone works on this  
-├── T003.json    # And this
-└── ...
-```
-
-Benefits:
-- Parallel task creation
-- Atomic state updates
-- Clean git diffs
-- Easy to re-run single task
-
-### 3. Explicit State Machine
-
-State is **never inferred** from filesystem:
-
-```json
-{
-  "phase": {
-    "current": "executing",
-    "completed": ["ingestion", "logical", "physical", "definition", "sequencing", "ready"]
-  },
-  "tasks": {
-    "T001": {"status": "complete", "completed_at": "..."},
-    "T002": {"status": "running", "started_at": "..."},
-    "T003": {"status": "pending"}
-  }
-}
-```
-
-### 4. Validation Gates
-
-Phase transitions require validation:
+## Planning Phases
 
 ```
-logical phase
-    │
-    ▼
-[Agent outputs capability-map.json]
-    │
-    ▼
-[state.py validate capability_map]
-    │
-    ├── FAIL → Agent fixes output
-    │
-    └── PASS → [state.py advance] → physical phase
+Phase 0: Ingestion     → spec.md saved
+Phase 1: Logical       → capability-map.json (what the system does)
+Phase 2: Physical      → physical-map.json (where code lives)
+Phase 3: Definition    → tasks/*.json (individual task files)
+Phase 4: Sequencing    → wave assignments, DAG validation
+Phase 5: Ready         → planning complete, ready for execution
 ```
 
-### 5. Dynamic Ready-Task Resolution
+## Project Structure
 
-Instead of hardcoded wave execution:
+```
+.claude/
+├── agents/           # Specialized subagent definitions
+│   ├── logic-architect.md
+│   ├── physical-architect.md
+│   ├── task-author.md
+│   ├── plan-auditor.md
+│   └── task-executor.md
+├── commands/         # Slash commands
+│   ├── plan.md
+│   └── execute.md
+├── skills/
+│   └── orchestrator/ # Main orchestration skill
+└── hooks/            # Event hooks
+
+scripts/
+├── state.py          # State management CLI
+└── bundle.py         # Execution bundle generator
+
+schemas/              # JSON Schema validation
+├── capability-map.schema.json
+├── physical-map.schema.json
+├── task.schema.json
+├── execution-bundle.schema.json
+└── state.schema.json
+```
+
+## State Management
 
 ```bash
-$ python3 scripts/state.py ready-tasks
-T005: Implement user service (wave 2)
-T006: Add logging middleware (wave 2)
-T007: Create health endpoint (wave 2)
-```
-
-Tasks are "ready" when all dependencies complete - computed at runtime.
-
-### 6. Built-in Rollback
-
-Task executor tracks all changes:
-
-```python
-# Before modifying
-BACKUP: /tmp/rollback-T001/
-
-# On failure
-→ Delete created files
-→ Restore modified files
-→ Mark task failed
-→ Dependent tasks auto-blocked
-```
-
-### 7. Append-Only Event Log
-
-All state changes logged:
-
-```json
-"events": [
-  {"timestamp": "...", "type": "task_started", "task_id": "T001"},
-  {"timestamp": "...", "type": "task_completed", "task_id": "T001"},
-  {"timestamp": "...", "type": "tokens_logged", "details": {"cost": 0.0234}}
-]
-```
-
-Enables: auditing, debugging, replaying state.
-
-## Usage
-
-### Plan (Decompose Spec → Tasks)
-
-```bash
-claude
-> /plan
-```
-
-You'll be asked for:
-1. Your specification (paste or path)
-2. Target directory (where code will be written)
-3. Constraints (optional - tech stack, rules)
-
-The planner runs through phases 0-5, producing:
-- `capability-map.json` (validated)
-- `physical-map.json` (validated)
-- `tasks/*.json` (individual task files)
-- `state.json` (ready for execution)
-
-### Execute (Run Tasks via Subagents)
-
-```bash
-> /execute
-```
-
-You'll be asked for:
-1. Planning directory (where state.json lives)
-2. Target directory (where code gets written)
-
-The executor:
-- Queries ready tasks dynamically
-- Spawns isolated subagent per task
-- Tracks files for rollback
-- Logs token usage
-- Continues until complete
-
-### Execution Options
-
-```bash
-> /execute           # Interactive, one at a time
-> /execute T005      # Specific task only
-> /execute --batch   # All ready, no prompts
-```
-
-### Check Status
-
-```bash
+# Check current status
 python3 scripts/state.py status
+
+# List ready tasks
 python3 scripts/state.py ready-tasks
-```
 
-### Error Recovery
-
-```bash
-# Retry a failed task (resets to pending, unblocks dependents)
+# Retry a failed task
 python3 scripts/state.py retry-task T005
 
-# Skip a blocked task (treats as complete for dependency purposes)
-python3 scripts/state.py skip-task T005 "Not needed for MVP"
+# Skip a blocked task
+python3 scripts/state.py skip-task T005 "reason"
 ```
 
-### Execute from Target Project
+## Bundle Generation
 
-Install `/work` command in your target project:
+Each task gets a self-contained execution bundle with:
+- Expanded atom details
+- File paths with purposes
+- Acceptance criteria
+- Constraints (language, framework, patterns)
+- Dependency files from prior tasks
 
 ```bash
-# Install /work command
-python3 scripts/install_work_command.py /path/to/target/project
-
-# Then from target project:
-cd /path/to/target/project
-claude
-> /work
+python3 scripts/bundle.py generate T001       # Generate for one task
+python3 scripts/bundle.py generate-ready      # Generate all ready
+python3 scripts/bundle.py list                # List existing bundles
 ```
 
-This allows you to work from the target project context while still using the tasker planning infrastructure.
-
-## Templates
-
-Copy templates to get started:
+## Development
 
 ```bash
-mkdir -p project-planning/inputs
-cp templates/spec.md.example project-planning/inputs/spec.md
-cp templates/constraints.md.example project-planning/inputs/constraints.md
-# Edit with your project details
+make install    # Setup project
+make lint       # Run ruff
+make test       # Run pytest
+make clean      # Remove artifacts
 ```
 
-See `templates/README.md` for full documentation.
+## How It Works
 
-## Documentation
+1. **Planning**: The orchestrator coordinates specialized agents through planning phases, producing schema-validated JSON artifacts
 
-- `docs/protocol.md` - Full protocol specification with phase details
-- `templates/README.md` - Template usage guide
-- `.claude/skills/orchestrator/SKILL.md` - Orchestrator implementation details
+2. **Execution**: Tasks run in isolated subagent contexts with full context budgets, no memory of previous tasks, and automatic rollback on failure
 
-## Directory Structure
+3. **State**: All state transitions go through `scripts/state.py`, which tracks phases, task status, token usage, and events
 
-```
-tasker/
-├── .claude/
-│   ├── agents/
-│   │   ├── logic-architect.md      # Phase 1: spec → capabilities
-│   │   ├── physical-architect.md   # Phase 2: atoms → files
-│   │   ├── task-author.md          # Phase 3: files → tasks
-│   │   ├── plan-auditor.md         # Phase 4: tasks → waves
-│   │   └── task-executor.md        # Phase 6: task → code
-│   ├── commands/
-│   │   ├── plan.md                 # /plan - decomposition
-│   │   └── execute.md              # /execute - run tasks
-│   ├── hooks/
-│   │   └── subagent_stop.py        # Token tracking
-│   └── skills/
-│       └── orchestrator/
-│           └── SKILL.md            # Thin coordination layer
-├── docs/
-│   └── protocol.md                 # Full protocol specification
-├── schemas/
-│   ├── state.schema.json           # Execution state
-│   ├── capability-map.schema.json  # Phase 1 output
-│   ├── physical-map.schema.json    # Phase 2 output
-│   ├── task.schema.json            # Individual task
-│   └── execution-bundle.schema.json # Task execution bundle
-├── scripts/
-│   ├── state.py                    # All state management
-│   ├── bundle.py                   # Execution bundle generator
-│   └── install_work_command.py     # Install /work in target project
-├── templates/
-│   ├── spec.md.example             # Specification template
-│   ├── constraints.md.example      # Constraints template
-│   ├── task.json.example           # Task file example
-│   ├── commands/
-│   │   └── work.md                 # /work command template
-│   └── README.md                   # Template usage guide
-└── project-planning/               # Created at runtime
-    ├── state.json                  # Single source of truth
-    ├── inputs/
-    │   ├── spec.md
-    │   └── constraints.md
-    ├── artifacts/
-    │   ├── capability-map.json
-    │   └── physical-map.json
-    ├── tasks/
-    │   ├── T001.json
-    │   └── ...
-    └── bundles/
-        ├── T001-bundle.json
-        └── ...
-```
+## License
 
-## Comparison Summary
-
-| Aspect | Original | v2 |
-|--------|----------|-----|
-| **Commands** | `/task-decompose`, `/work` | `/plan`, `/execute` |
-| **State detection** | Filesystem scan | Explicit state.json |
-| **Artifact format** | Markdown | Validated JSON |
-| **Task storage** | Single file | Individual files |
-| **Validation** | None | Schema-based gates |
-| **Ready tasks** | Wave-based | DAG-computed |
-| **Error recovery** | Manual | Built-in rollback |
-| **Event history** | Mutable progress.md | Append-only log |
-| **Orchestrator** | Heavy (all logic) | Thin (delegates to state.py) |
-
-## When to Use Original vs v2
-
-**Use Original** if:
-- Simple project, few tasks
-- Prefer markdown readability
-- Don't need parallel execution
-
-**Use v2** if:
-- Complex project, many tasks
-- Need robust error recovery
-- Want parallel task execution
-- Need audit trail
-- Agents produce unreliable output (validation gates help)
+See [LICENSE.md](LICENSE.md)
