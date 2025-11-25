@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DecompositionState",
+  "description": "Single source of truth for decomposition progress",
+  "type": "object",
+  "required": ["version", "phase", "target_dir", "created_at", "artifacts", "tasks"],
+  "properties": {
+    "version": { "const": "2.0" },
+    
+    "phase": {
+      "type": "object",
+      "required": ["current", "completed"],
+      "properties": {
+        "current": { 
+          "enum": ["ingestion", "logical", "physical", "definition", "sequencing", "ready", "executing", "complete"] 
+        },
+        "completed": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    
+    "target_dir": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    
+    "artifacts": {
+      "type": "object",
+      "properties": {
+        "capability_map": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "checksum": { "type": "string" },
+            "valid": { "type": "boolean" },
+            "validated_at": { "type": "string", "format": "date-time" }
+          }
+        },
+        "physical_map": { "$ref": "#/properties/artifacts/properties/capability_map" },
+        "dependency_graph": { "$ref": "#/properties/artifacts/properties/capability_map" }
+      }
+    },
+    
+    "tasks": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "status", "wave"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "enum": ["pending", "ready", "running", "complete", "failed", "blocked"] },
+          "wave": { "type": "integer" },
+          "depends_on": { "type": "array", "items": { "type": "string" } },
+          "blocks": { "type": "array", "items": { "type": "string" } },
+          "started_at": { "type": "string", "format": "date-time" },
+          "completed_at": { "type": "string", "format": "date-time" },
+          "error": { "type": "string" },
+          "files_created": { "type": "array", "items": { "type": "string" } },
+          "files_modified": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    
+    "execution": {
+      "type": "object",
+      "properties": {
+        "current_wave": { "type": "integer" },
+        "active_tasks": { "type": "array", "items": { "type": "string" } },
+        "completed_count": { "type": "integer" },
+        "failed_count": { "type": "integer" },
+        "total_tokens": { "type": "integer" },
+        "total_cost_usd": { "type": "number" }
+      }
+    },
+    
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "type"],
+        "properties": {
+          "timestamp": { "type": "string", "format": "date-time" },
+          "type": { "type": "string" },
+          "task_id": { "type": "string" },
+          "details": { "type": "object" }
+        }
+      }
+    }
+  }
+}

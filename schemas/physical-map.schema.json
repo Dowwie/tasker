@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PhysicalMap",
+  "description": "Phase 2 output: Maps behavioral atoms to concrete file paths",
+  "type": "object",
+  "required": ["version", "target_dir", "file_mapping", "summary"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "target_dir": {
+      "type": "string",
+      "description": "Absolute path to target directory where code will be written"
+    },
+    "capability_map_checksum": {
+      "type": "string",
+      "description": "SHA256 checksum of capability-map.json for change detection"
+    },
+
+    "file_mapping": {
+      "type": "array",
+      "description": "Maps each atom to its implementation files",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["atom_id", "atom_name", "files"],
+        "properties": {
+          "atom_id": {
+            "type": "string",
+            "pattern": "^A[0-9]+$",
+            "description": "Reference to atom ID from capability map"
+          },
+          "atom_name": { "type": "string" },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["path", "action"],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Relative path from target_dir"
+                },
+                "action": {
+                  "enum": ["create", "modify", "extend"],
+                  "description": "create=new file, modify=change existing, extend=add to existing"
+                },
+                "layer": {
+                  "enum": ["api", "domain", "data", "infra", "test"],
+                  "description": "Architectural layer classification"
+                },
+                "purpose": {
+                  "type": "string",
+                  "description": "Brief description of what this file does"
+                }
+              }
+            }
+          },
+          "tests": {
+            "type": "array",
+            "description": "Test files for this atom",
+            "items": {
+              "type": "object",
+              "required": ["path", "action"],
+              "properties": {
+                "path": { "type": "string" },
+                "action": { "enum": ["create", "modify", "extend"] }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "cross_cutting": {
+      "type": "array",
+      "description": "Non-functional concerns that span multiple components",
+      "items": {
+        "type": "object",
+        "required": ["concern", "files"],
+        "properties": {
+          "concern": {
+            "type": "string",
+            "description": "Name of cross-cutting concern (e.g., logging, auth, error_handling)"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "action"],
+              "properties": {
+                "path": { "type": "string" },
+                "action": { "enum": ["create", "modify", "extend"] },
+                "purpose": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "infrastructure": {
+      "type": "array",
+      "description": "Infrastructure and DevOps files",
+      "items": {
+        "type": "object",
+        "required": ["path", "action"],
+        "properties": {
+          "path": { "type": "string" },
+          "action": { "enum": ["create", "modify", "extend"] },
+          "purpose": { "type": "string" }
+        }
+      }
+    },
+
+    "summary": {
+      "type": "object",
+      "description": "Aggregate counts for validation",
+      "required": ["total_atoms", "total_files"],
+      "properties": {
+        "total_atoms": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total number of atoms mapped"
+        },
+        "total_files": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total number of files to create/modify"
+        },
+        "files_to_create": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_to_modify": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

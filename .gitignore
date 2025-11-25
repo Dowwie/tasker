@@ -1,0 +1,15 @@
+# Project-specific state (contains paths, progress)
+project-planning/
+
+# Configured settings
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# Rollback files
+/tmp/rollback-*/

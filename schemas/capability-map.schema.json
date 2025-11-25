@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CapabilityMap",
+  "description": "Phase 1 output: Logical decomposition of spec into domains, capabilities, and atoms",
+  "type": "object",
+  "required": ["version", "domains", "flows"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "spec_checksum": { "type": "string", "description": "SHA256 of source spec for change detection" },
+    
+    "domains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "capabilities"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^D[0-9]+$" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "atoms"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^C[0-9]+$" },
+                "name": { "type": "string" },
+                "spec_ref": { "type": "string" },
+                "atoms": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "name", "type"],
+                    "properties": {
+                      "id": { "type": "string", "pattern": "^A[0-9]+$" },
+                      "name": { "type": "string" },
+                      "type": { "enum": ["input", "process", "state", "output"] },
+                      "description": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "flows": {
+      "type": "array",
+      "description": "End-to-end user journeys mapped to atoms",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "steps"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^F[0-9]+$" },
+          "name": { "type": "string" },
+          "is_steel_thread": { "type": "boolean", "default": false },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["atom_id"],
+              "properties": {
+                "order": { "type": "integer" },
+                "atom_id": { "type": "string" },
+                "description": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    
+    "coverage": {
+      "type": "object",
+      "description": "Validation that all spec requirements map to atoms",
+      "properties": {
+        "total_requirements": { "type": "integer" },
+        "covered_requirements": { "type": "integer" },
+        "gaps": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

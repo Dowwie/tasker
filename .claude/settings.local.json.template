@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(jq:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Read({{PROJECT_ROOT}}/**)",
+      "Write({{PROJECT_ROOT}}/project-planning/**)",
+      "Read({{TARGET_DIR}}/**)",
+      "Write({{TARGET_DIR}}/**)",
+      "Edit({{TARGET_DIR}}/**)"
+    ]
+  },
+  "hooks": {
+    "SubagentStop": [{
+      "matcher": "",
+      "hooks": [{
+        "type": "command",
+        "command": "python3 {{PROJECT_ROOT}}/.claude/hooks/subagent_stop.py"
+      }]
+    }]
+  }
+}

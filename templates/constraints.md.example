@@ -1,0 +1,81 @@
+# Project Constraints Template
+
+Copy this file to `project-planning/inputs/constraints.md` and customize for your project.
+
+---
+
+# {{PROJECT_NAME}} - Project Constraints
+
+## Technology Stack
+
+### Language & Runtime
+- **Language:** {{e.g., Python 3.13+}}
+- **Package Manager:** {{e.g., uv (not pip/poetry)}}
+
+### Frameworks
+- **API Framework:** {{e.g., FastAPI}}
+- **HTTP Client:** {{e.g., httpx}}
+- **Validation:** {{e.g., Pydantic v2}}
+
+### Testing & Quality
+- **Test Framework:** {{e.g., pytest}}
+- **Linter:** {{e.g., ruff}}
+- **Type Checker:** {{e.g., ty, mypy, pyright}}
+- **Coverage Requirement:** {{e.g., >= 90%}}
+
+### Observability
+- **Logging:** {{e.g., loguru}}
+- **Tracing:** {{e.g., OpenTelemetry}}
+- **Metrics:** {{e.g., Prometheus}}
+
+## Architecture Rules
+
+### Design Patterns (Required)
+- {{e.g., Use `typing.Protocol` for interfaces, not ABC}}
+- {{e.g., Use `@dataclass(frozen=True)` for immutable data}}
+- {{e.g., Use factory methods (`from_settings()`) for complex initialization}}
+- {{e.g., Dependency injection via constructor parameters}}
+
+### Design Patterns (Prohibited)
+- {{e.g., No deep inheritance hierarchies (max depth: 1)}}
+- {{e.g., No global mutable state}}
+- {{e.g., No synchronous blocking calls in async code}}
+
+## Code Standards
+
+### Naming Conventions
+- {{e.g., snake_case for functions and variables}}
+- {{e.g., PascalCase for classes}}
+- {{e.g., SCREAMING_SNAKE_CASE for constants}}
+
+### Documentation
+- {{e.g., Google-style docstrings}}
+- {{e.g., Type annotations on all public functions}}
+- {{e.g., Module docstrings required}}
+
+## Security Requirements
+- {{e.g., No secrets in code or logs}}
+- {{e.g., Input validation at API boundaries}}
+- {{e.g., Use environment variables for configuration}}
+
+## Definition of Done
+
+A task is complete when:
+- [ ] All acceptance criteria pass
+- [ ] Linter passes (`ruff check .`)
+- [ ] Type checker passes (`ty check src`)
+- [ ] Tests pass (`pytest`)
+- [ ] No new security vulnerabilities
+- [ ] Code follows all architecture rules above
+
+## External Dependencies
+
+List any external systems or libraries that must be available:
+
+| Dependency | Version | Purpose | Required By |
+|------------|---------|---------|-------------|
+| {{library}} | {{version}} | {{purpose}} | {{Phase X}} |
+
+## Project-Specific Rules
+
+{{Add any rules unique to this project}}

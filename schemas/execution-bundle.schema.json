@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExecutionBundle",
+  "description": "Self-contained package for task execution - everything a task-executor needs",
+  "type": "object",
+  "required": ["version", "task_id", "name", "target_dir", "atoms", "files", "acceptance_criteria"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "bundle_created_at": { "type": "string", "format": "date-time" },
+
+    "task_id": { "type": "string", "pattern": "^T[0-9]+$" },
+    "name": { "type": "string" },
+    "wave": { "type": "integer", "minimum": 1 },
+
+    "target_dir": {
+      "type": "string",
+      "description": "Absolute path where code will be written"
+    },
+
+    "context": {
+      "type": "object",
+      "description": "Logical context - why this task exists",
+      "properties": {
+        "domain": { "type": "string" },
+        "capability": { "type": "string" },
+        "capability_id": { "type": "string" },
+        "spec_ref": { "type": "string" },
+        "steel_thread": { "type": "boolean", "default": false }
+      }
+    },
+
+    "atoms": {
+      "type": "array",
+      "description": "Expanded atom details (not just IDs)",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^A[0-9]+$" },
+          "name": { "type": "string" },
+          "type": { "enum": ["input", "process", "state", "output"] },
+          "description": { "type": "string" }
+        }
+      }
+    },
+
+    "files": {
+      "type": "array",
+      "description": "Files to create/modify with full context",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "action"],
+        "properties": {
+          "path": { "type": "string" },
+          "action": { "enum": ["create", "modify", "delete"] },
+          "layer": { "enum": ["api", "domain", "data", "infra", "test"] },
+          "purpose": { "type": "string" },
+          "atoms": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Atom IDs implemented in this file"
+          }
+        }
+      }
+    },
+
+    "dependencies": {
+      "type": "object",
+      "description": "What must exist before this task runs",
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Task IDs that must complete first"
+        },
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Files that should exist (from prior tasks)"
+        },
+        "external": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "External prerequisites (libraries, services)"
+        }
+      }
+    },
+
+    "acceptance_criteria": {
+      "type": "array",
+      "description": "Verification that must pass before completion",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["criterion", "verification"],
+        "properties": {
+          "criterion": { "type": "string" },
+          "verification": {
+            "type": "string",
+            "description": "Shell command that returns 0 on success"
+          }
+        }
+      }
+    },
+
+    "constraints": {
+      "type": "object",
+      "description": "Tech stack and coding standards",
+      "properties": {
+        "language": { "type": "string" },
+        "framework": { "type": "string" },
+        "patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Required patterns (e.g., 'Use Protocol for interfaces')"
+        },
+        "forbidden": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns to avoid"
+        },
+        "testing": { "type": "string" },
+        "raw": {
+          "type": "string",
+          "description": "Full constraints.md content if applicable"
+        }
+      }
+    },
+
+    "related_files": {
+      "type": "object",
+      "description": "Files the executor might need to read for context",
+      "properties": {
+        "interfaces": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Protocol/interface files to import from"
+        },
+        "models": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Data models used by this task"
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Similar files to reference for patterns"
+        }
+      }
+    }
+  }
+}

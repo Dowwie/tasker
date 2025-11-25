@@ -1,0 +1,64 @@
+{
+  "$comment": "Example task file - copy to project-planning/tasks/T001.json",
+
+  "id": "T001",
+  "name": "Implement credential validation",
+  "wave": 1,
+
+  "context": {
+    "domain": "Authentication",
+    "capability": "User Login",
+    "spec_ref": "spec.md#user-authentication",
+    "steel_thread": true
+  },
+
+  "atoms": ["A001", "A002"],
+
+  "files": [
+    {
+      "path": "src/auth/validator.py",
+      "action": "create",
+      "purpose": "Credential validation logic using Pydantic"
+    },
+    {
+      "path": "src/auth/exceptions.py",
+      "action": "create",
+      "purpose": "Authentication-specific exceptions"
+    },
+    {
+      "path": "tests/auth/test_validator.py",
+      "action": "create",
+      "purpose": "Unit tests for credential validation"
+    }
+  ],
+
+  "dependencies": {
+    "tasks": [],
+    "external": ["pydantic>=2.0"]
+  },
+
+  "acceptance_criteria": [
+    {
+      "criterion": "Valid email and password return True",
+      "verification": "pytest tests/auth/test_validator.py::test_valid_credentials -v"
+    },
+    {
+      "criterion": "Invalid email raises ValidationError",
+      "verification": "pytest tests/auth/test_validator.py::test_invalid_email -v"
+    },
+    {
+      "criterion": "Weak password raises ValidationError",
+      "verification": "pytest tests/auth/test_validator.py::test_weak_password -v"
+    },
+    {
+      "criterion": "Code passes linting",
+      "verification": "ruff check src/auth/validator.py"
+    },
+    {
+      "criterion": "Code passes type checking",
+      "verification": "ty check src/auth"
+    }
+  ],
+
+  "estimate_hours": 3
+}

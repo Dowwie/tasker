@@ -1,0 +1,641 @@
+#!/usr/bin/env python3
+"""
+State Manager for Task Decomposition Protocol v2
+
+Single source of truth for decomposition state. All state changes go through here.
+Validates artifacts against schemas. Computes ready tasks dynamically.
+
+Usage:
+    state.py init <target_dir>           Initialize new decomposition
+    state.py status                       Show current state
+    state.py advance                      Attempt to advance to next phase
+    state.py validate <artifact>          Validate artifact against schema
+    state.py load-tasks                   Load task files from tasks/ directory
+    state.py ready-tasks                  List tasks ready for execution
+    state.py start-task <task_id>         Mark task as running
+    state.py complete-task <task_id>      Mark task as complete
+    state.py fail-task <task_id> <error>  Mark task as failed
+    state.py retry-task <task_id>         Reset failed task to pending
+    state.py skip-task <task_id> [reason] Skip task without blocking dependents
+    state.py log-tokens <session> <in> <out> <cost>  Log token usage
+"""
+
+import json
+import hashlib
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+# Paths relative to script location
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+PLANNING_DIR = PROJECT_ROOT / "project-planning"
+STATE_FILE = PLANNING_DIR / "state.json"
+SCHEMAS_DIR = PROJECT_ROOT / "schemas"
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def file_checksum(path: Path) -> str:
+    """SHA256 checksum of file contents."""
+    if not path.exists():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+
+def load_state() -> dict:
+    """Load state from file or return None if doesn't exist."""
+    if not STATE_FILE.exists():
+        return None
+    return json.loads(STATE_FILE.read_text())
+
+
+def save_state(state: dict) -> None:
+    """Save state to file."""
+    state["updated_at"] = now_iso()
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, indent=2))
+
+
+def add_event(state: dict, event_type: str, task_id: str = None, details: dict = None) -> None:
+    """Append event to state's event log."""
+    event = {
+        "timestamp": now_iso(),
+        "type": event_type,
+    }
+    if task_id:
+        event["task_id"] = task_id
+    if details:
+        event["details"] = details
+    state.setdefault("events", []).append(event)
+
+
+def validate_json(data: dict, schema_name: str) -> tuple[bool, str]:
+    """Validate JSON data against schema. Returns (valid, error_message)."""
+    schema_path = SCHEMAS_DIR / f"{schema_name}.schema.json"
+    if not schema_path.exists():
+        return False, f"Schema not found: {schema_path}"
+
+    try:
+        from jsonschema import validate, ValidationError, SchemaError
+    except ImportError:
+        # Fallback to basic validation if jsonschema not installed
+        schema = json.loads(schema_path.read_text())
+        required = schema.get("required", [])
+        for field in required:
+            if field not in data:
+                return False, f"Missing required field: {field}"
+        return True, ""
+
+    try:
+        schema = json.loads(schema_path.read_text())
+        validate(instance=data, schema=schema)
+        return True, ""
+    except SchemaError as e:
+        return False, f"Invalid schema: {e.message}"
+    except ValidationError as e:
+        # Build a helpful error message with path to the error
+        path = " -> ".join(str(p) for p in e.absolute_path) if e.absolute_path else "root"
+        return False, f"Validation error at '{path}': {e.message}"
+
+
+def init_state(target_dir: str) -> dict:
+    """Initialize new decomposition state."""
+    state = {
+        "version": "2.0",
+        "phase": {
+            "current": "ingestion",
+            "completed": []
+        },
+        "target_dir": str(Path(target_dir).resolve()),
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+        "artifacts": {},
+        "tasks": {},
+        "execution": {
+            "current_wave": 0,
+            "active_tasks": [],
+            "completed_count": 0,
+            "failed_count": 0,
+            "total_tokens": 0,
+            "total_cost_usd": 0.0
+        },
+        "events": []
+    }
+    add_event(state, "initialized", details={"target_dir": target_dir})
+    return state
+
+
+def get_phase_order() -> list[str]:
+    return ["ingestion", "logical", "physical", "definition", "sequencing", "ready", "executing", "complete"]
+
+
+def get_next_phase(current: str) -> str | None:
+    """Get the next phase after current."""
+    order = get_phase_order()
+    try:
+        idx = order.index(current)
+        if idx + 1 < len(order):
+            return order[idx + 1]
+    except ValueError:
+        pass
+    return None
+
+
+def can_advance_phase(state: dict) -> tuple[bool, str]:
+    """Check if we can advance to next phase. Returns (can_advance, reason)."""
+    current = state["phase"]["current"]
+    
+    if current == "ingestion":
+        spec_path = PLANNING_DIR / "inputs" / "spec.md"
+        if not spec_path.exists():
+            return False, "spec.md not found in project-planning/inputs/"
+        return True, ""
+    
+    elif current == "logical":
+        artifact = state["artifacts"].get("capability_map", {})
+        if not artifact.get("valid"):
+            return False, "capability_map not validated"
+        return True, ""
+    
+    elif current == "physical":
+        artifact = state["artifacts"].get("physical_map", {})
+        if not artifact.get("valid"):
+            return False, "physical_map not validated"
+        return True, ""
+    
+    elif current == "definition":
+        if not state["tasks"]:
+            return False, "No tasks defined"
+        return True, ""
+    
+    elif current == "sequencing":
+        # Check that all tasks have waves assigned
+        for tid, task in state["tasks"].items():
+            if task.get("wave", 0) == 0:
+                return False, f"Task {tid} has no wave assigned"
+        return True, ""
+    
+    elif current == "ready":
+        return True, ""  # Can always start executing
+    
+    elif current == "executing":
+        # Check if all tasks complete
+        for tid, task in state["tasks"].items():
+            if task["status"] not in ["complete", "blocked"]:
+                return False, f"Task {tid} not complete"
+        return True, ""
+    
+    return False, f"Unknown phase: {current}"
+
+
+def advance_phase(state: dict) -> tuple[bool, str]:
+    """Attempt to advance to next phase."""
+    can, reason = can_advance_phase(state)
+    if not can:
+        return False, reason
+    
+    current = state["phase"]["current"]
+    next_phase = get_next_phase(current)
+    
+    if not next_phase:
+        return False, "Already at final phase"
+    
+    state["phase"]["completed"].append(current)
+    state["phase"]["current"] = next_phase
+    add_event(state, "phase_advanced", details={"from": current, "to": next_phase})
+    
+    return True, f"Advanced from {current} to {next_phase}"
+
+
+def register_artifact(state: dict, artifact_type: str, path: str) -> tuple[bool, str]:
+    """Register and validate an artifact."""
+    artifact_path = Path(path)
+    if not artifact_path.exists():
+        return False, f"Artifact not found: {path}"
+    
+    # Load and validate
+    try:
+        data = json.loads(artifact_path.read_text())
+    except json.JSONDecodeError as e:
+        return False, f"Invalid JSON: {e}"
+    
+    valid, error = validate_json(data, artifact_type.replace("_", "-"))
+    
+    state["artifacts"][artifact_type] = {
+        "path": str(artifact_path),
+        "checksum": file_checksum(artifact_path),
+        "valid": valid,
+        "validated_at": now_iso(),
+        "error": error if not valid else None
+    }
+    
+    add_event(state, "artifact_registered", details={
+        "type": artifact_type,
+        "valid": valid,
+        "error": error if not valid else None
+    })
+    
+    return valid, error if not valid else "Validated successfully"
+
+
+def load_tasks_from_dir(state: dict) -> int:
+    """Load individual task files from tasks/ directory."""
+    tasks_dir = PLANNING_DIR / "tasks"
+    if not tasks_dir.exists():
+        return 0
+    
+    count = 0
+    for task_file in tasks_dir.glob("*.json"):
+        try:
+            task = json.loads(task_file.read_text())
+            task_id = task["id"]
+            
+            # Initialize runtime state
+            state["tasks"][task_id] = {
+                "id": task_id,
+                "name": task.get("name", ""),
+                "status": "pending",
+                "wave": task.get("wave", 0),
+                "depends_on": task.get("dependencies", {}).get("tasks", []),
+                "blocks": [],  # Computed later
+                "file": str(task_file)
+            }
+            count += 1
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Warning: Could not load {task_file}: {e}", file=sys.stderr)
+    
+    # Compute reverse dependencies (blocks)
+    for tid, task in state["tasks"].items():
+        for dep in task["depends_on"]:
+            if dep in state["tasks"]:
+                state["tasks"][dep]["blocks"].append(tid)
+    
+    add_event(state, "tasks_loaded", details={"count": count})
+    return count
+
+
+def get_ready_tasks(state: dict) -> list[str]:
+    """Get task IDs that are ready to execute (all deps complete)."""
+    ready = []
+    for tid, task in state["tasks"].items():
+        if task["status"] != "pending":
+            continue
+        
+        # Check all dependencies are complete
+        deps_met = all(
+            state["tasks"].get(dep, {}).get("status") == "complete"
+            for dep in task["depends_on"]
+        )
+        
+        if deps_met:
+            ready.append(tid)
+    
+    return ready
+
+
+def start_task(state: dict, task_id: str) -> tuple[bool, str]:
+    """Mark task as running."""
+    if task_id not in state["tasks"]:
+        return False, f"Task not found: {task_id}"
+    
+    task = state["tasks"][task_id]
+    if task["status"] != "pending":
+        return False, f"Task {task_id} is {task['status']}, not pending"
+    
+    # Check dependencies
+    for dep in task["depends_on"]:
+        dep_status = state["tasks"].get(dep, {}).get("status")
+        if dep_status != "complete":
+            return False, f"Dependency {dep} is {dep_status}, not complete"
+    
+    task["status"] = "running"
+    task["started_at"] = now_iso()
+    state["execution"]["active_tasks"].append(task_id)
+    
+    add_event(state, "task_started", task_id=task_id)
+    return True, f"Task {task_id} started"
+
+
+def complete_task(state: dict, task_id: str, files_created: list = None, files_modified: list = None) -> tuple[bool, str]:
+    """Mark task as complete."""
+    if task_id not in state["tasks"]:
+        return False, f"Task not found: {task_id}"
+    
+    task = state["tasks"][task_id]
+    if task["status"] != "running":
+        return False, f"Task {task_id} is {task['status']}, not running"
+    
+    task["status"] = "complete"
+    task["completed_at"] = now_iso()
+    task["files_created"] = files_created or []
+    task["files_modified"] = files_modified or []
+    
+    if task_id in state["execution"]["active_tasks"]:
+        state["execution"]["active_tasks"].remove(task_id)
+    state["execution"]["completed_count"] += 1
+    
+    add_event(state, "task_completed", task_id=task_id, details={
+        "files_created": files_created,
+        "files_modified": files_modified
+    })
+    return True, f"Task {task_id} completed"
+
+
+def fail_task(state: dict, task_id: str, error: str) -> tuple[bool, str]:
+    """Mark task as failed."""
+    if task_id not in state["tasks"]:
+        return False, f"Task not found: {task_id}"
+    
+    task = state["tasks"][task_id]
+    task["status"] = "failed"
+    task["error"] = error
+    task["completed_at"] = now_iso()
+    
+    if task_id in state["execution"]["active_tasks"]:
+        state["execution"]["active_tasks"].remove(task_id)
+    state["execution"]["failed_count"] += 1
+    
+    # Mark dependent tasks as blocked
+    for blocked_id in task["blocks"]:
+        if blocked_id in state["tasks"]:
+            state["tasks"][blocked_id]["status"] = "blocked"
+            state["tasks"][blocked_id]["error"] = f"Blocked by failed task {task_id}"
+    
+    add_event(state, "task_failed", task_id=task_id, details={"error": error})
+    return True, f"Task {task_id} failed: {error}"
+
+
+def retry_task(state: dict, task_id: str) -> tuple[bool, str]:
+    """Reset a failed task to pending and unblock its dependents."""
+    if task_id not in state["tasks"]:
+        return False, f"Task not found: {task_id}"
+
+    task = state["tasks"][task_id]
+    if task["status"] not in ["failed", "blocked"]:
+        return False, f"Task {task_id} is {task['status']}, not failed/blocked"
+
+    # Reset this task
+    old_status = task["status"]
+    task["status"] = "pending"
+    task.pop("error", None)
+    task.pop("completed_at", None)
+    task.pop("started_at", None)
+
+    # Decrement failed count if it was failed
+    if old_status == "failed":
+        state["execution"]["failed_count"] = max(0, state["execution"]["failed_count"] - 1)
+
+    # Recursively unblock dependent tasks that were blocked by this task
+    unblocked = []
+    for blocked_id in task.get("blocks", []):
+        if blocked_id in state["tasks"]:
+            blocked_task = state["tasks"][blocked_id]
+            if blocked_task["status"] == "blocked" and f"Blocked by failed task {task_id}" in blocked_task.get("error", ""):
+                blocked_task["status"] = "pending"
+                blocked_task.pop("error", None)
+                unblocked.append(blocked_id)
+
+    add_event(state, "task_retried", task_id=task_id, details={"unblocked": unblocked})
+
+    msg = f"Task {task_id} reset to pending"
+    if unblocked:
+        msg += f", unblocked: {unblocked}"
+    return True, msg
+
+
+def skip_task(state: dict, task_id: str, reason: str = "Manually skipped") -> tuple[bool, str]:
+    """Mark a task as skipped without blocking dependents."""
+    if task_id not in state["tasks"]:
+        return False, f"Task not found: {task_id}"
+
+    task = state["tasks"][task_id]
+    if task["status"] not in ["pending", "blocked", "failed"]:
+        return False, f"Task {task_id} is {task['status']}, cannot skip"
+
+    old_status = task["status"]
+    task["status"] = "skipped"
+    task["skip_reason"] = reason
+    task["completed_at"] = now_iso()
+
+    # Decrement failed count if it was failed
+    if old_status == "failed":
+        state["execution"]["failed_count"] = max(0, state["execution"]["failed_count"] - 1)
+
+    # Treat skipped as "complete" for dependency purposes - unblock dependents
+    # that were blocked by this task being failed
+    unblocked = []
+    for blocked_id in task.get("blocks", []):
+        if blocked_id in state["tasks"]:
+            blocked_task = state["tasks"][blocked_id]
+            if blocked_task["status"] == "blocked":
+                # Check if all other dependencies are now satisfied
+                all_deps_ok = all(
+                    state["tasks"].get(dep, {}).get("status") in ["complete", "skipped"]
+                    for dep in blocked_task.get("depends_on", [])
+                )
+                if all_deps_ok:
+                    blocked_task["status"] = "pending"
+                    blocked_task.pop("error", None)
+                    unblocked.append(blocked_id)
+
+    add_event(state, "task_skipped", task_id=task_id, details={"reason": reason, "unblocked": unblocked})
+
+    msg = f"Task {task_id} skipped: {reason}"
+    if unblocked:
+        msg += f", unblocked: {unblocked}"
+    return True, msg
+
+
+def log_tokens(state: dict, session_id: str, input_tokens: int, output_tokens: int, cost: float) -> None:
+    """Log token usage from subagent."""
+    state["execution"]["total_tokens"] += input_tokens + output_tokens
+    state["execution"]["total_cost_usd"] += cost
+    
+    add_event(state, "tokens_logged", details={
+        "session_id": session_id,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cost_usd": cost
+    })
+
+
+def print_status(state: dict) -> None:
+    """Print human-readable status."""
+    print(f"Phase: {state['phase']['current']}")
+    print(f"Target: {state['target_dir']}")
+    print(f"Tasks: {len(state['tasks'])}")
+    
+    if state["tasks"]:
+        by_status = {}
+        for task in state["tasks"].values():
+            status = task["status"]
+            by_status[status] = by_status.get(status, 0) + 1
+        print(f"Status: {by_status}")
+    
+    print(f"Tokens: {state['execution']['total_tokens']:,}")
+    print(f"Cost: ${state['execution']['total_cost_usd']:.4f}")
+    
+    ready = get_ready_tasks(state)
+    if ready:
+        print(f"Ready tasks: {ready}")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
+    
+    cmd = sys.argv[1]
+    
+    if cmd == "init":
+        if len(sys.argv) < 3:
+            print("Usage: state.py init <target_dir>")
+            sys.exit(1)
+        state = init_state(sys.argv[2])
+        save_state(state)
+        print(f"Initialized state for {sys.argv[2]}")
+    
+    elif cmd == "status":
+        state = load_state()
+        if not state:
+            print("No state file. Run 'state.py init <target_dir>' first.")
+            sys.exit(1)
+        print_status(state)
+    
+    elif cmd == "advance":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+        success, msg = advance_phase(state)
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+    
+    elif cmd == "validate":
+        if len(sys.argv) < 3:
+            print("Usage: state.py validate <artifact_type>")
+            sys.exit(1)
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+        
+        artifact_type = sys.argv[2]
+        path_map = {
+            "capability_map": PLANNING_DIR / "artifacts" / "capability-map.json",
+            "physical_map": PLANNING_DIR / "artifacts" / "physical-map.json",
+        }
+        
+        if artifact_type not in path_map:
+            print(f"Unknown artifact type: {artifact_type}")
+            sys.exit(1)
+        
+        success, msg = register_artifact(state, artifact_type, str(path_map[artifact_type]))
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+    
+    elif cmd == "load-tasks":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+        count = load_tasks_from_dir(state)
+        save_state(state)
+        print(f"Loaded {count} tasks")
+    
+    elif cmd == "ready-tasks":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+        ready = get_ready_tasks(state)
+        for tid in ready:
+            task = state["tasks"][tid]
+            print(f"{tid}: {task['name']} (wave {task['wave']})")
+    
+    elif cmd == "start-task":
+        if len(sys.argv) < 3:
+            print("Usage: state.py start-task <task_id>")
+            sys.exit(1)
+        state = load_state()
+        success, msg = start_task(state, sys.argv[2])
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+    
+    elif cmd == "complete-task":
+        if len(sys.argv) < 3:
+            print("Usage: state.py complete-task <task_id>")
+            sys.exit(1)
+        state = load_state()
+        success, msg = complete_task(state, sys.argv[2])
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+    
+    elif cmd == "fail-task":
+        if len(sys.argv) < 4:
+            print("Usage: state.py fail-task <task_id> <error>")
+            sys.exit(1)
+        state = load_state()
+        success, msg = fail_task(state, sys.argv[2], sys.argv[3])
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+
+    elif cmd == "retry-task":
+        if len(sys.argv) < 3:
+            print("Usage: state.py retry-task <task_id>")
+            sys.exit(1)
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+        success, msg = retry_task(state, sys.argv[2])
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+
+    elif cmd == "skip-task":
+        if len(sys.argv) < 3:
+            print("Usage: state.py skip-task <task_id> [reason]")
+            sys.exit(1)
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+        reason = sys.argv[3] if len(sys.argv) > 3 else "Manually skipped"
+        success, msg = skip_task(state, sys.argv[2], reason)
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+
+    elif cmd == "log-tokens":
+        if len(sys.argv) < 6:
+            print("Usage: state.py log-tokens <session> <input> <output> <cost>")
+            sys.exit(1)
+        state = load_state()
+        log_tokens(state, sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5]))
+        save_state(state)
+        print("Tokens logged")
+    
+    else:
+        print(f"Unknown command: {cmd}")
+        print(__doc__)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
