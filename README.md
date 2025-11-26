@@ -52,7 +52,8 @@ Phase 5: Ready         → planning complete, ready for execution
 │   ├── physical-architect.md
 │   ├── task-author.md
 │   ├── plan-auditor.md
-│   └── task-executor.md
+│   ├── task-executor.md
+│   └── task-verifier.md
 ├── commands/         # Slash commands
 │   ├── plan.md
 │   └── execute.md
@@ -119,6 +120,52 @@ make clean      # Remove artifacts
 2. **Execution**: Tasks run in isolated subagent contexts with full context budgets, no memory of previous tasks, and automatic rollback on failure
 
 3. **State**: All state transitions go through `scripts/state.py`, which tracks phases, task status, token usage, and events
+
+4. **Verification**: Completed tasks are evaluated by an LLM-as-judge verifier before being marked complete
+
+## Task Verification
+
+Each completed task passes through an **LLM-as-judge** verifier — much richer than "tests passed/failed". The verifier reasons about whether the implementation meets the *intent*.
+
+### Verification Rubric
+
+**1. Evidence Gathering**
+- Read implementation files
+- Run verification commands
+- Capture all output
+
+**2. Multi-Dimensional Judgment**
+
+| Dimension | What's Judged |
+|-----------|---------------|
+| Functional Correctness | Does it meet each criterion? |
+| Code Quality | Types, docs, patterns, error handling |
+| Test Quality | Coverage, assertions, edge cases |
+
+**3. Verdicts**
+
+| Verdict | Meaning |
+|---------|---------|
+| PASS | All criteria met, quality acceptable |
+| CONDITIONAL PASS | Works, minor issues, proceed with notes |
+| FAIL | Criteria not met or critical issues |
+
+**4. Judgment Principles**
+
+1. **Be objective** — Judge the code, not the approach
+2. **Be specific** — Cite exact evidence for every judgment
+3. **Be fair** — Partial credit for partial implementations
+4. **Be helpful** — Provide actionable feedback on failures
+5. **Be strict** — Functional criteria are non-negotiable
+6. **Be reasonable** — Minor style issues don't block
+
+**5. Failure Feedback**
+
+When blocking, the verifier provides:
+- **What failed** — Specific criterion
+- **Why it failed** — Evidence from code/tests
+- **How to fix** — Concrete suggestions
+- **What to re-verify** — After fix
 
 ## License
 

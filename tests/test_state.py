@@ -2,7 +2,7 @@
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -14,6 +14,7 @@ from state import (
     add_event,
     advance_phase,
     can_advance_phase,
+    commit_task_changes,
     complete_task,
     fail_task,
     file_checksum,
@@ -670,3 +671,152 @@ class TestLogTokens:
         token_events = [e for e in state["events"] if e["type"] == "tokens_logged"]
         assert len(token_events) == 1
         assert token_events[0]["details"]["session_id"] == "session-123"
+
+
+class TestCommitTaskChanges:
+    """Tests for commit_task_changes function."""
+
+    def test_commit_task_not_found(self, temp_state_env: Path) -> None:
+        """Test committing nonexistent task."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {}
+
+        success, msg = commit_task_changes(state, "T999")
+
+        assert success is False
+        assert "not found" in msg.lower()
+
+    def test_commit_task_not_complete(self, temp_state_env: Path) -> None:
+        """Test committing a task that's not complete."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "running", "depends_on": []},
+        }
+
+        success, msg = commit_task_changes(state, "T001")
+
+        assert success is False
+        assert "running" in msg.lower()
+
+    def test_commit_task_no_files(self, temp_state_env: Path) -> None:
+        """Test committing a task with no files tracked."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "name": "Test task",
+                "status": "complete",
+                "depends_on": [],
+                "files_created": [],
+                "files_modified": [],
+            },
+        }
+
+        success, msg = commit_task_changes(state, "T001")
+
+        assert success is False
+        assert "no files" in msg.lower()
+
+    def test_commit_task_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test successful commit of task files."""
+        import subprocess
+        import state as state_module
+
+        # Create a git repo in tmp_path
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+        subprocess.run(["git", "init"], cwd=target_dir, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=target_dir,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=target_dir,
+            capture_output=True,
+        )
+
+        # Create a file to commit
+        test_file = target_dir / "src" / "file.py"
+        test_file.parent.mkdir(parents=True)
+        test_file.write_text("# test")
+
+        # Setup state environment
+        planning_dir = tmp_path / "project-planning"
+        planning_dir.mkdir()
+        monkeypatch.setattr(state_module, "PLANNING_DIR", planning_dir)
+        monkeypatch.setattr(state_module, "STATE_FILE", planning_dir / "state.json")
+
+        state = init_state(str(target_dir))
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "name": "Implement feature",
+                "status": "complete",
+                "depends_on": [],
+                "files_created": ["src/file.py"],
+                "files_modified": [],
+            },
+        }
+
+        success, msg = commit_task_changes(state, "T001")
+
+        assert success is True
+        assert "1 file(s)" in msg
+
+        # Verify commit was made
+        result = subprocess.run(
+            ["git", "log", "--oneline", "-1"],
+            cwd=target_dir,
+            capture_output=True,
+            text=True,
+        )
+        assert "T001: Implement feature" in result.stdout
+
+    def test_commit_task_adds_event(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that committing adds event to state."""
+        import subprocess
+        import state as state_module
+
+        # Create a git repo
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+        subprocess.run(["git", "init"], cwd=target_dir, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=target_dir,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=target_dir,
+            capture_output=True,
+        )
+
+        test_file = target_dir / "file.py"
+        test_file.write_text("# test")
+
+        planning_dir = tmp_path / "project-planning"
+        planning_dir.mkdir()
+        monkeypatch.setattr(state_module, "PLANNING_DIR", planning_dir)
+        monkeypatch.setattr(state_module, "STATE_FILE", planning_dir / "state.json")
+
+        state = init_state(str(target_dir))
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "name": "Test",
+                "status": "complete",
+                "depends_on": [],
+                "files_created": ["file.py"],
+                "files_modified": [],
+            },
+        }
+
+        commit_task_changes(state, "T001")
+
+        commit_events = [e for e in state["events"] if e["type"] == "task_committed"]
+        assert len(commit_events) == 1
+        assert commit_events[0]["task_id"] == "T001"
+        assert commit_events[0]["details"]["files"] == ["file.py"]

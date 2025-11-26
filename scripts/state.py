@@ -13,7 +13,9 @@ Usage:
     state.py load-tasks                   Load task files from tasks/ directory
     state.py ready-tasks                  List tasks ready for execution
     state.py start-task <task_id>         Mark task as running
-    state.py complete-task <task_id>      Mark task as complete
+    state.py complete-task <task_id> [--created f1 f2] [--modified f3 f4]
+                                          Mark task as complete with file tracking
+    state.py commit-task <task_id>        Commit files from completed task to git
     state.py fail-task <task_id> <error>  Mark task as failed
     state.py retry-task <task_id>         Reset failed task to pending
     state.py skip-task <task_id> [reason] Skip task without blocking dependents
@@ -70,6 +72,64 @@ def add_event(state: dict, event_type: str, task_id: str = None, details: dict =
     if details:
         event["details"] = details
     state.setdefault("events", []).append(event)
+
+
+def commit_task_changes(state: dict, task_id: str) -> tuple[bool, str]:
+    """Commit files changed by a completed task."""
+    import subprocess
+
+    if task_id not in state["tasks"]:
+        return False, f"Task not found: {task_id}"
+
+    task = state["tasks"][task_id]
+    if task["status"] != "complete":
+        return False, f"Task {task_id} is {task['status']}, not complete"
+
+    files_created = task.get("files_created", [])
+    files_modified = task.get("files_modified", [])
+    all_files = files_created + files_modified
+
+    if not all_files:
+        return False, f"No files to commit for task {task_id}"
+
+    target_dir = state.get("target_dir", ".")
+
+    # Stage the files
+    for f in all_files:
+        file_path = Path(target_dir) / f
+        if file_path.exists():
+            result = subprocess.run(
+                ["git", "add", str(file_path)],
+                cwd=target_dir,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                return False, f"git add failed for {f}: {result.stderr}"
+
+    # Build commit message
+    commit_msg = f"{task_id}: {task['name']}"
+
+    # Commit
+    result = subprocess.run(
+        ["git", "commit", "-m", commit_msg],
+        cwd=target_dir,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        # Check if it's "nothing to commit"
+        if "nothing to commit" in result.stdout or "nothing to commit" in result.stderr:
+            return True, f"No changes to commit for {task_id}"
+        return False, f"git commit failed: {result.stderr}"
+
+    add_event(state, "task_committed", task_id=task_id, details={
+        "files": all_files,
+        "commit_msg": commit_msg
+    })
+
+    return True, f"Committed {len(all_files)} file(s) for {task_id}"
 
 
 def validate_json(data: dict, schema_name: str) -> tuple[bool, str]:
@@ -573,10 +633,25 @@ def main():
     
     elif cmd == "complete-task":
         if len(sys.argv) < 3:
-            print("Usage: state.py complete-task <task_id>")
+            print("Usage: state.py complete-task <task_id> [--created f1 f2] [--modified f3 f4]")
             sys.exit(1)
         state = load_state()
-        success, msg = complete_task(state, sys.argv[2])
+        task_id = sys.argv[2]
+
+        # Parse optional --created and --modified args
+        files_created = []
+        files_modified = []
+        args = sys.argv[3:]
+        current_list = None
+        for arg in args:
+            if arg == "--created":
+                current_list = files_created
+            elif arg == "--modified":
+                current_list = files_modified
+            elif current_list is not None:
+                current_list.append(arg)
+
+        success, msg = complete_task(state, task_id, files_created or None, files_modified or None)
         if success:
             save_state(state)
         print(msg)
@@ -630,7 +705,21 @@ def main():
         log_tokens(state, sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5]))
         save_state(state)
         print("Tokens logged")
-    
+
+    elif cmd == "commit-task":
+        if len(sys.argv) < 3:
+            print("Usage: state.py commit-task <task_id>")
+            sys.exit(1)
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+        success, msg = commit_task_changes(state, sys.argv[2])
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+
     else:
         print(f"Unknown command: {cmd}")
         print(__doc__)

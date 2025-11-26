@@ -117,26 +117,104 @@ MODIFIED_FILES = []
 CREATED_FILES.append("src/auth/validator.py")
 ```
 
-### 6. Verify Acceptance Criteria
+### 6. Documentation
 
-Run each verification command from `bundle.acceptance_criteria`:
+After implementation, create documentation artifacts:
 
-```bash
-# From acceptance_criteria[0]
-# criterion: "Valid credentials return True"
-# verification: "pytest tests/auth/test_validator.py::test_valid"
+#### Task Spec (Required)
 
-cd $TARGET_DIR
-pytest tests/auth/test_validator.py::test_valid
+Create `docs/{task_id}-spec.md` documenting what was built:
+
+```markdown
+# T001: Implement credential validation
+
+## Summary
+Brief description of what this task accomplished.
+
+## Components
+- `src/auth/validator.py` - Credential validation logic
+- `src/auth/errors.py` - Custom exceptions
+
+## API / Interface
+```python
+def validate_credentials(email: str, password: str) -> bool:
+    """Validate user credentials."""
 ```
 
-All must pass before completing.
+## Dependencies
+- pydantic (validation)
 
-### 7. Complete or Rollback
+## Testing
+```bash
+pytest tests/auth/test_validator.py
+```
+```
+
+Track this file:
+```python
+CREATED_FILES.append("docs/T001-spec.md")
+```
+
+#### README Update (If Applicable)
+
+If the task adds user-facing functionality, update README.md with a concise entry:
+
+**When to update:**
+- New features or commands
+- New configuration options
+- New integrations or capabilities
+
+**When NOT to update:**
+- Internal refactoring
+- Bug fixes
+- Test-only changes
+- Infrastructure/tooling changes
+
+**Format:** Add a single bullet point or short section. Keep it concise.
+
+```markdown
+## Features
+
+- **Credential Validation** - Validates email format and password strength
+```
+
+If README.md was modified:
+```python
+MODIFIED_FILES.append("README.md")
+```
+
+### 7. Verify Acceptance Criteria
+
+**Spawn the `task-verifier` subagent** to verify in a clean context:
+
+```
+Verify task T001
+
+Bundle: project-planning/bundles/T001-bundle.json
+Target: $TARGET_DIR
+```
+
+The verifier:
+- Runs in isolated context (no implementation memory)
+- Executes each `acceptance_criteria[].verification` command
+- Returns structured report with PASS/FAIL per criterion
+- Recommends PROCEED or BLOCK
+
+**Wait for verifier response.** Parse the result:
+- If `**Status:** PASS` and `Recommendation: PROCEED` → continue to step 8
+- If `**Status:** FAIL` or `Recommendation: BLOCK` → rollback (step 8 failure path)
+
+### 8. Complete or Rollback
 
 **If all criteria pass:**
 ```bash
-python3 scripts/state.py complete-task T001
+# Complete with file tracking (include docs and README if modified)
+python3 scripts/state.py complete-task T001 \
+  --created src/auth/validator.py src/auth/errors.py docs/T001-spec.md \
+  --modified src/auth/__init__.py README.md
+
+# Commit changes to git
+python3 scripts/state.py commit-task T001
 
 # Clean up rollback files
 rm -rf /tmp/rollback-T001
@@ -159,7 +237,7 @@ done
 python3 scripts/state.py fail-task T001 "Acceptance criteria failed: <details>"
 ```
 
-### 8. Report
+### 9. Report
 
 Return structured report:
 
@@ -176,13 +254,18 @@ Return structured report:
 
 ### Files Created
 - src/auth/validator.py (domain layer)
+- docs/T001-spec.md (task spec)
 
 ### Files Modified
-- (none)
+- README.md (added feature entry)
 
-### Verification Results
-- [x] Valid credentials return True
-- [x] Invalid email raises ValidationError
+### Verification Results (from task-verifier)
+| Criterion | Status |
+|-----------|--------|
+| Valid credentials return True | PASS |
+| Invalid email raises ValidationError | PASS |
+
+**Verifier Recommendation:** PROCEED
 
 ### Notes
 Used Pydantic for validation per constraints.patterns.
@@ -206,7 +289,8 @@ This executor runs in an **isolated subagent context**:
 | Bundle not found | Report and exit |
 | Dependency file missing | Report and exit |
 | File creation fails | Rollback and fail task |
-| Test fails | Rollback and fail task |
+| Verifier returns BLOCK | Rollback and fail task |
+| Verifier spawn fails | Rollback and fail task |
 | Crash mid-execution | Rollback files remain for manual recovery |
 
 ## Quality Standards
@@ -217,7 +301,21 @@ All code must:
 - [ ] Have type annotations
 - [ ] Have docstrings
 - [ ] Pass linting
-- [ ] Pass acceptance criteria verification
+- [ ] Pass acceptance criteria (verified by `task-verifier` subagent)
+
+## Subagent Spawning
+
+This executor spawns ONE subagent:
+
+| Subagent | When | Purpose |
+|----------|------|---------|
+| `task-verifier` | After implementation + docs | Verify acceptance criteria in clean context |
+
+**Why separate verification?**
+- Executor context is bloated with implementation details
+- Verifier has fresh context = unbiased testing
+- Failure analysis is cleaner without implementation noise
+- Token efficiency: verifier only loads criteria + runs commands
 
 ## Bundle Example
 
