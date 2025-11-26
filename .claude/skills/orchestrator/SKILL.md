@@ -57,6 +57,7 @@ python3 scripts/state.py status
 | `logical` | **logic-architect** | `artifacts/capability-map.json` | `state.py validate capability_map` |
 | `physical` | **physical-architect** | `artifacts/physical-map.json` | `state.py validate physical_map` |
 | `definition` | **task-author** | `tasks/*.json` | `state.py load-tasks` |
+| `validation` | **task-plan-verifier** | Validation report | `state.py validate-tasks <verdict>` |
 | `sequencing` | **plan-auditor** | Updated task waves | DAG is valid |
 | `ready` | (done) | Planning complete | — |
 
@@ -67,10 +68,54 @@ while phase not in ["ready", "executing", "complete"]:
     1. Query current phase
     2. Spawn appropriate agent
     3. Wait for agent to complete
-    4. Validate output: state.py validate <artifact>
+    4. Validate output:
+       - For artifacts: state.py validate <artifact>
+       - For task validation: state.py validate-tasks <verdict>
     5. If valid: state.py advance
     6. If invalid: Tell agent to fix, re-validate
 ```
+
+### Validation Phase Details
+
+The `validation` phase runs **task-plan-verifier** to evaluate task definitions:
+
+```bash
+# Spawn task-plan-verifier with context
+Verify task definitions for planning
+
+Spec: project-planning/inputs/spec.md
+Capability Map: project-planning/artifacts/capability-map.json
+Tasks Directory: project-planning/tasks/
+User Preferences: ~/.claude/CLAUDE.md (if exists)
+```
+
+The verifier:
+1. Evaluates all tasks against spec, strategy, and user preferences
+2. Registers its verdict via `python3 scripts/state.py validate-tasks <VERDICT> ...`
+3. Returns a detailed report
+
+Verdicts:
+- `READY` - All tasks pass, proceed to sequencing
+- `READY_WITH_NOTES` - Tasks pass with minor issues noted
+- `BLOCKED` - Critical issues found, must fix before continuing
+
+After the verifier completes, the orchestrator:
+```bash
+# Check if we can advance (verifier already registered verdict)
+python3 scripts/state.py advance
+```
+
+If BLOCKED, the orchestrator:
+1. Displays the verifier's summary to user
+2. Points user to full report: `project-planning/reports/verification-report.md`
+3. Waits for user to fix task files
+4. Re-runs task-plan-verifier (or user runs `/verify-plan`)
+5. Repeats until READY or READY_WITH_NOTES
+
+The report file contains:
+- Per-task evaluations with evidence
+- Specific issues and fix suggestions
+- User preference violations (from ~/.claude/CLAUDE.md)
 
 ## Plan Completion
 
@@ -225,6 +270,8 @@ python3 scripts/state.py advance         # Try to advance phase
 # Planning
 python3 scripts/state.py init <dir>      # Initialize new plan
 python3 scripts/state.py validate <art>  # Validate artifact
+python3 scripts/state.py validate-tasks <verdict> [summary] [--issues ...]
+                                         # Register task validation result
 
 # Execution
 python3 scripts/state.py ready-tasks     # List ready tasks

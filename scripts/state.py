@@ -10,6 +10,8 @@ Usage:
     state.py status                       Show current state
     state.py advance                      Attempt to advance to next phase
     state.py validate <artifact>          Validate artifact against schema
+    state.py validate-tasks <verdict> [summary] [--issues i1 i2]
+                                          Register task validation results
     state.py load-tasks                   Load task files from tasks/ directory
     state.py ready-tasks                  List tasks ready for execution
     state.py start-task <task_id>         Mark task as running
@@ -189,7 +191,7 @@ def init_state(target_dir: str) -> dict:
 
 
 def get_phase_order() -> list[str]:
-    return ["ingestion", "logical", "physical", "definition", "sequencing", "ready", "executing", "complete"]
+    return ["ingestion", "logical", "physical", "definition", "validation", "sequencing", "ready", "executing", "complete"]
 
 
 def get_next_phase(current: str) -> str | None:
@@ -230,7 +232,16 @@ def can_advance_phase(state: dict) -> tuple[bool, str]:
         if not state["tasks"]:
             return False, "No tasks defined"
         return True, ""
-    
+
+    elif current == "validation":
+        validation = state["artifacts"].get("task_validation", {})
+        if not validation.get("valid"):
+            return False, "Task validation not complete or has blocking issues"
+        verdict = validation.get("verdict", "")
+        if verdict == "BLOCKED":
+            return False, f"Task validation blocked: {validation.get('error', 'Unknown issue')}"
+        return True, ""
+
     elif current == "sequencing":
         # Check that all tasks have waves assigned
         for tid, task in state["tasks"].items():
@@ -297,8 +308,49 @@ def register_artifact(state: dict, artifact_type: str, path: str) -> tuple[bool,
         "valid": valid,
         "error": error if not valid else None
     })
-    
+
     return valid, error if not valid else "Validated successfully"
+
+
+def register_task_validation(
+    state: dict, verdict: str, summary: str = "", issues: list | None = None
+) -> tuple[bool, str]:
+    """Register task validation results from task-plan-verifier.
+
+    Args:
+        state: Current state dict
+        verdict: READY, READY_WITH_NOTES, or BLOCKED
+        summary: Summary of validation results
+        issues: List of issues found (for BLOCKED or READY_WITH_NOTES)
+
+    Returns:
+        (success, message) tuple
+    """
+    valid_verdicts = ["READY", "READY_WITH_NOTES", "BLOCKED"]
+    if verdict not in valid_verdicts:
+        return False, f"Invalid verdict: {verdict}. Must be one of {valid_verdicts}"
+
+    is_valid = verdict in ["READY", "READY_WITH_NOTES"]
+
+    state["artifacts"]["task_validation"] = {
+        "verdict": verdict,
+        "valid": is_valid,
+        "summary": summary,
+        "issues": issues or [],
+        "validated_at": now_iso(),
+        "error": summary if not is_valid else None,
+    }
+
+    add_event(
+        state,
+        "task_validation_complete",
+        details={"verdict": verdict, "valid": is_valid, "issue_count": len(issues or [])},
+    )
+
+    if is_valid:
+        return True, f"Task validation complete: {verdict}"
+    else:
+        return False, f"Task validation blocked: {summary}"
 
 
 def load_tasks_from_dir(state: dict) -> int:
@@ -600,7 +652,38 @@ def main():
             save_state(state)
         print(msg)
         sys.exit(0 if success else 1)
-    
+
+    elif cmd == "validate-tasks":
+        if len(sys.argv) < 3:
+            print("Usage: state.py validate-tasks <verdict> [summary] [--issues i1 i2]")
+            print("  verdict: READY, READY_WITH_NOTES, or BLOCKED")
+            sys.exit(1)
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        verdict = sys.argv[2].upper()
+        summary = ""
+        issues = []
+
+        # Parse optional summary and --issues
+        args = sys.argv[3:]
+        i = 0
+        while i < len(args):
+            if args[i] == "--issues":
+                issues = args[i + 1 :]
+                break
+            else:
+                summary = args[i]
+            i += 1
+
+        success, msg = register_task_validation(state, verdict, summary, issues)
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+
     elif cmd == "load-tasks":
         state = load_state()
         if not state:

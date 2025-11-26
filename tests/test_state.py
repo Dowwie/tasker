@@ -27,6 +27,7 @@ from state import (
     log_tokens,
     now_iso,
     register_artifact,
+    register_task_validation,
     save_state,
     start_task,
     validate_json,
@@ -268,7 +269,8 @@ class TestPhaseManagement:
         assert order[0] == "ingestion"
         assert order[-1] == "complete"
         assert "executing" in order
-        assert len(order) == 8
+        assert "validation" in order
+        assert len(order) == 9
 
     def test_get_next_phase(self) -> None:
         """Test getting next phase."""
@@ -820,3 +822,122 @@ class TestCommitTaskChanges:
         assert len(commit_events) == 1
         assert commit_events[0]["task_id"] == "T001"
         assert commit_events[0]["details"]["files"] == ["file.py"]
+
+
+class TestRegisterTaskValidation:
+    """Tests for register_task_validation function."""
+
+    def test_register_ready_verdict(self) -> None:
+        """Test registering READY verdict."""
+        state = init_state("/tmp/target")
+
+        success, msg = register_task_validation(state, "READY", "All tasks aligned")
+
+        assert success is True
+        assert "READY" in msg
+        assert state["artifacts"]["task_validation"]["verdict"] == "READY"
+        assert state["artifacts"]["task_validation"]["valid"] is True
+        assert state["artifacts"]["task_validation"]["summary"] == "All tasks aligned"
+
+    def test_register_ready_with_notes_verdict(self) -> None:
+        """Test registering READY_WITH_NOTES verdict."""
+        state = init_state("/tmp/target")
+        issues = ["T002: missing constraints", "T005: unclear deps"]
+
+        success, msg = register_task_validation(
+            state, "READY_WITH_NOTES", "Minor issues found", issues
+        )
+
+        assert success is True
+        assert state["artifacts"]["task_validation"]["verdict"] == "READY_WITH_NOTES"
+        assert state["artifacts"]["task_validation"]["valid"] is True
+        assert state["artifacts"]["task_validation"]["issues"] == issues
+
+    def test_register_blocked_verdict(self) -> None:
+        """Test registering BLOCKED verdict."""
+        state = init_state("/tmp/target")
+        issues = ["T005: not in spec"]
+
+        success, msg = register_task_validation(
+            state, "BLOCKED", "Critical issues found", issues
+        )
+
+        assert success is False
+        assert "blocked" in msg.lower()
+        assert state["artifacts"]["task_validation"]["verdict"] == "BLOCKED"
+        assert state["artifacts"]["task_validation"]["valid"] is False
+
+    def test_register_invalid_verdict(self) -> None:
+        """Test registering invalid verdict fails."""
+        state = init_state("/tmp/target")
+
+        success, msg = register_task_validation(state, "INVALID")
+
+        assert success is False
+        assert "Invalid verdict" in msg
+
+    def test_register_adds_event(self) -> None:
+        """Test that registration adds event."""
+        state = init_state("/tmp/target")
+
+        register_task_validation(state, "READY", "All good")
+
+        events = [e for e in state["events"] if e["type"] == "task_validation_complete"]
+        assert len(events) == 1
+        assert events[0]["details"]["verdict"] == "READY"
+        assert events[0]["details"]["valid"] is True
+
+
+class TestCanAdvanceFromValidation:
+    """Tests for can_advance_phase from validation phase."""
+
+    def test_can_advance_without_validation(self) -> None:
+        """Test cannot advance without task validation."""
+        state = init_state("/tmp/target")
+        state["phase"]["current"] = "validation"
+
+        can, reason = can_advance_phase(state)
+
+        assert can is False
+        assert "validation" in reason.lower()
+
+    def test_can_advance_with_ready_verdict(self) -> None:
+        """Test can advance with READY verdict."""
+        state = init_state("/tmp/target")
+        state["phase"]["current"] = "validation"
+        state["artifacts"]["task_validation"] = {
+            "verdict": "READY",
+            "valid": True,
+        }
+
+        can, reason = can_advance_phase(state)
+
+        assert can is True
+
+    def test_can_advance_with_ready_with_notes_verdict(self) -> None:
+        """Test can advance with READY_WITH_NOTES verdict."""
+        state = init_state("/tmp/target")
+        state["phase"]["current"] = "validation"
+        state["artifacts"]["task_validation"] = {
+            "verdict": "READY_WITH_NOTES",
+            "valid": True,
+        }
+
+        can, reason = can_advance_phase(state)
+
+        assert can is True
+
+    def test_cannot_advance_with_blocked_verdict(self) -> None:
+        """Test cannot advance with BLOCKED verdict."""
+        state = init_state("/tmp/target")
+        state["phase"]["current"] = "validation"
+        state["artifacts"]["task_validation"] = {
+            "verdict": "BLOCKED",
+            "valid": False,
+            "error": "T005 not in spec",
+        }
+
+        can, reason = can_advance_phase(state)
+
+        assert can is False
+        assert "blocking" in reason.lower() or "validation" in reason.lower()

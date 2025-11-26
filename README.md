@@ -27,7 +27,8 @@ uv sync
 
 | Command | Description |
 |---------|-------------|
-| `/plan` | Decompose a spec into a task DAG (phases 0-5) |
+| `/plan` | Decompose a spec into a task DAG (phases 0-6) |
+| `/verify-plan` | Re-run task verification against spec & preferences |
 | `/execute` | Run tasks via isolated subagents |
 | `/execute T005` | Execute a specific task |
 | `/execute --batch` | Execute all ready tasks without prompts |
@@ -39,8 +40,9 @@ Phase 0: Ingestion     → spec.md saved
 Phase 1: Logical       → capability-map.json (what the system does)
 Phase 2: Physical      → physical-map.json (where code lives)
 Phase 3: Definition    → tasks/*.json (individual task files)
-Phase 4: Sequencing    → wave assignments, DAG validation
-Phase 5: Ready         → planning complete, ready for execution
+Phase 4: Validation    → tasks verified against spec & user preferences
+Phase 5: Sequencing    → wave assignments, DAG validation
+Phase 6: Ready         → planning complete, ready for execution
 ```
 
 ## Project Structure
@@ -51,11 +53,13 @@ Phase 5: Ready         → planning complete, ready for execution
 │   ├── logic-architect.md
 │   ├── physical-architect.md
 │   ├── task-author.md
+│   ├── task-plan-verifier.md
 │   ├── plan-auditor.md
 │   ├── task-executor.md
 │   └── task-verifier.md
 ├── commands/         # Slash commands
 │   ├── plan.md
+│   ├── verify-plan.md
 │   └── execute.md
 ├── skills/
 │   └── orchestrator/ # Main orchestration skill
@@ -81,6 +85,9 @@ python3 scripts/state.py status
 
 # List ready tasks
 python3 scripts/state.py ready-tasks
+
+# Register task validation result (during planning)
+python3 scripts/state.py validate-tasks READY "All tasks aligned"
 
 # Retry a failed task
 python3 scripts/state.py retry-task T005
