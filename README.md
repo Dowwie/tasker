@@ -16,12 +16,43 @@ Tasker implements a **Task Decomposition Protocol** that:
 # Install dependencies
 uv sync
 
+# Create planning directories
+mkdir -p project-planning/inputs
+
+# Copy and customize templates
+cp templates/spec.md.example project-planning/inputs/spec.md
+cp templates/constraints.md.example project-planning/inputs/constraints.md
+
+# Edit spec.md and constraints.md with your project details
+# IMPORTANT: Set "Target Directory:" in spec.md
+
 # In Claude Code, plan a project:
 /plan
 
 # Then execute the plan:
 /execute
 ```
+
+## Templates
+
+The `templates/` directory contains starter files for defining your project:
+
+| Template | Purpose |
+|----------|---------|
+| `spec.md.example` | Project specification (goals, architecture, APIs, data models, success criteria) |
+| `constraints.md.example` | Technology stack, architecture rules, code standards, definition of done |
+| `task.json.example` | Reference schema for task files (generated automatically during planning) |
+
+### Template Flow
+
+1. **Copy templates** to `project-planning/inputs/` and customize with your project details
+2. **Run `/plan`** — the orchestrator reads your inputs and coordinates specialized agents:
+   - Phase 1: `logic-architect` extracts capabilities/atoms from spec
+   - Phase 2: `physical-architect` maps atoms to file paths
+   - Phase 3: `task-author` creates individual task files
+3. **Run `/execute`** — tasks are executed via isolated subagents
+
+Templates themselves aren't processed programmatically—they're guidance for users. The system parses your customized files in `project-planning/inputs/` and validates generated artifacts against JSON schemas in `schemas/`.
 
 ## Commands
 
