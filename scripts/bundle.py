@@ -287,12 +287,75 @@ def validate_bundle(task_id: str) -> tuple[bool, str]:
     bundle = json.loads(bundle_path.read_text())
     schema = json.loads(schema_path.read_text())
 
-    required = schema.get("required", [])
-    for field in required:
-        if field not in bundle:
-            return False, f"Missing required field: {field}"
+    # Full schema validation with jsonschema if available
+    try:
+        from jsonschema import ValidationError, validate
+
+        validate(instance=bundle, schema=schema)
+    except ImportError:
+        # Fallback to basic validation
+        required = schema.get("required", [])
+        for field in required:
+            if field not in bundle:
+                return False, f"Missing required field: {field}"
+    except ValidationError as e:
+        path = " -> ".join(str(p) for p in e.absolute_path) if e.absolute_path else "root"
+        return False, f"Validation error at '{path}': {e.message}"
 
     return True, "Bundle is valid"
+
+
+def validate_bundle_dependencies(task_id: str) -> tuple[bool, list[str]]:
+    """Validate that all dependency files referenced in bundle exist.
+
+    Returns:
+        (all_exist, missing_files) tuple
+    """
+    bundle_path = BUNDLES_DIR / f"{task_id}-bundle.json"
+    if not bundle_path.exists():
+        return False, [f"Bundle not found: {bundle_path}"]
+
+    bundle = json.loads(bundle_path.read_text())
+    target_dir = Path(bundle.get("target_dir", ""))
+    dep_files = bundle.get("dependencies", {}).get("files", [])
+
+    missing = []
+    for dep_file in dep_files:
+        full_path = target_dir / dep_file
+        if not full_path.exists():
+            missing.append(dep_file)
+
+    return len(missing) == 0, missing
+
+
+def validate_verification_commands(task_id: str) -> tuple[bool, list[str]]:
+    """Validate that verification commands are syntactically valid.
+
+    Returns:
+        (all_valid, invalid_commands) tuple
+    """
+    import shlex
+
+    bundle_path = BUNDLES_DIR / f"{task_id}-bundle.json"
+    if not bundle_path.exists():
+        return False, [f"Bundle not found: {bundle_path}"]
+
+    bundle = json.loads(bundle_path.read_text())
+    criteria = bundle.get("acceptance_criteria", [])
+
+    invalid = []
+    for criterion in criteria:
+        cmd = criterion.get("verification", "")
+        if not cmd:
+            invalid.append(f"Empty verification for: {criterion.get('criterion', 'unknown')}")
+            continue
+        try:
+            # Validate command can be parsed
+            shlex.split(cmd)
+        except ValueError as e:
+            invalid.append(f"Invalid command '{cmd}': {e}")
+
+    return len(invalid) == 0, invalid
 
 
 def list_bundles() -> list[str]:

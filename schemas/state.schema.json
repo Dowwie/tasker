@@ -50,7 +50,7 @@
         "properties": {
           "id": { "type": "string" },
           "name": { "type": "string" },
-          "status": { "enum": ["pending", "ready", "running", "complete", "failed", "blocked"] },
+          "status": { "enum": ["pending", "ready", "running", "complete", "failed", "blocked", "skipped"] },
           "wave": { "type": "integer" },
           "depends_on": { "type": "array", "items": { "type": "string" } },
           "blocks": { "type": "array", "items": { "type": "string" } },
@@ -58,7 +58,46 @@
           "completed_at": { "type": "string", "format": "date-time" },
           "error": { "type": "string" },
           "files_created": { "type": "array", "items": { "type": "string" } },
-          "files_modified": { "type": "array", "items": { "type": "string" } }
+          "files_modified": { "type": "array", "items": { "type": "string" } },
+          "attempts": { "type": "integer", "minimum": 0, "default": 0 },
+          "duration_seconds": { "type": "number", "minimum": 0 },
+          "verification": {
+            "type": "object",
+            "properties": {
+              "verdict": { "enum": ["PASS", "FAIL", "CONDITIONAL"] },
+              "recommendation": { "enum": ["PROCEED", "BLOCK"] },
+              "criteria": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "score"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "score": { "enum": ["PASS", "PARTIAL", "FAIL"] },
+                    "evidence": { "type": "string" }
+                  }
+                }
+              },
+              "quality": {
+                "type": "object",
+                "properties": {
+                  "types": { "enum": ["PASS", "PARTIAL", "FAIL"] },
+                  "docs": { "enum": ["PASS", "PARTIAL", "FAIL"] },
+                  "patterns": { "enum": ["PASS", "PARTIAL", "FAIL"] },
+                  "errors": { "enum": ["PASS", "PARTIAL", "FAIL"] }
+                }
+              },
+              "tests": {
+                "type": "object",
+                "properties": {
+                  "coverage": { "enum": ["PASS", "PARTIAL", "FAIL"] },
+                  "assertions": { "enum": ["PASS", "PARTIAL", "FAIL"] },
+                  "edge_cases": { "enum": ["PASS", "PARTIAL", "FAIL"] }
+                }
+              },
+              "verified_at": { "type": "string", "format": "date-time" }
+            }
+          }
         }
       }
     },

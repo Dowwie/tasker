@@ -199,10 +199,27 @@ The verifier:
 - Executes each `acceptance_criteria[].verification` command
 - Returns structured report with PASS/FAIL per criterion
 - Recommends PROCEED or BLOCK
+- Includes structured JSON block for programmatic parsing
 
 **Wait for verifier response.** Parse the result:
-- If `**Status:** PASS` and `Recommendation: PROCEED` → continue to step 8
-- If `**Status:** FAIL` or `Recommendation: BLOCK` → rollback (step 8 failure path)
+- If `**Verdict:** PASS` and `Recommendation: PROCEED` → continue to step 8
+- If `**Verdict:** FAIL` or `Recommendation: BLOCK` → rollback (step 8 failure path)
+
+**Extract and persist verification data:**
+
+The verifier includes a JSON block at the end of its report. Extract it and persist:
+
+```bash
+# Parse the JSON block from verifier output
+# The JSON contains: task_id, verdict, recommendation, criteria, quality, tests
+
+python3 scripts/state.py record-verification T001 \
+  --verdict PASS \
+  --recommendation PROCEED \
+  --criteria '[{"name": "...", "score": "PASS", "evidence": "..."}]' \
+  --quality '{"types": "PASS", "docs": "PASS", "patterns": "PASS", "errors": "PASS"}' \
+  --tests '{"coverage": "PASS", "assertions": "PASS", "edge_cases": "PARTIAL"}'
+```
 
 ### 8. Complete or Rollback
 

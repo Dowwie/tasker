@@ -192,6 +192,46 @@ Your final message MUST include:
 2. Evidence for each criterion
 3. Reasoning for each judgment
 4. `### Recommendation` with `**PROCEED**` or `**BLOCK**`
+5. A structured JSON block at the end (see below)
+
+### Structured Output
+
+At the very end of your report, include a JSON block for programmatic parsing:
+
+```json
+{
+  "task_id": "T001",
+  "verdict": "PASS",
+  "recommendation": "PROCEED",
+  "criteria": [
+    {"name": "Valid credentials return True", "score": "PASS", "evidence": "Function exists, test passes"},
+    {"name": "Invalid email raises ValidationError", "score": "PASS", "evidence": "Error raised with message"}
+  ],
+  "quality": {
+    "types": "PASS",
+    "docs": "PASS",
+    "patterns": "PASS",
+    "errors": "PASS"
+  },
+  "tests": {
+    "coverage": "PASS",
+    "assertions": "PASS",
+    "edge_cases": "PARTIAL"
+  }
+}
+```
+
+**Score values:** `PASS`, `PARTIAL`, or `FAIL`
+
+This JSON block enables the executor to persist verification results via:
+```bash
+python3 scripts/state.py record-verification T001 \
+  --verdict PASS \
+  --recommendation PROCEED \
+  --criteria '[...]' \
+  --quality '{...}' \
+  --tests '{...}'
+```
 
 ## Failure Feedback
 

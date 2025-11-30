@@ -19,6 +19,8 @@ from bundle import (
     load_json,
     parse_constraints,
     validate_bundle,
+    validate_bundle_dependencies,
+    validate_verification_commands,
 )
 
 
@@ -563,7 +565,8 @@ class TestValidateBundle:
         valid, msg = validate_bundle("T001")
 
         assert valid is False
-        assert "missing" in msg.lower()
+        # Error message may say "missing" or "required" depending on validator
+        assert "missing" in msg.lower() or "required" in msg.lower()
 
 
 class TestListBundles:
@@ -685,3 +688,271 @@ class TestBundleIntegration:
         assert bundle["dependencies"]["tasks"] == ["T002"]
         # T002 was completed with files
         assert "src/data/user_repo.py" in bundle["dependencies"]["files"]
+
+
+class TestValidateBundleDependencies:
+    """Tests for validate_bundle_dependencies function."""
+
+    def test_all_dependencies_exist(
+        self,
+        temp_planning_dir: Path,
+        sample_task: dict,
+        sample_capability_map: dict,
+        sample_physical_map: dict,
+        tmp_path: Path,
+    ) -> None:
+        """Test when all dependency files exist."""
+        # Create target directory with dependency files
+        target_dir = tmp_path / "target-project"
+        target_dir.mkdir()
+        (target_dir / "src" / "data").mkdir(parents=True)
+        (target_dir / "src" / "data" / "user_repo.py").write_text("# repo")
+
+        # Update sample_state with target_dir
+        sample_state = {
+            "version": "2.0",
+            "target_dir": str(target_dir),
+            "tasks": {
+                "T001": {"id": "T001", "status": "pending", "wave": 1},
+                "T002": {
+                    "id": "T002",
+                    "status": "complete",
+                    "files_created": ["src/data/user_repo.py"],
+                },
+            },
+            "execution": {},
+        }
+
+        # Task that depends on T002
+        task_with_deps = {
+            "id": "T003",
+            "name": "Use user repo",
+            "wave": 2,
+            "atoms": ["A001"],
+            "files": [{"path": "src/api/users.py", "action": "create"}],
+            "dependencies": {"tasks": ["T002"], "external": []},
+            "acceptance_criteria": [{"criterion": "Works", "verification": "pytest"}],
+        }
+
+        (temp_planning_dir / "tasks" / "T003.json").write_text(json.dumps(task_with_deps))
+        (temp_planning_dir / "artifacts" / "capability-map.json").write_text(
+            json.dumps(sample_capability_map)
+        )
+        (temp_planning_dir / "artifacts" / "physical-map.json").write_text(
+            json.dumps(sample_physical_map)
+        )
+        (temp_planning_dir / "state.json").write_text(json.dumps(sample_state))
+
+        # Generate bundle
+        generate_bundle("T003")
+
+        # Validate dependencies
+        valid, missing = validate_bundle_dependencies("T003")
+
+        assert valid is True
+        assert len(missing) == 0
+
+    def test_missing_dependencies(
+        self,
+        temp_planning_dir: Path,
+        sample_capability_map: dict,
+        sample_physical_map: dict,
+        tmp_path: Path,
+    ) -> None:
+        """Test when dependency files are missing."""
+        target_dir = tmp_path / "target-project"
+        target_dir.mkdir()
+        # NOT creating the dependency file
+
+        sample_state = {
+            "version": "2.0",
+            "target_dir": str(target_dir),
+            "tasks": {
+                "T002": {
+                    "id": "T002",
+                    "status": "complete",
+                    "files_created": ["src/data/missing.py"],
+                },
+            },
+            "execution": {},
+        }
+
+        task_with_deps = {
+            "id": "T003",
+            "name": "Use missing file",
+            "wave": 2,
+            "atoms": ["A001"],
+            "files": [{"path": "src/api/users.py", "action": "create"}],
+            "dependencies": {"tasks": ["T002"], "external": []},
+            "acceptance_criteria": [{"criterion": "Works", "verification": "pytest"}],
+        }
+
+        (temp_planning_dir / "tasks" / "T003.json").write_text(json.dumps(task_with_deps))
+        (temp_planning_dir / "artifacts" / "capability-map.json").write_text(
+            json.dumps(sample_capability_map)
+        )
+        (temp_planning_dir / "artifacts" / "physical-map.json").write_text(
+            json.dumps(sample_physical_map)
+        )
+        (temp_planning_dir / "state.json").write_text(json.dumps(sample_state))
+
+        generate_bundle("T003")
+
+        valid, missing = validate_bundle_dependencies("T003")
+
+        assert valid is False
+        assert "src/data/missing.py" in missing
+
+    def test_nonexistent_bundle(self, temp_planning_dir: Path) -> None:
+        """Test validation of nonexistent bundle."""
+        valid, missing = validate_bundle_dependencies("T999")
+
+        assert valid is False
+        assert any("not found" in m.lower() for m in missing)
+
+
+class TestValidateVerificationCommands:
+    """Tests for validate_verification_commands function."""
+
+    def test_valid_commands(
+        self,
+        temp_planning_dir: Path,
+        sample_task: dict,
+        sample_capability_map: dict,
+        sample_physical_map: dict,
+        sample_state: dict,
+    ) -> None:
+        """Test bundle with valid verification commands."""
+        (temp_planning_dir / "tasks" / "T001.json").write_text(json.dumps(sample_task))
+        (temp_planning_dir / "artifacts" / "capability-map.json").write_text(
+            json.dumps(sample_capability_map)
+        )
+        (temp_planning_dir / "artifacts" / "physical-map.json").write_text(
+            json.dumps(sample_physical_map)
+        )
+        (temp_planning_dir / "state.json").write_text(json.dumps(sample_state))
+
+        generate_bundle("T001")
+
+        valid, invalid = validate_verification_commands("T001")
+
+        assert valid is True
+        assert len(invalid) == 0
+
+    def test_empty_verification_command(
+        self,
+        temp_planning_dir: Path,
+        sample_capability_map: dict,
+        sample_physical_map: dict,
+        sample_state: dict,
+    ) -> None:
+        """Test detection of empty verification command."""
+        task_empty_cmd = {
+            "id": "T001",
+            "name": "Task with empty command",
+            "wave": 1,
+            "atoms": ["A001"],
+            "files": [{"path": "src/file.py", "action": "create"}],
+            "dependencies": {"tasks": []},
+            "acceptance_criteria": [
+                {"criterion": "Something works", "verification": ""},
+            ],
+        }
+
+        (temp_planning_dir / "tasks" / "T001.json").write_text(json.dumps(task_empty_cmd))
+        (temp_planning_dir / "artifacts" / "capability-map.json").write_text(
+            json.dumps(sample_capability_map)
+        )
+        (temp_planning_dir / "artifacts" / "physical-map.json").write_text(
+            json.dumps(sample_physical_map)
+        )
+        (temp_planning_dir / "state.json").write_text(json.dumps(sample_state))
+
+        generate_bundle("T001")
+
+        valid, invalid = validate_verification_commands("T001")
+
+        assert valid is False
+        assert any("empty" in i.lower() for i in invalid)
+
+    def test_invalid_command_syntax(
+        self,
+        temp_planning_dir: Path,
+        sample_capability_map: dict,
+        sample_physical_map: dict,
+        sample_state: dict,
+    ) -> None:
+        """Test detection of syntactically invalid command."""
+        task_bad_cmd = {
+            "id": "T001",
+            "name": "Task with bad command",
+            "wave": 1,
+            "atoms": ["A001"],
+            "files": [{"path": "src/file.py", "action": "create"}],
+            "dependencies": {"tasks": []},
+            "acceptance_criteria": [
+                {"criterion": "Something", "verification": "echo 'unclosed quote"},
+            ],
+        }
+
+        (temp_planning_dir / "tasks" / "T001.json").write_text(json.dumps(task_bad_cmd))
+        (temp_planning_dir / "artifacts" / "capability-map.json").write_text(
+            json.dumps(sample_capability_map)
+        )
+        (temp_planning_dir / "artifacts" / "physical-map.json").write_text(
+            json.dumps(sample_physical_map)
+        )
+        (temp_planning_dir / "state.json").write_text(json.dumps(sample_state))
+
+        generate_bundle("T001")
+
+        valid, invalid = validate_verification_commands("T001")
+
+        assert valid is False
+        assert len(invalid) > 0
+
+    def test_complex_valid_command(
+        self,
+        temp_planning_dir: Path,
+        sample_capability_map: dict,
+        sample_physical_map: dict,
+        sample_state: dict,
+    ) -> None:
+        """Test complex but valid verification command."""
+        task_complex = {
+            "id": "T001",
+            "name": "Task with complex command",
+            "wave": 1,
+            "atoms": ["A001"],
+            "files": [{"path": "src/file.py", "action": "create"}],
+            "dependencies": {"tasks": []},
+            "acceptance_criteria": [
+                {
+                    "criterion": "All tests pass",
+                    "verification": "pytest tests/ -v --tb=short -x --cov=src --cov-report=term-missing",
+                },
+            ],
+        }
+
+        (temp_planning_dir / "tasks" / "T001.json").write_text(json.dumps(task_complex))
+        (temp_planning_dir / "artifacts" / "capability-map.json").write_text(
+            json.dumps(sample_capability_map)
+        )
+        (temp_planning_dir / "artifacts" / "physical-map.json").write_text(
+            json.dumps(sample_physical_map)
+        )
+        (temp_planning_dir / "state.json").write_text(json.dumps(sample_state))
+
+        generate_bundle("T001")
+
+        valid, invalid = validate_verification_commands("T001")
+
+        assert valid is True
+        assert len(invalid) == 0
+
+    def test_nonexistent_bundle(self, temp_planning_dir: Path) -> None:
+        """Test validation of nonexistent bundle."""
+        valid, invalid = validate_verification_commands("T999")
+
+        assert valid is False
+        assert any("not found" in i.lower() for i in invalid)

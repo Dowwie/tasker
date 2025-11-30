@@ -16,6 +16,7 @@ from state import (
     can_advance_phase,
     commit_task_changes,
     complete_task,
+    compute_metrics,
     fail_task,
     file_checksum,
     get_next_phase,
@@ -26,6 +27,7 @@ from state import (
     load_tasks_from_dir,
     log_tokens,
     now_iso,
+    record_verification,
     register_artifact,
     register_task_validation,
     save_state,
@@ -941,3 +943,391 @@ class TestCanAdvanceFromValidation:
 
         assert can is False
         assert "blocking" in reason.lower() or "validation" in reason.lower()
+
+
+class TestStartTaskAttempts:
+    """Tests for attempt tracking in start_task."""
+
+    def test_start_task_increments_attempts(self, temp_state_env: Path) -> None:
+        """Test that starting a task increments attempts counter."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "pending", "depends_on": []},
+        }
+
+        start_task(state, "T001")
+
+        assert state["tasks"]["T001"]["attempts"] == 1
+
+    def test_start_task_second_attempt(self, temp_state_env: Path) -> None:
+        """Test that retry increments attempts on second start."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "pending", "depends_on": [], "attempts": 1},
+        }
+
+        start_task(state, "T001")
+
+        assert state["tasks"]["T001"]["attempts"] == 2
+
+    def test_start_task_message_includes_attempt(self, temp_state_env: Path) -> None:
+        """Test that start message includes attempt number."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "pending", "depends_on": []},
+        }
+
+        success, msg = start_task(state, "T001")
+
+        assert success is True
+        assert "attempt 1" in msg
+
+
+class TestCompleteTaskDuration:
+    """Tests for duration calculation in complete_task."""
+
+    def test_complete_task_calculates_duration(self, temp_state_env: Path) -> None:
+        """Test that completing a task calculates duration."""
+        import time
+
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "pending", "depends_on": []},
+        }
+        state["execution"]["active_tasks"] = []
+
+        start_task(state, "T001")
+        time.sleep(0.1)  # Small delay to ensure measurable duration
+        complete_task(state, "T001")
+
+        assert "duration_seconds" in state["tasks"]["T001"]
+        assert state["tasks"]["T001"]["duration_seconds"] >= 0.1
+
+    def test_complete_task_duration_in_event(self, temp_state_env: Path) -> None:
+        """Test that duration is included in completion event."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "pending", "depends_on": []},
+        }
+        state["execution"]["active_tasks"] = []
+
+        start_task(state, "T001")
+        complete_task(state, "T001")
+
+        completed_events = [e for e in state["events"] if e["type"] == "task_completed"]
+        assert len(completed_events) == 1
+        assert "duration_seconds" in completed_events[0]["details"]
+
+
+class TestRecordVerification:
+    """Tests for record_verification function."""
+
+    def test_record_verification_success(self, temp_state_env: Path) -> None:
+        """Test recording verification results."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "complete", "depends_on": []},
+        }
+
+        criteria = [{"name": "Test criterion", "score": "PASS", "evidence": "Test evidence"}]
+        quality = {"types": "PASS", "docs": "PASS", "patterns": "PASS", "errors": "PASS"}
+        tests = {"coverage": "PASS", "assertions": "PASS", "edge_cases": "PARTIAL"}
+
+        success, msg = record_verification(
+            state, "T001", "PASS", "PROCEED", criteria, quality, tests
+        )
+
+        assert success is True
+        assert "PASS" in msg
+        assert state["tasks"]["T001"]["verification"]["verdict"] == "PASS"
+        assert state["tasks"]["T001"]["verification"]["recommendation"] == "PROCEED"
+        assert state["tasks"]["T001"]["verification"]["criteria"] == criteria
+        assert state["tasks"]["T001"]["verification"]["quality"] == quality
+        assert state["tasks"]["T001"]["verification"]["tests"] == tests
+        assert "verified_at" in state["tasks"]["T001"]["verification"]
+
+    def test_record_verification_invalid_verdict(self, temp_state_env: Path) -> None:
+        """Test that invalid verdict is rejected."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001", "status": "complete", "depends_on": []}}
+
+        success, msg = record_verification(state, "T001", "INVALID", "PROCEED")
+
+        assert success is False
+        assert "Invalid verdict" in msg
+
+    def test_record_verification_invalid_recommendation(self, temp_state_env: Path) -> None:
+        """Test that invalid recommendation is rejected."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001", "status": "complete", "depends_on": []}}
+
+        success, msg = record_verification(state, "T001", "PASS", "INVALID")
+
+        assert success is False
+        assert "Invalid recommendation" in msg
+
+    def test_record_verification_task_not_found(self, temp_state_env: Path) -> None:
+        """Test that missing task is rejected."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {}
+
+        success, msg = record_verification(state, "T999", "PASS", "PROCEED")
+
+        assert success is False
+        assert "not found" in msg.lower()
+
+    def test_record_verification_adds_event(self, temp_state_env: Path) -> None:
+        """Test that verification adds event."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001", "status": "complete", "depends_on": []}}
+
+        record_verification(state, "T001", "PASS", "PROCEED")
+
+        events = [e for e in state["events"] if e["type"] == "verification_recorded"]
+        assert len(events) == 1
+        assert events[0]["task_id"] == "T001"
+        assert events[0]["details"]["verdict"] == "PASS"
+
+
+class TestComputeMetrics:
+    """Tests for compute_metrics function."""
+
+    def test_compute_metrics_empty_state(self, temp_state_env: Path) -> None:
+        """Test metrics computation with no tasks."""
+        state = init_state("/tmp/target")
+
+        metrics = compute_metrics(state)
+
+        assert metrics["task_success_rate"] == 0.0
+        assert metrics["first_attempt_success_rate"] == 0.0
+        assert metrics["avg_attempts"] == 0.0
+        assert metrics["completed_count"] == 0
+        assert metrics["failed_count"] == 0
+
+    def test_compute_metrics_with_completed_tasks(self, temp_state_env: Path) -> None:
+        """Test metrics with completed tasks."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "attempts": 1,
+                "verification": {
+                    "criteria": [{"name": "c1", "score": "PASS"}],
+                    "quality": {"types": "PASS", "docs": "PASS", "patterns": "PASS", "errors": "PASS"},
+                    "tests": {"edge_cases": "PASS"},
+                },
+            },
+            "T002": {
+                "id": "T002",
+                "status": "complete",
+                "attempts": 2,
+                "verification": {
+                    "criteria": [{"name": "c2", "score": "PARTIAL"}],
+                    "quality": {"types": "PASS", "docs": "FAIL"},
+                    "tests": {"edge_cases": "PARTIAL"},
+                },
+            },
+        }
+        state["execution"]["completed_count"] = 2
+        state["execution"]["failed_count"] = 0
+        state["execution"]["total_tokens"] = 1000
+        state["execution"]["total_cost_usd"] = 0.10
+
+        metrics = compute_metrics(state)
+
+        assert metrics["task_success_rate"] == 1.0
+        assert metrics["first_attempt_success_rate"] == 0.5  # 1 of 2
+        assert metrics["avg_attempts"] == 1.5  # (1 + 2) / 2
+        assert metrics["tokens_per_task"] == 500  # 1000 / 2
+        assert metrics["cost_per_task"] == 0.05  # 0.10 / 2
+        assert metrics["quality_pass_rate"] == 0.5  # 1 of 2 has all PASS
+        assert metrics["functional_pass_rate"] == 0.5  # 1 PASS, 1 PARTIAL
+        assert metrics["test_edge_case_rate"] == 0.5  # 1 of 2 has PASS
+
+    def test_compute_metrics_with_failures(self, temp_state_env: Path) -> None:
+        """Test metrics with failed tasks."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "complete", "attempts": 1},
+            "T002": {"id": "T002", "status": "failed", "attempts": 3},
+        }
+        state["execution"]["completed_count"] = 1
+        state["execution"]["failed_count"] = 1
+
+        metrics = compute_metrics(state)
+
+        assert metrics["task_success_rate"] == 0.5  # 1 completed, 1 failed
+        assert metrics["completed_count"] == 1
+        assert metrics["failed_count"] == 1
+
+    def test_compute_metrics_no_verification_data(self, temp_state_env: Path) -> None:
+        """Test metrics when tasks have no verification data."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "complete", "attempts": 1},
+            "T002": {"id": "T002", "status": "complete", "attempts": 1},
+        }
+        state["execution"]["completed_count"] = 2
+        state["execution"]["failed_count"] = 0
+
+        metrics = compute_metrics(state)
+
+        # All should be valid but with no quality/test data
+        assert metrics["task_success_rate"] == 1.0
+        assert metrics["first_attempt_success_rate"] == 1.0
+        assert metrics["quality_pass_rate"] == 0.0  # No quality data
+        assert metrics["functional_pass_rate"] == 0.0  # No criteria
+        assert metrics["test_edge_case_rate"] == 0.0  # No test data
+
+    def test_compute_metrics_partial_verification(self, temp_state_env: Path) -> None:
+        """Test metrics with partial verification data."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "attempts": 1,
+                "verification": {
+                    "criteria": [{"name": "c1", "score": "PASS"}],
+                    # No quality or tests
+                },
+            },
+        }
+        state["execution"]["completed_count"] = 1
+
+        metrics = compute_metrics(state)
+
+        assert metrics["functional_pass_rate"] == 1.0
+        assert metrics["quality_pass_rate"] == 0.0  # No quality data
+        assert metrics["test_edge_case_rate"] == 0.0  # No test data
+
+    def test_compute_metrics_all_fail_criteria(self, temp_state_env: Path) -> None:
+        """Test metrics when all criteria fail."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "attempts": 3,
+                "verification": {
+                    "criteria": [
+                        {"name": "c1", "score": "FAIL"},
+                        {"name": "c2", "score": "FAIL"},
+                    ],
+                },
+            },
+        }
+        state["execution"]["completed_count"] = 1
+
+        metrics = compute_metrics(state)
+
+        assert metrics["functional_pass_rate"] == 0.0
+        assert metrics["avg_attempts"] == 3.0
+
+    def test_compute_metrics_high_retry_rate(self, temp_state_env: Path) -> None:
+        """Test metrics with high retry tasks."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "complete", "attempts": 5},
+            "T002": {"id": "T002", "status": "complete", "attempts": 3},
+            "T003": {"id": "T003", "status": "complete", "attempts": 1},
+        }
+        state["execution"]["completed_count"] = 3
+
+        metrics = compute_metrics(state)
+
+        assert metrics["first_attempt_success_rate"] == 1 / 3
+        assert metrics["avg_attempts"] == 3.0  # (5 + 3 + 1) / 3
+
+
+class TestRecordVerificationExtended:
+    """Extended tests for record_verification function."""
+
+    def test_record_conditional_verdict(self, temp_state_env: Path) -> None:
+        """Test recording CONDITIONAL verdict."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001", "status": "complete", "depends_on": []}}
+
+        success, msg = record_verification(state, "T001", "CONDITIONAL", "PROCEED")
+
+        assert success is True
+        assert state["tasks"]["T001"]["verification"]["verdict"] == "CONDITIONAL"
+
+    def test_record_verification_with_all_data(self, temp_state_env: Path) -> None:
+        """Test recording verification with full quality and test data."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001", "status": "complete", "depends_on": []}}
+
+        criteria = [
+            {"name": "Unit tests pass", "score": "PASS", "evidence": "All 42 tests passed"},
+            {"name": "Integration test", "score": "PARTIAL", "evidence": "2 of 3 scenarios passed"},
+        ]
+        quality = {
+            "types": "PASS",
+            "docs": "PARTIAL",
+            "patterns": "PASS",
+            "errors": "PASS",
+        }
+        tests = {
+            "coverage": "PASS",
+            "assertions": "PASS",
+            "edge_cases": "PARTIAL",
+        }
+
+        success, msg = record_verification(
+            state, "T001", "PASS", "PROCEED", criteria, quality, tests
+        )
+
+        assert success is True
+        v = state["tasks"]["T001"]["verification"]
+        assert v["criteria"] == criteria
+        assert v["quality"] == quality
+        assert v["tests"] == tests
+        assert "verified_at" in v
+
+    def test_record_verification_block_recommendation(self, temp_state_env: Path) -> None:
+        """Test recording BLOCK recommendation."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001", "status": "complete", "depends_on": []}}
+
+        criteria = [
+            {"name": "Security check", "score": "FAIL", "evidence": "SQL injection found"},
+        ]
+
+        success, msg = record_verification(
+            state, "T001", "FAIL", "BLOCK", criteria
+        )
+
+        assert success is True
+        assert state["tasks"]["T001"]["verification"]["recommendation"] == "BLOCK"
+
+    def test_record_verification_overwrites_previous(self, temp_state_env: Path) -> None:
+        """Test that re-recording verification overwrites previous data."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "verification": {"verdict": "FAIL", "recommendation": "BLOCK"},
+            }
+        }
+
+        # Re-verify with PASS
+        success, msg = record_verification(state, "T001", "PASS", "PROCEED")
+
+        assert success is True
+        assert state["tasks"]["T001"]["verification"]["verdict"] == "PASS"
+        assert state["tasks"]["T001"]["verification"]["recommendation"] == "PROCEED"
+
+    def test_record_verification_events_multiple(self, temp_state_env: Path) -> None:
+        """Test that multiple verifications add multiple events."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001", "status": "complete", "depends_on": []}}
+
+        record_verification(state, "T001", "FAIL", "BLOCK")
+        record_verification(state, "T001", "PASS", "PROCEED")
+
+        events = [e for e in state["events"] if e["type"] == "verification_recorded"]
+        assert len(events) == 2

@@ -22,6 +22,12 @@ Usage:
     state.py retry-task <task_id>         Reset failed task to pending
     state.py skip-task <task_id> [reason] Skip task without blocking dependents
     state.py log-tokens <session> <in> <out> <cost>  Log token usage
+    state.py record-verification <task_id> --verdict PASS|FAIL|CONDITIONAL
+                                          --recommendation PROCEED|BLOCK
+                                          [--criteria '<json>'] [--quality '<json>']
+                                          [--tests '<json>']
+                                          Record verification results for a task
+    state.py metrics [--format text|json] Compute and display performance metrics
 """
 
 import json
@@ -409,49 +415,57 @@ def get_ready_tasks(state: dict) -> list[str]:
 
 
 def start_task(state: dict, task_id: str) -> tuple[bool, str]:
-    """Mark task as running."""
+    """Mark task as running and increment attempt counter."""
     if task_id not in state["tasks"]:
         return False, f"Task not found: {task_id}"
-    
+
     task = state["tasks"][task_id]
     if task["status"] != "pending":
         return False, f"Task {task_id} is {task['status']}, not pending"
-    
+
     # Check dependencies
     for dep in task["depends_on"]:
         dep_status = state["tasks"].get(dep, {}).get("status")
         if dep_status != "complete":
             return False, f"Dependency {dep} is {dep_status}, not complete"
-    
+
     task["status"] = "running"
     task["started_at"] = now_iso()
+    task["attempts"] = task.get("attempts", 0) + 1
     state["execution"]["active_tasks"].append(task_id)
-    
-    add_event(state, "task_started", task_id=task_id)
-    return True, f"Task {task_id} started"
+
+    add_event(state, "task_started", task_id=task_id, details={"attempt": task["attempts"]})
+    return True, f"Task {task_id} started (attempt {task['attempts']})"
 
 
 def complete_task(state: dict, task_id: str, files_created: list = None, files_modified: list = None) -> tuple[bool, str]:
-    """Mark task as complete."""
+    """Mark task as complete and compute duration."""
     if task_id not in state["tasks"]:
         return False, f"Task not found: {task_id}"
-    
+
     task = state["tasks"][task_id]
     if task["status"] != "running":
         return False, f"Task {task_id} is {task['status']}, not running"
-    
+
     task["status"] = "complete"
     task["completed_at"] = now_iso()
     task["files_created"] = files_created or []
     task["files_modified"] = files_modified or []
-    
+
+    # Compute duration if started_at is available
+    if "started_at" in task:
+        started = datetime.fromisoformat(task["started_at"].replace("Z", "+00:00"))
+        completed = datetime.fromisoformat(task["completed_at"].replace("Z", "+00:00"))
+        task["duration_seconds"] = (completed - started).total_seconds()
+
     if task_id in state["execution"]["active_tasks"]:
         state["execution"]["active_tasks"].remove(task_id)
     state["execution"]["completed_count"] += 1
-    
+
     add_event(state, "task_completed", task_id=task_id, details={
         "files_created": files_created,
-        "files_modified": files_modified
+        "files_modified": files_modified,
+        "duration_seconds": task.get("duration_seconds")
     })
     return True, f"Task {task_id} completed"
 
@@ -565,13 +579,146 @@ def log_tokens(state: dict, session_id: str, input_tokens: int, output_tokens: i
     """Log token usage from subagent."""
     state["execution"]["total_tokens"] += input_tokens + output_tokens
     state["execution"]["total_cost_usd"] += cost
-    
+
     add_event(state, "tokens_logged", details={
         "session_id": session_id,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "cost_usd": cost
     })
+
+
+def record_verification(
+    state: dict,
+    task_id: str,
+    verdict: str,
+    recommendation: str,
+    criteria: list | None = None,
+    quality: dict | None = None,
+    tests: dict | None = None,
+) -> tuple[bool, str]:
+    """Record verification results for a completed task.
+
+    Args:
+        state: Current state dict
+        task_id: Task ID to record verification for
+        verdict: PASS, FAIL, or CONDITIONAL
+        recommendation: PROCEED or BLOCK
+        criteria: List of {"name", "score", "evidence"} dicts
+        quality: Dict with types, docs, patterns, errors scores
+        tests: Dict with coverage, assertions, edge_cases scores
+
+    Returns:
+        (success, message) tuple
+    """
+    if task_id not in state["tasks"]:
+        return False, f"Task not found: {task_id}"
+
+    valid_verdicts = ["PASS", "FAIL", "CONDITIONAL"]
+    if verdict not in valid_verdicts:
+        return False, f"Invalid verdict: {verdict}. Must be one of {valid_verdicts}"
+
+    valid_recommendations = ["PROCEED", "BLOCK"]
+    if recommendation not in valid_recommendations:
+        return False, f"Invalid recommendation: {recommendation}. Must be one of {valid_recommendations}"
+
+    task = state["tasks"][task_id]
+    task["verification"] = {
+        "verdict": verdict,
+        "recommendation": recommendation,
+        "criteria": criteria or [],
+        "quality": quality or {},
+        "tests": tests or {},
+        "verified_at": now_iso(),
+    }
+
+    add_event(state, "verification_recorded", task_id=task_id, details={
+        "verdict": verdict,
+        "recommendation": recommendation,
+        "criteria_count": len(criteria or []),
+    })
+
+    return True, f"Verification recorded for {task_id}: {verdict} ({recommendation})"
+
+
+def compute_metrics(state: dict) -> dict:
+    """Compute performance metrics from state.
+
+    Returns:
+        Dict with computed metrics:
+        - task_success_rate: completed / (completed + failed)
+        - first_attempt_success_rate: first-try successes / completed
+        - avg_attempts: average attempts per completed task
+        - tokens_per_task: total_tokens / completed
+        - cost_per_task: total_cost / completed
+        - quality_pass_rate: tasks with all quality PASS / completed
+        - functional_pass_rate: criteria PASS / total criteria
+        - test_edge_case_rate: tests with edge_cases PASS / tested tasks
+    """
+    tasks = state.get("tasks", {})
+    execution = state.get("execution", {})
+
+    completed = execution.get("completed_count", 0)
+    failed = execution.get("failed_count", 0)
+    total_tokens = execution.get("total_tokens", 0)
+    total_cost = execution.get("total_cost_usd", 0.0)
+
+    # Avoid division by zero
+    total_finished = completed + failed
+
+    # Count first-attempt successes and quality metrics
+    first_attempt_successes = 0
+    quality_full_pass = 0
+    total_criteria = 0
+    criteria_pass = 0
+    tasks_with_tests = 0
+    edge_cases_pass = 0
+    total_attempts = 0
+
+    for task in tasks.values():
+        if task.get("status") == "complete":
+            attempts = task.get("attempts", 1)
+            total_attempts += attempts
+            if attempts == 1:
+                first_attempt_successes += 1
+
+            verification = task.get("verification", {})
+
+            # Quality pass rate
+            quality = verification.get("quality", {})
+            if quality:
+                quality_scores = [quality.get(k) for k in ["types", "docs", "patterns", "errors"]]
+                if all(s == "PASS" for s in quality_scores if s):
+                    quality_full_pass += 1
+
+            # Functional criteria pass rate
+            criteria = verification.get("criteria", [])
+            for c in criteria:
+                total_criteria += 1
+                if c.get("score") == "PASS":
+                    criteria_pass += 1
+
+            # Test edge case rate
+            tests = verification.get("tests", {})
+            if tests:
+                tasks_with_tests += 1
+                if tests.get("edge_cases") == "PASS":
+                    edge_cases_pass += 1
+
+    return {
+        "task_success_rate": completed / total_finished if total_finished > 0 else 0.0,
+        "first_attempt_success_rate": first_attempt_successes / completed if completed > 0 else 0.0,
+        "avg_attempts": total_attempts / completed if completed > 0 else 0.0,
+        "tokens_per_task": total_tokens / completed if completed > 0 else 0,
+        "cost_per_task": total_cost / completed if completed > 0 else 0.0,
+        "quality_pass_rate": quality_full_pass / completed if completed > 0 else 0.0,
+        "functional_pass_rate": criteria_pass / total_criteria if total_criteria > 0 else 0.0,
+        "test_edge_case_rate": edge_cases_pass / tasks_with_tests if tasks_with_tests > 0 else 0.0,
+        "completed_count": completed,
+        "failed_count": failed,
+        "total_tokens": total_tokens,
+        "total_cost_usd": total_cost,
+    }
 
 
 def print_status(state: dict) -> None:
@@ -802,6 +949,82 @@ def main():
             save_state(state)
         print(msg)
         sys.exit(0 if success else 1)
+
+    elif cmd == "record-verification":
+        if len(sys.argv) < 5:
+            print("Usage: state.py record-verification <task_id> --verdict PASS|FAIL|CONDITIONAL --recommendation PROCEED|BLOCK [--criteria '<json>'] [--quality '<json>'] [--tests '<json>']")
+            sys.exit(1)
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        task_id = sys.argv[2]
+        verdict = None
+        recommendation = None
+        criteria = None
+        quality = None
+        tests = None
+
+        args = sys.argv[3:]
+        i = 0
+        while i < len(args):
+            if args[i] == "--verdict" and i + 1 < len(args):
+                verdict = args[i + 1].upper()
+                i += 2
+            elif args[i] == "--recommendation" and i + 1 < len(args):
+                recommendation = args[i + 1].upper()
+                i += 2
+            elif args[i] == "--criteria" and i + 1 < len(args):
+                criteria = json.loads(args[i + 1])
+                i += 2
+            elif args[i] == "--quality" and i + 1 < len(args):
+                quality = json.loads(args[i + 1])
+                i += 2
+            elif args[i] == "--tests" and i + 1 < len(args):
+                tests = json.loads(args[i + 1])
+                i += 2
+            else:
+                i += 1
+
+        if not verdict or not recommendation:
+            print("Error: --verdict and --recommendation are required")
+            sys.exit(1)
+
+        success, msg = record_verification(state, task_id, verdict, recommendation, criteria, quality, tests)
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+
+    elif cmd == "metrics":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        output_format = "text"
+        if len(sys.argv) > 2 and sys.argv[2] == "--format" and len(sys.argv) > 3:
+            output_format = sys.argv[3]
+
+        metrics = compute_metrics(state)
+
+        if output_format == "json":
+            print(json.dumps(metrics, indent=2))
+        else:
+            print("Performance Metrics")
+            print("=" * 40)
+            print(f"Task success rate:         {metrics['task_success_rate']:.1%}")
+            print(f"First-attempt success:     {metrics['first_attempt_success_rate']:.1%}")
+            print(f"Average attempts:          {metrics['avg_attempts']:.2f}")
+            print(f"Tokens per task:           {metrics['tokens_per_task']:,.0f}")
+            print(f"Cost per task:             ${metrics['cost_per_task']:.4f}")
+            print(f"Quality pass rate:         {metrics['quality_pass_rate']:.1%}")
+            print(f"Functional pass rate:      {metrics['functional_pass_rate']:.1%}")
+            print(f"Test edge case rate:       {metrics['test_edge_case_rate']:.1%}")
+            print("-" * 40)
+            print(f"Completed: {metrics['completed_count']}  Failed: {metrics['failed_count']}")
+            print(f"Total tokens: {metrics['total_tokens']:,}  Total cost: ${metrics['total_cost_usd']:.4f}")
 
     else:
         print(f"Unknown command: {cmd}")
