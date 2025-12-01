@@ -7,12 +7,17 @@ from textual.widgets import Footer, Header, Label, Static
 
 from tui.providers import TaskInfo, WorkflowState
 from tui.views.widgets import (
+    ArtifactPanel,
     CalibrationPanel,
     CostPanel,
     CurrentTaskPanel,
     HealthPanel,
+    PlanningMetricsPanel,
+    PlanningPhasePanel,
     ProgressPanel,
+    SpecCoveragePanel,
     TaskRow,
+    ValidationPanel,
 )
 
 
@@ -52,6 +57,44 @@ class PhaseIndicator(Static):
     def compose(self) -> ComposeResult:
         display = self.PHASE_DISPLAY.get(self._phase, self._phase.upper())
         yield Label(f"Phase: {display}", classes="phase-name")
+
+
+class ColumnHeader(Static):
+    """Header for a dashboard column."""
+
+    DEFAULT_CSS = """
+    ColumnHeader {
+        height: 3;
+        border: solid $primary;
+        padding: 0 1;
+        content-align: center middle;
+        text-style: bold;
+    }
+
+    ColumnHeader.active {
+        border: solid $accent;
+        color: $accent;
+    }
+
+    ColumnHeader.dimmed {
+        color: $text-muted;
+        border: solid $surface;
+    }
+    """
+
+    def __init__(self, title: str, active: bool = False, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._title = title
+        self._active = active
+
+    def compose(self) -> ComposeResult:
+        yield Label(self._title)
+
+    def on_mount(self) -> None:
+        if self._active:
+            self.add_class("active")
+        else:
+            self.add_class("dimmed")
 
 
 class TaskListPanel(Static):
@@ -154,7 +197,7 @@ class RecentActivityPanel(Static):
 
 
 class DashboardScreen(Screen):
-    """Main dashboard screen."""
+    """Main dashboard screen with Planning | Center | Execution columns."""
 
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -163,49 +206,71 @@ class DashboardScreen(Screen):
         ("d", "details", "Details"),
     ]
 
+    # Planning phases (before ready/executing/complete)
+    PLANNING_PHASES = {"ingestion", "logical", "physical", "definition", "validation", "sequencing"}
+
     DEFAULT_CSS = """
     DashboardScreen {
         layout: grid;
-        grid-size: 3 3;
-        grid-columns: 1fr 2fr 1fr;
-        grid-rows: auto 1fr auto;
+        grid-size: 3 4;
+        grid-columns: 1fr 1fr 1fr;
+        grid-rows: auto auto 1fr auto;
     }
 
-    #header-row {
+    #phase-row {
         column-span: 3;
         height: 3;
     }
 
-    #left-column {
-        row-span: 1;
-        padding: 1;
+    #planning-header {
+        height: 3;
+    }
+
+    #center-header {
+        height: 3;
+    }
+
+    #execution-header {
+        height: 3;
+    }
+
+    #planning-column {
+        padding: 0 1;
+        height: 100%;
     }
 
     #center-column {
-        row-span: 1;
-        padding: 1;
+        padding: 0 1;
+        height: 100%;
     }
 
-    #right-column {
-        row-span: 1;
-        padding: 1;
+    #execution-column {
+        padding: 0 1;
+        height: 100%;
     }
 
-    #footer-row {
-        column-span: 3;
-        height: auto;
+    .column-scroll {
+        height: 100%;
+        overflow-y: auto;
     }
 
     .no-state {
         text-align: center;
         margin: 2;
         color: $warning;
+        column-span: 3;
     }
     """
 
     def __init__(self, state: WorkflowState | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._state = state
+
+    def _is_planning_mode(self) -> bool:
+        """Check if we're in a planning phase."""
+        if not self._state:
+            return True
+        return self._state.phase.current in self.PLANNING_PHASES
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -219,6 +284,8 @@ class DashboardScreen(Screen):
             yield Footer()
             return
 
+        is_planning = self._is_planning_mode()
+
         # Calculate max phase
         max_phase = max((t.phase for t in self._state.tasks.values()), default=1)
 
@@ -229,27 +296,44 @@ class DashboardScreen(Screen):
             if tid in self._state.tasks
         ]
 
-        # Header row
-        with Container(id="header-row"):
+        # Phase indicator row
+        with Container(id="phase-row"):
             yield PhaseIndicator(self._state.phase.current)
 
-        # Left column - Health & Calibration
-        with Vertical(id="left-column"):
-            yield HealthPanel(self._state.health_checks)
-            yield CalibrationPanel(self._state.calibration)
-            yield CostPanel(self._state.execution)
+        # Column headers
+        yield ColumnHeader("PLANNING", active=is_planning, id="planning-header")
+        yield ColumnHeader("STATUS", active=True, id="center-header")
+        yield ColumnHeader("EXECUTION", active=not is_planning, id="execution-header")
 
-        # Center column - Progress & Tasks
+        # Planning column (left)
+        with Vertical(id="planning-column"):
+            with ScrollableContainer(classes="column-scroll"):
+                if self._state.planning:
+                    yield PlanningPhasePanel(self._state.planning)
+                    yield ArtifactPanel(self._state.planning.artifacts)
+                    yield PlanningMetricsPanel(self._state.planning)
+                    yield ValidationPanel(self._state.planning)
+                    if self._state.planning.spec_coverage_pct is not None:
+                        yield SpecCoveragePanel(self._state.planning)
+                else:
+                    yield Label("No planning data")
+
+        # Center column (status/health/cost)
         with Vertical(id="center-column"):
-            yield ProgressPanel(
-                self._state.execution, self._state.tasks, max_phase
-            )
-            yield CurrentTaskPanel(active_task_infos)
-            yield RecentActivityPanel(self._state.tasks)
+            with ScrollableContainer(classes="column-scroll"):
+                yield HealthPanel(self._state.health_checks)
+                yield CalibrationPanel(self._state.calibration)
+                yield CostPanel(self._state.execution)
 
-        # Right column - Task List
-        with Vertical(id="right-column"):
-            yield TaskListPanel(self._state.tasks)
+        # Execution column (right)
+        with Vertical(id="execution-column"):
+            with ScrollableContainer(classes="column-scroll"):
+                yield ProgressPanel(
+                    self._state.execution, self._state.tasks, max_phase
+                )
+                yield CurrentTaskPanel(active_task_infos)
+                yield RecentActivityPanel(self._state.tasks)
+                yield TaskListPanel(self._state.tasks)
 
         yield Footer()
 

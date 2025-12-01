@@ -72,6 +72,53 @@ class CalibrationInfo:
 
 
 @dataclass(frozen=True)
+class ArtifactInfo:
+    """Status of a planning artifact."""
+
+    name: str
+    exists: bool
+    valid: bool | None = None
+    error: str | None = None
+    validated_at: datetime | None = None
+    details: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PlanningInfo:
+    """Planning phase information for dashboard display."""
+
+    # Phase progression
+    phases: tuple[str, ...] = (
+        "ingestion",
+        "logical",
+        "physical",
+        "definition",
+        "validation",
+        "sequencing",
+    )
+    current_phase: str = "ingestion"
+    completed_phases: tuple[str, ...] = ()
+
+    # Artifact status
+    artifacts: tuple[ArtifactInfo, ...] = ()
+
+    # Metrics (populated after definition phase)
+    total_tasks: int = 0
+    total_behaviors: int = 0
+    avg_behaviors_per_task: float = 0.0
+    steel_thread_count: int = 0
+    phase_count: int = 0
+
+    # Spec coverage (if computed)
+    spec_coverage_pct: float | None = None
+    uncovered_requirements: tuple[str, ...] = ()
+
+    # Validation status
+    validation_verdict: str | None = None
+    validation_issues: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class WorkflowState:
     """Complete workflow state snapshot."""
 
@@ -83,6 +130,7 @@ class WorkflowState:
     updated_at: datetime
     health_checks: list[HealthCheck] = field(default_factory=list)
     calibration: CalibrationInfo | None = None
+    planning: PlanningInfo | None = None
 
 
 class StateProvider(Protocol):
