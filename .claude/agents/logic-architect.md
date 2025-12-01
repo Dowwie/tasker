@@ -28,6 +28,8 @@ If validation fails, fix the JSON and re-validate.
 
 Read: `project-planning/inputs/spec.md`
 
+**Important:** The spec may be in any format (freeform, PRD, bullet list, etc.). Do not expect structured sections. Extract requirements from whatever format is provided.
+
 ## I.P.S.O. Decomposition (Behavior Taxonomy)
 
 For each capability, identify behaviors:
@@ -43,7 +45,7 @@ For each capability, identify behaviors:
 {
   "version": "1.0",
   "spec_checksum": "<first 16 chars of SHA256 of spec.md>",
-  
+
   "domains": [
     {
       "id": "D1",
@@ -53,7 +55,10 @@ For each capability, identify behaviors:
         {
           "id": "C1",
           "name": "User Login",
-          "spec_ref": "Section 2.1",
+          "spec_ref": {
+            "quote": "Users must be able to log in with email and password",
+            "location": "paragraph 3"
+          },
           "behaviors": [
             {"id": "B1", "name": "ValidateCredentials", "type": "input", "description": "Check email/password format"},
             {"id": "B2", "name": "VerifyPassword", "type": "process", "description": "Compare hash"},
@@ -64,7 +69,7 @@ For each capability, identify behaviors:
       ]
     }
   ],
-  
+
   "flows": [
     {
       "id": "F1",
@@ -78,7 +83,7 @@ For each capability, identify behaviors:
       ]
     }
   ],
-  
+
   "coverage": {
     "total_requirements": 15,
     "covered_requirements": 15,
@@ -86,6 +91,34 @@ For each capability, identify behaviors:
   }
 }
 ```
+
+## Spec Reference Format
+
+The `spec_ref` field supports content-based traceability for any spec format:
+
+```json
+"spec_ref": {
+  "quote": "exact text from spec that defines this requirement",
+  "location": "optional: line number, paragraph, bullet point, etc."
+}
+```
+
+**Examples:**
+```json
+// For a structured doc
+{"quote": "The system shall authenticate users via OAuth2", "location": "Section 3.1"}
+
+// For a bullet list
+{"quote": "- user login with email/password", "location": "line 15"}
+
+// For freeform prose
+{"quote": "we need users to be able to sign in", "location": "paragraph 2"}
+
+// For meeting notes
+{"quote": "John said auth is critical for MVP", "location": "near end"}
+```
+
+The quote provides 100% traceability - it IS the spec content. The location is best-effort.
 
 ## ID Conventions
 
@@ -98,6 +131,7 @@ For each capability, identify behaviors:
 
 Before outputting:
 - [ ] Every spec requirement maps to behaviors
+- [ ] Every capability has a `spec_ref` with a quoted snippet from the spec
 - [ ] Every behavior has correct type (input/process/state/output)
 - [ ] Steel thread flow identified
 - [ ] Coverage gaps documented

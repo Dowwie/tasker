@@ -88,13 +88,13 @@ class ProgressPanel(Static):
         self,
         execution: ExecutionInfo,
         tasks: dict[str, TaskInfo],
-        max_wave: int,
+        max_phase: int,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self._execution = execution
         self._tasks = tasks
-        self._max_wave = max_wave
+        self._max_phase = max_phase
 
     def compose(self) -> ComposeResult:
         total = len(self._tasks)
@@ -107,9 +107,9 @@ class ProgressPanel(Static):
 
         yield Label("Progress", classes="title")
 
-        # Wave indicator
-        current_wave = self._execution.current_wave or 1
-        yield Label(f"Wave {current_wave} of {self._max_wave}")
+        # Phase indicator
+        current_phase = self._execution.current_phase or 1
+        yield Label(f"Phase {current_phase} of {self._max_phase}")
 
         # Progress bar
         progress = completed / total if total > 0 else 0

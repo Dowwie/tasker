@@ -10,7 +10,7 @@
 
     "task_id": { "type": "string", "pattern": "^T[0-9]+$" },
     "name": { "type": "string" },
-    "wave": { "type": "integer", "minimum": 1 },
+    "phase": { "type": "integer", "minimum": 1 },
 
     "target_dir": {
       "type": "string",

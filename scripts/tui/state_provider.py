@@ -40,7 +40,7 @@ def _task_from_dict(tid: str, data: dict) -> TaskInfo:
         id=tid,
         name=data.get("name", ""),
         status=data.get("status", "pending"),
-        wave=data.get("wave", 0),
+        phase=data.get("phase", 0),
         depends_on=tuple(data.get("depends_on", [])),
         blocks=tuple(data.get("blocks", [])),
         attempts=data.get("attempts", 0),
@@ -88,7 +88,7 @@ class FileStateProvider:
 
         exec_data = data.get("execution", {})
         execution = ExecutionInfo(
-            current_wave=exec_data.get("current_wave", 0),
+            current_phase=exec_data.get("current_phase", 0),
             active_tasks=tuple(exec_data.get("active_tasks", [])),
             completed_count=exec_data.get("completed_count", 0),
             failed_count=exec_data.get("failed_count", 0),

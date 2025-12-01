@@ -253,7 +253,7 @@ def generate_bundle(task_id: str) -> tuple[bool, str, dict | None]:
         "bundle_created_at": now_iso(),
         "task_id": task_id,
         "name": task.get("name", ""),
-        "wave": task.get("wave", 1),
+        "phase": task.get("phase", 1),
         "target_dir": str(target_dir),
         "context": context,
         "behaviors": expanded_behaviors,

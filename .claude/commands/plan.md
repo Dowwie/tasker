@@ -4,10 +4,20 @@ Decompose a specification into an executable task DAG.
 
 ## Input Required
 
-You will be asked to provide:
-1. **Specification** - Your requirements document (paste or path)
-2. **Target Directory** - Where the code will eventually be written
-3. **Constraints** (optional) - Tech stack, architecture rules
+The planner will ask you for:
+
+1. **Specification** - Paste your requirements directly, or provide a file path. Any format works:
+   - PRDs, design docs, Notion exports
+   - Bullet lists, freeform descriptions
+   - Slack thread summaries, meeting notes
+   - Existing README or spec files
+
+2. **Target Directory** - Where the code will be written (e.g., `/path/to/my-project`)
+
+3. **Tech Stack** (optional) - Any constraints like:
+   - "Python with FastAPI"
+   - "Use existing React setup"
+   - "Must integrate with PostgreSQL"
 
 ## What Happens
 
@@ -19,7 +29,7 @@ Phase 1: Logical       → capability-map.json (validated)
 Phase 2: Physical      → physical-map.json (validated)
 Phase 3: Definition    → tasks/*.json created
 Phase 4: Validation    → tasks verified against spec & user preferences
-Phase 5: Sequencing    → waves assigned, DAG validated
+Phase 5: Sequencing    → phases assigned, DAG validated
 Phase 6: Ready         → state.json shows "ready" phase
 ```
 
@@ -44,8 +54,7 @@ After planning completes, you'll have:
 project-planning/
 ├── state.json              # Execution state (ready phase)
 ├── inputs/
-│   ├── spec.md             # Your specification
-│   └── constraints.md      # Tech stack rules
+│   └── spec.md             # Your specification (verbatim)
 ├── artifacts/
 │   ├── capability-map.json # What the system does
 │   └── physical-map.json   # Where code lives

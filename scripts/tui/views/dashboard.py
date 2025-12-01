@@ -82,17 +82,17 @@ class TaskListPanel(Static):
     def compose(self) -> ComposeResult:
         yield Label("Tasks", classes="title")
 
-        # Sort by wave, then by ID
+        # Sort by phase, then by ID
         sorted_tasks = sorted(
-            self._tasks.values(), key=lambda t: (t.wave, t.id)
+            self._tasks.values(), key=lambda t: (t.phase, t.id)
         )
 
         with ScrollableContainer(classes="task-list"):
-            current_wave = None
+            current_phase = None
             for task in sorted_tasks:
-                if task.wave != current_wave:
-                    current_wave = task.wave
-                    yield Label(f"─── Wave {current_wave} ───")
+                if task.phase != current_phase:
+                    current_phase = task.phase
+                    yield Label(f"─── Phase {current_phase} ───")
                 yield TaskRow(task)
 
 
@@ -219,8 +219,8 @@ class DashboardScreen(Screen):
             yield Footer()
             return
 
-        # Calculate max wave
-        max_wave = max((t.wave for t in self._state.tasks.values()), default=1)
+        # Calculate max phase
+        max_phase = max((t.phase for t in self._state.tasks.values()), default=1)
 
         # Get active tasks
         active_task_infos = [
@@ -242,7 +242,7 @@ class DashboardScreen(Screen):
         # Center column - Progress & Tasks
         with Vertical(id="center-column"):
             yield ProgressPanel(
-                self._state.execution, self._state.tasks, max_wave
+                self._state.execution, self._state.tasks, max_phase
             )
             yield CurrentTaskPanel(active_task_infos)
             yield RecentActivityPanel(self._state.tasks)

@@ -1,56 +1,46 @@
 # Templates
 
-This directory contains example files to help you get started with the Task Decomposition Protocol v2.
+This directory contains example files for the Task Decomposition Protocol v2.
 
 ## Quick Start
 
-```bash
-# Create planning directories
-mkdir -p project-planning/inputs
+No setup required. Just run `/plan` and the orchestrator will ask for:
 
-# Copy and customize templates
-cp templates/spec.md.example project-planning/inputs/spec.md
-cp templates/constraints.md.example project-planning/inputs/constraints.md
+1. **Your specification** - paste it or provide a file path
+2. **Target directory** - where to write the code
+3. **Tech stack** (optional) - any constraints
 
-# Edit with your project details
-# Be sure to set TARGET_DIR in spec.md
-```
+The spec is stored verbatim. Any format works.
 
 ## Template Files
 
-### spec.md.example
+### example-spec.md
 
-The project specification template. Contains sections for:
-- Project overview and goals
-- Architecture and components
-- API contracts and data models
-- Non-functional requirements
-- Success criteria
+An example specification showing one possible format. **You don't need to follow this format.**
+The planner accepts any input:
+- Freeform requirements
+- PRDs or design docs
+- Bullet lists
+- Meeting notes
 
-**Required field:** `Target Directory:` must specify where code will be written.
-
-### constraints.md.example
-
-The project constraints template. Defines:
-- Technology stack (language, frameworks, tools)
-- Architecture rules (required and prohibited patterns)
-- Code standards (naming, documentation)
-- Definition of done
-
-The constraints are parsed by the bundle generator and included in execution bundles.
+This file is purely for inspiration.
 
 ### task.json.example
 
 Example of an individual task file. Shows the JSON schema with:
-- Task identification (id, name, wave)
+- Task identification (id, name, phase)
 - Context (domain, capability, spec reference)
-- Atoms to implement
+- Behaviors to implement
 - Files to create/modify
 - Dependencies (tasks and external)
 - Acceptance criteria with verification commands
 - Time estimate
 
 Task files are created by the task-author agent during Phase 3 (Definition).
+
+### constraints.md.example
+
+Example constraints file. **Optional.** You can provide tech stack constraints conversationally when running `/plan` instead of creating this file.
 
 ## Validation
 
@@ -66,9 +56,8 @@ python3 scripts/state.py validate capability_map
 python3 scripts/state.py validate physical_map
 ```
 
-## Next Steps
+## Workflow
 
-After setting up your inputs:
-1. Run `/plan` to decompose your spec into tasks
-2. Review the generated tasks in `project-planning/tasks/`
+1. Run `/plan` - provide spec, target dir, optional constraints
+2. Review generated tasks in `project-planning/tasks/`
 3. Run `/execute` to implement tasks via isolated subagents

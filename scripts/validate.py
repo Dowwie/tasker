@@ -141,7 +141,7 @@ def validate_dag(state: dict) -> tuple[bool, str]:
 
 
 def validate_steel_thread(state: dict) -> tuple[bool, list[str]]:
-    """Validate steel thread forms a contiguous path and is in early waves.
+    """Validate steel thread forms a contiguous path and is in early phases.
 
     Returns:
         (valid, issues) tuple
@@ -160,12 +160,12 @@ def validate_steel_thread(state: dict) -> tuple[bool, list[str]]:
         issues.append("No steel thread tasks defined")
         return False, issues
 
-    # Check waves - steel thread should be early
-    max_wave = max(tasks[t].get("wave", 1) for t in tasks)
+    # Check phases - steel thread should be early
+    max_phase = max(tasks[t].get("phase", 1) for t in tasks)
     for tid in steel_thread_tasks:
-        wave = tasks.get(tid, {}).get("wave", 1)
-        if wave > max_wave // 2 + 1:
-            issues.append(f"{tid} is in wave {wave}, should be in earlier waves for steel thread")
+        phase = tasks.get(tid, {}).get("phase", 1)
+        if phase > max_phase // 2 + 1:
+            issues.append(f"{tid} is in phase {phase}, should be in earlier phases for steel thread")
 
     # Check connectivity - steel thread tasks should form a path
     st_set = set(steel_thread_tasks)

@@ -48,11 +48,11 @@ def print_status_once() -> int:
     blocked = sum(1 for t in state.tasks.values() if t.status == "blocked")
     pending = total - completed - failed - running - blocked
 
-    max_wave = max((t.wave for t in state.tasks.values()), default=1)
-    current_wave = state.execution.current_wave or 1
+    max_phase = max((t.phase for t in state.tasks.values()), default=1)
+    current_phase = state.execution.current_phase or 1
 
     print(f"Progress: {completed}/{total} tasks ({completed/total*100:.0f}%)" if total > 0 else "Progress: No tasks")
-    print(f"Wave: {current_wave}/{max_wave}")
+    print(f"Phase: {current_phase}/{max_phase}")
     print()
 
     print("Status breakdown:")
@@ -132,9 +132,9 @@ def print_status_json() -> int:
             "running": len(state.execution.active_tasks),
             "blocked": sum(1 for t in state.tasks.values() if t.status == "blocked"),
         },
-        "wave": {
-            "current": state.execution.current_wave or 1,
-            "max": max((t.wave for t in state.tasks.values()), default=1),
+        "phase": {
+            "current": state.execution.current_phase or 1,
+            "max": max((t.phase for t in state.tasks.values()), default=1),
         },
         "health_checks": [
             {"name": c.name, "passed": c.passed, "message": c.message}

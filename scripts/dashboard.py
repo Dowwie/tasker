@@ -235,27 +235,27 @@ def render_dashboard(state: dict, use_color: bool = True) -> str:
     ])
     lines.append(box_text(status_line, width, "center"))
 
-    # Wave progress
-    waves = {}
+    # Phase progress
+    phases = {}
     for task in tasks.values():
-        wave = task.get("wave", 0)
-        if wave not in waves:
-            waves[wave] = {"total": 0, "complete": 0}
-        waves[wave]["total"] += 1
+        phase = task.get("phase", 0)
+        if phase not in phases:
+            phases[phase] = {"total": 0, "complete": 0}
+        phases[phase]["total"] += 1
         if task["status"] == "complete":
-            waves[wave]["complete"] += 1
+            phases[phase]["complete"] += 1
 
-    if waves:
+    if phases:
         lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
-        lines.append(box_text(f"{c(BOLD)}WAVE PROGRESS{c(RESET)}", width, "center"))
+        lines.append(box_text(f"{c(BOLD)}PHASE PROGRESS{c(RESET)}", width, "center"))
         lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
 
-        for wave_num in sorted(waves.keys()):
-            if wave_num == 0:
+        for phase_num in sorted(phases.keys()):
+            if phase_num == 0:
                 continue
-            w = waves[wave_num]
-            wave_bar = progress_bar(w["complete"], w["total"], 20)
-            lines.append(box_text(f"Wave {wave_num}: {wave_bar} ({w['complete']}/{w['total']})", width))
+            w = phases[phase_num]
+            phase_bar = progress_bar(w["complete"], w["total"], 20)
+            lines.append(box_text(f"Phase {phase_num}: {phase_bar} ({w['complete']}/{w['total']})", width))
 
     # Running tasks
     running_tasks = [t for t in tasks.values() if t["status"] == "running"]
@@ -312,8 +312,8 @@ def render_dashboard(state: dict, use_color: bool = True) -> str:
         lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
 
         for task in ready_tasks[:5]:  # Limit to 5
-            wave = task.get("wave", "?")
-            lines.append(box_text(f"{c(STATUS_COLORS['ready'])}{STATUS_ICONS['ready']}{c(RESET)} {task['id']} [W{wave}]: {task.get('name', '')[:45]}", width))
+            phase = task.get("phase", "?")
+            lines.append(box_text(f"{c(STATUS_COLORS['ready'])}{STATUS_ICONS['ready']}{c(RESET)} {task['id']} [W{phase}]: {task.get('name', '')[:45]}", width))
 
         if len(ready_tasks) > 5:
             lines.append(box_text(f"  ... and {len(ready_tasks) - 5} more ready", width))
@@ -448,7 +448,7 @@ def main():
             "tasks": {
                 tid: {
                     "status": t["status"],
-                    "wave": t.get("wave"),
+                    "phase": t.get("phase"),
                     "name": t.get("name"),
                     "error": t.get("error"),
                 }

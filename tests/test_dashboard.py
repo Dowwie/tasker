@@ -222,7 +222,7 @@ class TestRenderDashboard:
                     "id": "T001",
                     "name": "First task",
                     "status": "complete",
-                    "wave": 1,
+                    "phase": 1,
                     "depends_on": [],
                     "blocks": ["T002"],
                     "completed_at": (now - timedelta(hours=1)).isoformat(),
@@ -231,7 +231,7 @@ class TestRenderDashboard:
                     "id": "T002",
                     "name": "Second task",
                     "status": "running",
-                    "wave": 2,
+                    "phase": 2,
                     "depends_on": ["T001"],
                     "blocks": [],
                     "started_at": (now - timedelta(minutes=30)).isoformat(),
@@ -240,13 +240,13 @@ class TestRenderDashboard:
                     "id": "T003",
                     "name": "Third task",
                     "status": "pending",
-                    "wave": 2,
+                    "phase": 2,
                     "depends_on": ["T001"],
                     "blocks": [],
                 },
             },
             "execution": {
-                "current_wave": 2,
+                "current_phase": 2,
                 "active_tasks": ["T002"],
                 "completed_count": 1,
                 "failed_count": 0,
@@ -302,12 +302,12 @@ class TestRenderDashboard:
         assert "50,000" in result
         assert "$0.2500" in result
 
-    def test_dashboard_contains_wave_progress(self, sample_state: dict) -> None:
+    def test_dashboard_contains_phase_progress(self, sample_state: dict) -> None:
         result = render_dashboard(sample_state, use_color=False)
 
-        assert "WAVE PROGRESS" in result
-        assert "Wave 1" in result
-        assert "Wave 2" in result
+        assert "PHASE PROGRESS" in result
+        assert "Phase 1" in result
+        assert "Phase 2" in result
 
     def test_dashboard_shows_failed_tasks(self, sample_state: dict) -> None:
         sample_state["tasks"]["T002"]["status"] = "failed"

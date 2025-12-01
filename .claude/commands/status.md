@@ -10,7 +10,7 @@ python3 scripts/status.py --once
 
 This shows:
 - Current phase and target directory
-- Progress (completed/total tasks, current wave)
+- Progress (completed/total tasks, current phase)
 - Status breakdown (completed, running, failed, blocked, pending)
 - Health checks (DAG validation, steel thread, verification commands)
 - Verifier calibration score

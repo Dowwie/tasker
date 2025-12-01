@@ -427,7 +427,7 @@ This section documents how the Task Decomposition Protocol v2 implements the abo
 | Phase 1 | `01-capability-map.md` | `capability-map.json` (schema-validated) |
 | Phase 2 | `02-physical-map.md` | `physical-map.json` (schema-validated) |
 | Phase 3-4 | `03-task-inventory.md` | `tasks/*.json` (individual files) |
-| Phase 5 | `master_plan.md` | Waves in task files + state.json |
+| Phase 5 | `master_plan.md` | Phases in task files + state.json |
 | State | `progress.md` (mutable) | `state.json` (append-only events) |
 
 ### Commands

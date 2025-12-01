@@ -251,7 +251,7 @@ class TaskDetailScreen(Screen):
 
             status_class = f"status-{self._task.status}"
             status_parts = [f"Status: {self._task.status.upper()}"]
-            status_parts.append(f"Wave: {self._task.wave}")
+            status_parts.append(f"Phase: {self._task.phase}")
             status_parts.append(f"Attempts: {self._task.attempts}")
 
             if self._task.duration_seconds:

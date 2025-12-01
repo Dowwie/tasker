@@ -11,13 +11,17 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from state import (
+    FAILURE_CATEGORIES,
     add_event,
     advance_phase,
     can_advance_phase,
     commit_task_changes,
     complete_task,
+    compute_failure_metrics,
     compute_metrics,
     compute_planning_metrics,
+    compute_spec_coverage,
+    extract_requirements_from_spec,
     fail_task,
     file_checksum,
     get_calibration_score,
@@ -36,6 +40,7 @@ from state import (
     register_task_validation,
     save_state,
     start_task,
+    update_spec_coverage,
     validate_json,
     verify_rollback,
 )
@@ -250,7 +255,7 @@ class TestInitState:
         assert state["phase"]["completed"] == []
         assert state["tasks"] == {}
         assert state["artifacts"] == {}
-        assert state["execution"]["current_wave"] == 0
+        assert state["execution"]["current_phase"] == 0
 
     def test_init_state_resolves_path(self) -> None:
         """Test that init_state resolves relative paths."""
@@ -337,7 +342,7 @@ class TestCanAdvancePhase:
         assert can is False
 
         # With tasks
-        state["tasks"]["T001"] = {"id": "T001", "wave": 1}
+        state["tasks"]["T001"] = {"id": "T001", "phase": 1}
         can, reason = can_advance_phase(state)
         assert can is True
 
@@ -444,8 +449,8 @@ class TestLoadTasksFromDir:
         state = init_state("/tmp/target")
 
         # Create task files
-        task1 = {"id": "T001", "name": "Task 1", "wave": 1, "dependencies": {"tasks": []}}
-        task2 = {"id": "T002", "name": "Task 2", "wave": 2, "dependencies": {"tasks": ["T001"]}}
+        task1 = {"id": "T001", "name": "Task 1", "phase": 1, "dependencies": {"tasks": []}}
+        task2 = {"id": "T002", "name": "Task 2", "phase": 2, "dependencies": {"tasks": ["T001"]}}
 
         (state_module.PLANNING_DIR / "tasks" / "T001.json").write_text(json.dumps(task1))
         (state_module.PLANNING_DIR / "tasks" / "T002.json").write_text(json.dumps(task2))
@@ -463,8 +468,8 @@ class TestLoadTasksFromDir:
 
         state = init_state("/tmp/target")
 
-        task1 = {"id": "T001", "name": "Task 1", "wave": 1, "dependencies": {"tasks": []}}
-        task2 = {"id": "T002", "name": "Task 2", "wave": 2, "dependencies": {"tasks": ["T001"]}}
+        task1 = {"id": "T001", "name": "Task 1", "phase": 1, "dependencies": {"tasks": []}}
+        task2 = {"id": "T002", "name": "Task 2", "phase": 2, "dependencies": {"tasks": ["T001"]}}
 
         (state_module.PLANNING_DIR / "tasks" / "T001.json").write_text(json.dumps(task1))
         (state_module.PLANNING_DIR / "tasks" / "T002.json").write_text(json.dumps(task2))
@@ -1689,8 +1694,8 @@ class TestPlanningMetrics:
 
         state = init_state("/tmp/target")
         state["tasks"] = {
-            "T001": {"id": "T001", "wave": 1},
-            "T002": {"id": "T002", "wave": 2},
+            "T001": {"id": "T001", "phase": 1},
+            "T002": {"id": "T002", "phase": 2},
         }
 
         # Create task files
@@ -1722,5 +1727,447 @@ class TestPlanningMetrics:
         assert metrics["avg_criteria_per_task"] == 1.5
         assert metrics["avg_files_per_task"] == 1.5
         assert metrics["dependency_density"] == 0.5
-        assert metrics["wave_count"] == 2
+        assert metrics["phase_count"] == 2
         assert metrics["steel_thread_coverage"] == 0.5
+
+
+class TestFailTaskClassification:
+    """Tests for failure classification in fail_task."""
+
+    def test_fail_task_with_category(self, temp_state_env: Path) -> None:
+        """Test failing a task with category classification."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "running", "depends_on": [], "blocks": []},
+        }
+        state["execution"]["active_tasks"] = ["T001"]
+
+        success, msg = fail_task(
+            state, "T001", "Import error", category="dependency", subcategory="missing_import"
+        )
+
+        assert success is True
+        assert state["tasks"]["T001"]["failure"]["category"] == "dependency"
+        assert state["tasks"]["T001"]["failure"]["subcategory"] == "missing_import"
+        assert state["tasks"]["T001"]["failure"]["retryable"] is True
+        assert "(dependency)" in msg
+
+    def test_fail_task_default_category_other(self, temp_state_env: Path) -> None:
+        """Test that default category is 'other'."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "running", "depends_on": [], "blocks": []},
+        }
+        state["execution"]["active_tasks"] = ["T001"]
+
+        success, msg = fail_task(state, "T001", "Unknown error")
+
+        assert state["tasks"]["T001"]["failure"]["category"] == "other"
+
+    def test_fail_task_invalid_category_defaults_to_other(self, temp_state_env: Path) -> None:
+        """Test that invalid category defaults to 'other'."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "running", "depends_on": [], "blocks": []},
+        }
+        state["execution"]["active_tasks"] = ["T001"]
+
+        success, msg = fail_task(state, "T001", "Error", category="invalid_category")
+
+        assert state["tasks"]["T001"]["failure"]["category"] == "other"
+
+    def test_fail_task_non_retryable(self, temp_state_env: Path) -> None:
+        """Test marking a failure as non-retryable."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "running", "depends_on": [], "blocks": []},
+        }
+        state["execution"]["active_tasks"] = ["T001"]
+
+        success, msg = fail_task(
+            state, "T001", "Scope error", category="scope", retryable=False
+        )
+
+        assert state["tasks"]["T001"]["failure"]["retryable"] is False
+
+    def test_fail_task_event_includes_classification(self, temp_state_env: Path) -> None:
+        """Test that failure event includes classification details."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "running", "depends_on": [], "blocks": []},
+        }
+        state["execution"]["active_tasks"] = ["T001"]
+
+        fail_task(
+            state, "T001", "Test timeout", category="verification", subcategory="test_timeout"
+        )
+
+        events = [e for e in state["events"] if e["type"] == "task_failed"]
+        assert len(events) == 1
+        assert events[0]["details"]["category"] == "verification"
+        assert events[0]["details"]["subcategory"] == "test_timeout"
+
+    def test_failure_categories_constant(self) -> None:
+        """Test that FAILURE_CATEGORIES is defined correctly."""
+        assert "dependency" in FAILURE_CATEGORIES
+        assert "implementation" in FAILURE_CATEGORIES
+        assert "verification" in FAILURE_CATEGORIES
+        assert "environment" in FAILURE_CATEGORIES
+        assert "scope" in FAILURE_CATEGORIES
+        assert "other" in FAILURE_CATEGORIES
+
+
+class TestComputeFailureMetrics:
+    """Tests for compute_failure_metrics function."""
+
+    def test_compute_failure_metrics_empty(self, temp_state_env: Path) -> None:
+        """Test failure metrics with no failed tasks."""
+        state = init_state("/tmp/target")
+
+        metrics = compute_failure_metrics(state)
+
+        assert metrics["total_failed"] == 0
+        assert all(count == 0 for count in metrics["by_category"].values())
+
+    def test_compute_failure_metrics_by_category(self, temp_state_env: Path) -> None:
+        """Test failure metrics breakdown by category."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "failed",
+                "failure": {"category": "dependency", "subcategory": "missing_import", "retryable": True},
+            },
+            "T002": {
+                "id": "T002",
+                "status": "failed",
+                "failure": {"category": "dependency", "subcategory": "version_conflict", "retryable": True},
+            },
+            "T003": {
+                "id": "T003",
+                "status": "failed",
+                "failure": {"category": "implementation", "subcategory": "", "retryable": True},
+            },
+            "T004": {
+                "id": "T004",
+                "status": "complete",  # Not failed
+            },
+        }
+
+        metrics = compute_failure_metrics(state)
+
+        assert metrics["total_failed"] == 3
+        assert metrics["by_category"]["dependency"] == 2
+        assert metrics["by_category"]["implementation"] == 1
+        assert metrics["by_category"]["other"] == 0
+        assert "T001" in metrics["by_category_tasks"]["dependency"]
+        assert "T002" in metrics["by_category_tasks"]["dependency"]
+
+    def test_compute_failure_metrics_by_subcategory(self, temp_state_env: Path) -> None:
+        """Test failure metrics breakdown by subcategory."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "failed",
+                "failure": {"category": "dependency", "subcategory": "missing_import", "retryable": True},
+            },
+            "T002": {
+                "id": "T002",
+                "status": "failed",
+                "failure": {"category": "dependency", "subcategory": "missing_import", "retryable": True},
+            },
+            "T003": {
+                "id": "T003",
+                "status": "failed",
+                "failure": {"category": "verification", "subcategory": "test_timeout", "retryable": True},
+            },
+        }
+
+        metrics = compute_failure_metrics(state)
+
+        assert metrics["by_subcategory"]["missing_import"] == 2
+        assert metrics["by_subcategory"]["test_timeout"] == 1
+
+    def test_compute_failure_metrics_retryable(self, temp_state_env: Path) -> None:
+        """Test retryable vs non-retryable failure counts."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "failed",
+                "failure": {"category": "other", "retryable": True},
+            },
+            "T002": {
+                "id": "T002",
+                "status": "failed",
+                "failure": {"category": "scope", "retryable": False},
+            },
+            "T003": {
+                "id": "T003",
+                "status": "failed",
+                "failure": {"category": "other", "retryable": True},
+            },
+        }
+
+        metrics = compute_failure_metrics(state)
+
+        assert metrics["retryable_count"] == 2
+        assert metrics["non_retryable_count"] == 1
+
+    def test_compute_failure_metrics_category_pct(self, temp_state_env: Path) -> None:
+        """Test category percentage calculation."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "status": "failed", "failure": {"category": "dependency"}},
+            "T002": {"id": "T002", "status": "failed", "failure": {"category": "dependency"}},
+            "T003": {"id": "T003", "status": "failed", "failure": {"category": "implementation"}},
+            "T004": {"id": "T004", "status": "failed", "failure": {"category": "other"}},
+        }
+
+        metrics = compute_failure_metrics(state)
+
+        assert metrics["category_pct"]["dependency"] == 50.0
+        assert metrics["category_pct"]["implementation"] == 25.0
+        assert metrics["category_pct"]["other"] == 25.0
+
+
+class TestExtractRequirements:
+    """Tests for extract_requirements_from_spec function."""
+
+    def test_extract_req_pattern(self, tmp_path: Path) -> None:
+        """Test extracting REQ-NNN pattern."""
+        spec_file = tmp_path / "spec.md"
+        spec_file.write_text("""
+# Requirements
+
+REQ-001: User can login with email and password
+REQ-002: User can reset password via email
+""")
+
+        requirements = extract_requirements_from_spec(spec_file)
+
+        assert len(requirements) == 2
+        assert requirements[0]["id"] == "REQ-001"
+        assert "login" in requirements[0]["text"]
+        assert requirements[1]["id"] == "REQ-002"
+
+    def test_extract_r_pattern(self, tmp_path: Path) -> None:
+        """Test extracting R1, R1.2 patterns."""
+        spec_file = tmp_path / "spec.md"
+        spec_file.write_text("""
+[R1] User authentication system
+[R1.2] Support OAuth2 providers
+[R2] Data export functionality
+""")
+
+        requirements = extract_requirements_from_spec(spec_file)
+
+        assert len(requirements) == 3
+        assert requirements[0]["id"] == "R1"
+        assert requirements[1]["id"] == "R1.2"
+        assert requirements[2]["id"] == "R2"
+
+    def test_extract_bold_pattern(self, tmp_path: Path) -> None:
+        """Test extracting bold requirement pattern."""
+        spec_file = tmp_path / "spec.md"
+        spec_file.write_text("""
+**REQ-001**: User authentication
+**REQ-002**: Password hashing
+""")
+
+        requirements = extract_requirements_from_spec(spec_file)
+
+        assert len(requirements) == 2
+        assert requirements[0]["id"] == "REQ-001"
+
+    def test_extract_line_numbers(self, tmp_path: Path) -> None:
+        """Test that line numbers are captured."""
+        spec_file = tmp_path / "spec.md"
+        spec_file.write_text("""# Header
+
+REQ-001: First requirement
+
+Some text
+
+REQ-002: Second requirement
+""")
+
+        requirements = extract_requirements_from_spec(spec_file)
+
+        assert requirements[0]["source_line"] == 3
+        assert requirements[1]["source_line"] == 7
+
+    def test_extract_no_requirements(self, tmp_path: Path) -> None:
+        """Test spec with no requirements."""
+        spec_file = tmp_path / "spec.md"
+        spec_file.write_text("""
+# Overview
+
+This is a simple application without formal requirements.
+""")
+
+        requirements = extract_requirements_from_spec(spec_file)
+
+        assert requirements == []
+
+    def test_extract_nonexistent_file(self, tmp_path: Path) -> None:
+        """Test extracting from nonexistent file."""
+        requirements = extract_requirements_from_spec(tmp_path / "nonexistent.md")
+
+        assert requirements == []
+
+
+class TestComputeSpecCoverage:
+    """Tests for compute_spec_coverage function."""
+
+    def test_spec_coverage_empty(self, temp_state_env: Path) -> None:
+        """Test coverage with no requirements in spec."""
+        state = init_state("/tmp/target")
+
+        coverage = compute_spec_coverage(state)
+
+        assert coverage["total_count"] == 0
+        assert coverage["covered_count"] == 0
+        assert coverage["coverage_pct"] == 0.0
+
+    def test_spec_coverage_full(self, temp_state_env: Path) -> None:
+        """Test full coverage."""
+        import state as state_module
+
+        # Create spec with requirements
+        spec_content = """
+REQ-001: User login
+REQ-002: Password reset
+"""
+        (state_module.PLANNING_DIR / "inputs" / "spec.md").write_text(spec_content)
+
+        # Create tasks that cover requirements
+        task1 = {
+            "id": "T001",
+            "context": {"spec_requirements": ["REQ-001"]},
+        }
+        task2 = {
+            "id": "T002",
+            "context": {"spec_requirements": ["REQ-002"]},
+        }
+        (state_module.PLANNING_DIR / "tasks" / "T001.json").write_text(json.dumps(task1))
+        (state_module.PLANNING_DIR / "tasks" / "T002.json").write_text(json.dumps(task2))
+
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001"}, "T002": {"id": "T002"}}
+
+        coverage = compute_spec_coverage(state)
+
+        assert coverage["total_count"] == 2
+        assert coverage["covered_count"] == 2
+        assert coverage["coverage_pct"] == 100.0
+        assert coverage["uncovered"] == []
+
+    def test_spec_coverage_partial(self, temp_state_env: Path) -> None:
+        """Test partial coverage."""
+        import state as state_module
+
+        spec_content = """
+REQ-001: User login
+REQ-002: Password reset
+REQ-003: Two-factor auth
+"""
+        (state_module.PLANNING_DIR / "inputs" / "spec.md").write_text(spec_content)
+
+        task1 = {
+            "id": "T001",
+            "context": {"spec_requirements": ["REQ-001"]},
+        }
+        (state_module.PLANNING_DIR / "tasks" / "T001.json").write_text(json.dumps(task1))
+
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001"}}
+
+        coverage = compute_spec_coverage(state)
+
+        assert coverage["total_count"] == 3
+        assert coverage["covered_count"] == 1
+        assert coverage["coverage_pct"] == 33.3
+        assert "REQ-002" in coverage["uncovered"]
+        assert "REQ-003" in coverage["uncovered"]
+
+    def test_spec_coverage_via_spec_ref(self, temp_state_env: Path) -> None:
+        """Test coverage extraction from spec_ref field."""
+        import state as state_module
+
+        spec_content = """
+REQ-001: User login
+"""
+        (state_module.PLANNING_DIR / "inputs" / "spec.md").write_text(spec_content)
+
+        task1 = {
+            "id": "T001",
+            "context": {"spec_ref": "Section 2.1 (REQ-001)"},
+        }
+        (state_module.PLANNING_DIR / "tasks" / "T001.json").write_text(json.dumps(task1))
+
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001"}}
+
+        coverage = compute_spec_coverage(state)
+
+        assert coverage["covered_count"] == 1
+        assert "T001" in coverage["requirements"][0]["covered_by"]
+
+    def test_spec_coverage_multiple_tasks_same_req(self, temp_state_env: Path) -> None:
+        """Test multiple tasks covering same requirement."""
+        import state as state_module
+
+        spec_content = "REQ-001: User login"
+        (state_module.PLANNING_DIR / "inputs" / "spec.md").write_text(spec_content)
+
+        task1 = {"id": "T001", "context": {"spec_requirements": ["REQ-001"]}}
+        task2 = {"id": "T002", "context": {"spec_requirements": ["REQ-001"]}}
+        (state_module.PLANNING_DIR / "tasks" / "T001.json").write_text(json.dumps(task1))
+        (state_module.PLANNING_DIR / "tasks" / "T002.json").write_text(json.dumps(task2))
+
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001"}, "T002": {"id": "T002"}}
+
+        coverage = compute_spec_coverage(state)
+
+        assert coverage["covered_count"] == 1
+        req = coverage["requirements"][0]
+        assert "T001" in req["covered_by"]
+        assert "T002" in req["covered_by"]
+
+
+class TestUpdateSpecCoverage:
+    """Tests for update_spec_coverage function."""
+
+    def test_update_spec_coverage_stores_in_state(self, temp_state_env: Path) -> None:
+        """Test that update_spec_coverage stores results in state."""
+        import state as state_module
+
+        spec_content = "REQ-001: User login"
+        (state_module.PLANNING_DIR / "inputs" / "spec.md").write_text(spec_content)
+
+        state = init_state("/tmp/target")
+
+        success, msg = update_spec_coverage(state)
+
+        assert success is True
+        assert "spec_coverage" in state["artifacts"]
+        assert state["artifacts"]["spec_coverage"]["total_count"] == 1
+        assert "0/1" in msg or "coverage" in msg.lower()
+
+    def test_update_spec_coverage_adds_event(self, temp_state_env: Path) -> None:
+        """Test that update_spec_coverage adds event."""
+        import state as state_module
+
+        spec_content = "REQ-001: User login"
+        (state_module.PLANNING_DIR / "inputs" / "spec.md").write_text(spec_content)
+
+        state = init_state("/tmp/target")
+
+        update_spec_coverage(state)
+
+        events = [e for e in state["events"] if e["type"] == "spec_coverage_computed"]
+        assert len(events) == 1
+        assert "coverage_pct" in events[0]["details"]

@@ -3,18 +3,49 @@
   "title": "Task",
   "description": "Individual task definition - one file per task for parallel work",
   "type": "object",
-  "required": ["id", "name", "wave", "behaviors", "files", "acceptance_criteria"],
+  "required": ["id", "name", "phase", "behaviors", "files", "acceptance_criteria"],
+  "definitions": {
+    "spec_ref": {
+      "description": "Reference to source spec content. Supports both legacy string format and content-based format.",
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Legacy format: section reference like 'Section 2.1'"
+        },
+        {
+          "type": "object",
+          "description": "Content-based format: quoted spec text with optional location",
+          "required": ["quote"],
+          "properties": {
+            "quote": {
+              "type": "string",
+              "description": "Verbatim text from the spec that defines this requirement"
+            },
+            "location": {
+              "type": "string",
+              "description": "Best-effort location hint: line number, paragraph, section, etc."
+            }
+          }
+        }
+      ]
+    }
+  },
   "properties": {
     "id": { "type": "string", "pattern": "^T[0-9]+$" },
     "name": { "type": "string" },
-    "wave": { "type": "integer", "minimum": 1 },
-    
+    "phase": { "type": "integer", "minimum": 1 },
+
     "context": {
       "type": "object",
       "properties": {
         "domain": { "type": "string" },
         "capability": { "type": "string" },
-        "spec_ref": { "type": "string" },
+        "spec_ref": { "$ref": "#/definitions/spec_ref" },
+        "spec_requirements": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Explicit requirement IDs this task implements (e.g., REQ-001, R1.2)"
+        },
         "steel_thread": { "type": "boolean", "default": false }
       }
     },

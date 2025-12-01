@@ -17,7 +17,7 @@ class TaskInfo:
     id: str
     name: str
     status: str
-    wave: int
+    phase: int
     depends_on: tuple[str, ...]
     blocks: tuple[str, ...]
     attempts: int = 0
@@ -34,7 +34,7 @@ class TaskInfo:
 class ExecutionInfo:
     """Immutable snapshot of execution state."""
 
-    current_wave: int
+    current_phase: int
     active_tasks: tuple[str, ...]
     completed_count: int
     failed_count: int

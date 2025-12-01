@@ -38,7 +38,49 @@
           }
         },
         "physical_map": { "$ref": "#/properties/artifacts/properties/capability_map" },
-        "dependency_graph": { "$ref": "#/properties/artifacts/properties/capability_map" }
+        "dependency_graph": { "$ref": "#/properties/artifacts/properties/capability_map" },
+        "spec_coverage": {
+          "type": "object",
+          "description": "Tracking of spec requirement coverage by tasks",
+          "properties": {
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string", "description": "Requirement identifier (e.g., REQ-001)" },
+                  "text": { "type": "string", "description": "Requirement text from spec" },
+                  "source_line": { "type": "integer", "description": "Line number in spec file" },
+                  "covered_by": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Task IDs that implement this requirement"
+                  }
+                }
+              }
+            },
+            "coverage_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+            "covered_count": { "type": "integer" },
+            "total_count": { "type": "integer" },
+            "uncovered": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Requirement IDs with no covering tasks"
+            },
+            "computed_at": { "type": "string", "format": "date-time" }
+          }
+        },
+        "task_validation": {
+          "type": "object",
+          "description": "Results from task-plan-verifier",
+          "properties": {
+            "verdict": { "enum": ["READY", "READY_WITH_NOTES", "BLOCKED"] },
+            "valid": { "type": "boolean" },
+            "summary": { "type": "string" },
+            "issues": { "type": "array", "items": { "type": "string" } },
+            "validated_at": { "type": "string", "format": "date-time" }
+          }
+        }
       }
     },
     
@@ -46,17 +88,36 @@
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": ["id", "status", "wave"],
+        "required": ["id", "status", "phase"],
         "properties": {
           "id": { "type": "string" },
           "name": { "type": "string" },
           "status": { "enum": ["pending", "ready", "running", "complete", "failed", "blocked", "skipped"] },
-          "wave": { "type": "integer" },
+          "phase": { "type": "integer" },
           "depends_on": { "type": "array", "items": { "type": "string" } },
           "blocks": { "type": "array", "items": { "type": "string" } },
           "started_at": { "type": "string", "format": "date-time" },
           "completed_at": { "type": "string", "format": "date-time" },
           "error": { "type": "string" },
+          "failure": {
+            "type": "object",
+            "description": "Structured failure information for failed tasks",
+            "properties": {
+              "category": {
+                "enum": ["dependency", "implementation", "verification", "environment", "scope", "other"],
+                "description": "Primary failure category"
+              },
+              "subcategory": {
+                "type": "string",
+                "description": "More specific failure type within category"
+              },
+              "retryable": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether this failure type is typically recoverable"
+              }
+            }
+          },
           "files_created": { "type": "array", "items": { "type": "string" } },
           "files_modified": { "type": "array", "items": { "type": "string" } },
           "attempts": { "type": "integer", "minimum": 0, "default": 0 },
@@ -105,7 +166,7 @@
     "execution": {
       "type": "object",
       "properties": {
-        "current_wave": { "type": "integer" },
+        "current_phase": { "type": "integer" },
         "active_tasks": { "type": "array", "items": { "type": "string" } },
         "completed_count": { "type": "integer" },
         "failed_count": { "type": "integer" },

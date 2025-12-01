@@ -4,10 +4,36 @@
   "description": "Phase 1 output: Logical decomposition of spec into domains, capabilities, and behaviors",
   "type": "object",
   "required": ["version", "domains", "flows"],
+  "definitions": {
+    "spec_ref": {
+      "description": "Reference to source spec content. Supports both legacy string format and content-based format.",
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Legacy format: section reference like 'Section 2.1'"
+        },
+        {
+          "type": "object",
+          "description": "Content-based format: quoted spec text with optional location",
+          "required": ["quote"],
+          "properties": {
+            "quote": {
+              "type": "string",
+              "description": "Verbatim text from the spec that defines this requirement"
+            },
+            "location": {
+              "type": "string",
+              "description": "Best-effort location hint: line number, paragraph, section, etc."
+            }
+          }
+        }
+      ]
+    }
+  },
   "properties": {
     "version": { "const": "1.0" },
     "spec_checksum": { "type": "string", "description": "SHA256 of source spec for change detection" },
-    
+
     "domains": {
       "type": "array",
       "minItems": 1,
@@ -26,7 +52,7 @@
               "properties": {
                 "id": { "type": "string", "pattern": "^C[0-9]+$" },
                 "name": { "type": "string" },
-                "spec_ref": { "type": "string" },
+                "spec_ref": { "$ref": "#/definitions/spec_ref" },
                 "behaviors": {
                   "type": "array",
                   "minItems": 1,
@@ -47,7 +73,7 @@
         }
       }
     },
-    
+
     "flows": {
       "type": "array",
       "description": "End-to-end user journeys mapped to behaviors",
@@ -73,7 +99,7 @@
         }
       }
     },
-    
+
     "coverage": {
       "type": "object",
       "description": "Validation that all spec requirements map to behaviors",

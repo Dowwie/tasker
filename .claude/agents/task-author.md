@@ -46,12 +46,15 @@ Read: `project-planning/artifacts/physical-map.json`
 {
   "id": "T001",
   "name": "Implement credential validation",
-  "wave": 1,
-  
+  "phase": 1,
+
   "context": {
     "domain": "Authentication",
     "capability": "User Login",
-    "spec_ref": "Section 2.1",
+    "spec_ref": {
+      "quote": "Users must be able to log in with email and password",
+      "location": "paragraph 3"
+    },
     "steel_thread": true
   },
   
@@ -98,12 +101,12 @@ Explicit task dependencies:
 }
 ```
 
-## Wave Assignment
+## Phase Assignment
 
-Initial wave assignment (plan-auditor will refine):
-- Wave 1: No dependencies (foundations)
-- Wave 2: Depends on wave 1 (steel thread)
-- Wave 3+: Everything else
+Initial phase assignment (plan-auditor will refine):
+- Phase 1: No dependencies (foundations)
+- Phase 2: Depends on phase 1 (steel thread)
+- Phase 3+: Everything else
 
 ## Acceptance Criteria Rules
 

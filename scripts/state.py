@@ -18,7 +18,10 @@ Usage:
     state.py complete-task <task_id> [--created f1 f2] [--modified f3 f4]
                                           Mark task as complete with file tracking
     state.py commit-task <task_id>        Commit files from completed task to git
-    state.py fail-task <task_id> <error>  Mark task as failed
+    state.py fail-task <task_id> <error> [--category CAT] [--subcategory SUB] [--no-retry]
+                                          Mark task as failed with classification
+                                          Categories: dependency, implementation,
+                                          verification, environment, scope, other
     state.py retry-task <task_id>         Reset failed task to pending
     state.py skip-task <task_id> [reason] Skip task without blocking dependents
     state.py log-tokens <session> <in> <out> <cost>  Log token usage
@@ -30,6 +33,10 @@ Usage:
     state.py metrics [--format text|json] Compute and display performance metrics
     state.py planning-metrics [--format text|json]
                                           Compute and display planning quality metrics
+    state.py spec-coverage [--format text|json] [--save]
+                                          Compute spec requirement coverage by tasks
+    state.py failure-metrics [--format text|json]
+                                          Show failure classification breakdown
     state.py prepare-rollback <task_id> <file1> [file2 ...]
                                           Prepare rollback data before task execution
     state.py verify-rollback <task_id> [--created f1] [--modified f2]
@@ -41,6 +48,7 @@ Usage:
 
 import json
 import hashlib
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -192,7 +200,7 @@ def init_state(target_dir: str) -> dict:
         "artifacts": {},
         "tasks": {},
         "execution": {
-            "current_wave": 0,
+            "current_phase": 0,
             "active_tasks": [],
             "completed_count": 0,
             "failed_count": 0,
@@ -258,10 +266,10 @@ def can_advance_phase(state: dict) -> tuple[bool, str]:
         return True, ""
 
     elif current == "sequencing":
-        # Check that all tasks have waves assigned
+        # Check that all tasks have phases assigned
         for tid, task in state["tasks"].items():
-            if task.get("wave", 0) == 0:
-                return False, f"Task {tid} has no wave assigned"
+            if task.get("phase", 0) == 0:
+                return False, f"Task {tid} has no phase assigned"
         return True, ""
     
     elif current == "ready":
@@ -385,7 +393,7 @@ def load_tasks_from_dir(state: dict) -> int:
                 "id": task_id,
                 "name": task.get("name", ""),
                 "status": "pending",
-                "wave": task.get("wave", 0),
+                "phase": task.get("phase", 0),
                 "depends_on": task.get("dependencies", {}).get("tasks", []),
                 "blocks": [],  # Computed later
                 "file": str(task_file)
@@ -503,28 +511,68 @@ def complete_task(state: dict, task_id: str, files_created: list = None, files_m
     return True, f"Task {task_id} completed"
 
 
-def fail_task(state: dict, task_id: str, error: str) -> tuple[bool, str]:
-    """Mark task as failed."""
+FAILURE_CATEGORIES = ["dependency", "implementation", "verification", "environment", "scope", "other"]
+
+
+def fail_task(
+    state: dict,
+    task_id: str,
+    error: str,
+    category: str = "other",
+    subcategory: str = "",
+    retryable: bool = True,
+) -> tuple[bool, str]:
+    """Mark task as failed with structured failure classification.
+
+    Args:
+        state: Current state dict
+        task_id: Task ID to mark as failed
+        error: Human-readable error message
+        category: Failure category (dependency, implementation, verification,
+                  environment, scope, other). Defaults to "other".
+        subcategory: More specific failure type (e.g., "missing_import",
+                     "test_timeout", "file_not_found")
+        retryable: Whether this failure is typically recoverable
+
+    Returns:
+        (success, message) tuple
+    """
     if task_id not in state["tasks"]:
         return False, f"Task not found: {task_id}"
-    
+
+    # Validate category
+    if category not in FAILURE_CATEGORIES:
+        category = "other"
+
     task = state["tasks"][task_id]
     task["status"] = "failed"
     task["error"] = error
     task["completed_at"] = now_iso()
-    
+
+    # Add structured failure information
+    task["failure"] = {
+        "category": category,
+        "subcategory": subcategory,
+        "retryable": retryable,
+    }
+
     if task_id in state["execution"]["active_tasks"]:
         state["execution"]["active_tasks"].remove(task_id)
     state["execution"]["failed_count"] += 1
-    
+
     # Mark dependent tasks as blocked
     for blocked_id in task["blocks"]:
         if blocked_id in state["tasks"]:
             state["tasks"][blocked_id]["status"] = "blocked"
             state["tasks"][blocked_id]["error"] = f"Blocked by failed task {task_id}"
-    
-    add_event(state, "task_failed", task_id=task_id, details={"error": error})
-    return True, f"Task {task_id} failed: {error}"
+
+    add_event(state, "task_failed", task_id=task_id, details={
+        "error": error,
+        "category": category,
+        "subcategory": subcategory,
+        "retryable": retryable,
+    })
+    return True, f"Task {task_id} failed ({category}): {error}"
 
 
 def retry_task(state: dict, task_id: str) -> tuple[bool, str]:
@@ -904,8 +952,8 @@ def compute_planning_metrics(state: dict) -> dict:
         - avg_criteria_per_task: Average acceptance criteria per task
         - avg_files_per_task: Average files per task
         - dependency_density: Avg dependencies per task
-        - wave_count: Number of waves
-        - wave_compression: Actual waves / min possible waves
+        - phase_count: Number of phases
+        - phase_compression: Actual phases / min possible phases
         - steel_thread_coverage: % of tasks on steel thread
         - spec_coverage: % of behaviors traced to spec (if available)
     """
@@ -919,8 +967,8 @@ def compute_planning_metrics(state: dict) -> dict:
             "avg_criteria_per_task": 0.0,
             "avg_files_per_task": 0.0,
             "dependency_density": 0.0,
-            "wave_count": 0,
-            "wave_compression": 0.0,
+            "phase_count": 0,
+            "phase_compression": 0.0,
             "steel_thread_coverage": 0.0,
         }
 
@@ -931,7 +979,7 @@ def compute_planning_metrics(state: dict) -> dict:
     total_files = 0
     total_deps = 0
     steel_thread_tasks = 0
-    waves = set()
+    phases = set()
 
     for tid in tasks:
         task_path = tasks_dir / f"{tid}.json"
@@ -947,23 +995,23 @@ def compute_planning_metrics(state: dict) -> dict:
             except (json.JSONDecodeError, KeyError):
                 pass
 
-        wave = tasks[tid].get("wave", 0)
-        if wave > 0:
-            waves.add(wave)
+        phase = tasks[tid].get("phase", 0)
+        if phase > 0:
+            phases.add(phase)
 
     task_count = len(tasks)
-    wave_count = len(waves) if waves else 0
+    phase_count = len(phases) if phases else 0
 
-    # Compute minimum possible waves (longest dependency chain + 1)
+    # Compute minimum possible phases (longest dependency chain + 1)
     # This is a simplified computation
-    min_waves = 1
+    min_phases = 1
     if task_count > 0:
-        # Count tasks with no deps as wave 1, rest need at least 1 more
+        # Count tasks with no deps as phase 1, rest need at least 1 more
         no_dep_count = sum(1 for t in tasks.values() if not t.get("depends_on"))
         if no_dep_count < task_count:
-            min_waves = 2  # At least 2 waves if there are dependencies
+            min_phases = 2  # At least 2 phases if there are dependencies
 
-    wave_compression = wave_count / min_waves if min_waves > 0 else 1.0
+    phase_compression = phase_count / min_phases if min_phases > 0 else 1.0
 
     return {
         "total_tasks": task_count,
@@ -972,9 +1020,217 @@ def compute_planning_metrics(state: dict) -> dict:
         "avg_criteria_per_task": total_criteria / task_count if task_count > 0 else 0.0,
         "avg_files_per_task": total_files / task_count if task_count > 0 else 0.0,
         "dependency_density": total_deps / task_count if task_count > 0 else 0.0,
-        "wave_count": wave_count,
-        "wave_compression": wave_compression,
+        "phase_count": phase_count,
+        "phase_compression": phase_compression,
         "steel_thread_coverage": steel_thread_tasks / task_count if task_count > 0 else 0.0,
+    }
+
+
+def extract_requirements_from_spec(spec_path: Path) -> list[dict]:
+    """Extract requirement markers from a spec file.
+
+    Recognizes patterns:
+    - REQ-001: Description
+    - [R1] Description
+    - [R1.2] Description
+    - **REQ-001**: Description
+    - Requirement 1: Description
+
+    Args:
+        spec_path: Path to spec.md file
+
+    Returns:
+        List of {id, text, source_line} dicts
+    """
+    if not spec_path.exists():
+        return []
+
+    content = spec_path.read_text()
+    lines = content.split("\n")
+    requirements = []
+
+    # Patterns to match requirement markers
+    patterns = [
+        r"^(?:\*\*)?(?:REQ-\d+|R\d+(?:\.\d+)?)\*?\*?[:\s]+(.+)$",  # REQ-001: or [R1]:
+        r"^\[(?:REQ-\d+|R\d+(?:\.\d+)?)\][:\s]*(.+)$",  # [REQ-001] or [R1.2]
+        r"^Requirement\s+(\d+)[:\s]+(.+)$",  # Requirement 1:
+        r"^-\s*\[(?:REQ-\d+|R\d+(?:\.\d+)?)\][:\s]*(.+)$",  # - [REQ-001] list item
+    ]
+
+    # Pattern to extract the ID
+    id_pattern = r"(REQ-\d+|R\d+(?:\.\d+)?)"
+
+    for line_num, line in enumerate(lines, 1):
+        line = line.strip()
+        for pattern in patterns:
+            match = re.match(pattern, line, re.IGNORECASE)
+            if match:
+                # Extract the requirement ID
+                id_match = re.search(id_pattern, line, re.IGNORECASE)
+                if id_match:
+                    req_id = id_match.group(1).upper()
+                    # Get the text (last capture group from the pattern match)
+                    text = match.group(match.lastindex) if match.lastindex else line
+                    requirements.append({
+                        "id": req_id,
+                        "text": text.strip(),
+                        "source_line": line_num,
+                    })
+                break
+
+    return requirements
+
+
+def compute_spec_coverage(state: dict) -> dict:
+    """Compute spec requirement coverage by tasks.
+
+    Extracts requirements from spec.md, maps to tasks via spec_requirements,
+    and computes coverage metrics.
+
+    Args:
+        state: Current state dict
+
+    Returns:
+        Dict with coverage data:
+        - requirements: List of {id, text, source_line, covered_by}
+        - coverage_pct: Percentage of requirements covered
+        - covered_count: Number of covered requirements
+        - total_count: Total requirements found
+        - uncovered: List of uncovered requirement IDs
+    """
+    spec_path = PLANNING_DIR / "inputs" / "spec.md"
+    requirements = extract_requirements_from_spec(spec_path)
+
+    if not requirements:
+        return {
+            "requirements": [],
+            "coverage_pct": 0.0,
+            "covered_count": 0,
+            "total_count": 0,
+            "uncovered": [],
+            "computed_at": now_iso(),
+        }
+
+    # Build requirement ID -> requirement mapping
+    req_by_id = {r["id"]: r for r in requirements}
+    for r in requirements:
+        r["covered_by"] = []
+
+    # Load task files and find coverage
+    tasks_dir = PLANNING_DIR / "tasks"
+    for tid in state.get("tasks", {}):
+        task_path = tasks_dir / f"{tid}.json"
+        if task_path.exists():
+            try:
+                task_def = json.loads(task_path.read_text())
+                context = task_def.get("context", {})
+
+                # Check spec_requirements (explicit list)
+                spec_reqs = context.get("spec_requirements", [])
+                for req_id in spec_reqs:
+                    req_id_upper = req_id.upper()
+                    if req_id_upper in req_by_id:
+                        req_by_id[req_id_upper]["covered_by"].append(tid)
+
+                # Also check spec_ref for implicit coverage
+                spec_ref = context.get("spec_ref", "")
+                if spec_ref:
+                    # Try to extract requirement IDs from spec_ref
+                    id_matches = re.findall(r"(REQ-\d+|R\d+(?:\.\d+)?)", spec_ref, re.IGNORECASE)
+                    for req_id in id_matches:
+                        req_id_upper = req_id.upper()
+                        if req_id_upper in req_by_id:
+                            if tid not in req_by_id[req_id_upper]["covered_by"]:
+                                req_by_id[req_id_upper]["covered_by"].append(tid)
+
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+    # Compute coverage metrics
+    covered = [r for r in requirements if r["covered_by"]]
+    uncovered = [r["id"] for r in requirements if not r["covered_by"]]
+
+    total = len(requirements)
+    covered_count = len(covered)
+    coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
+
+    return {
+        "requirements": requirements,
+        "coverage_pct": round(coverage_pct, 1),
+        "covered_count": covered_count,
+        "total_count": total,
+        "uncovered": uncovered,
+        "computed_at": now_iso(),
+    }
+
+
+def update_spec_coverage(state: dict) -> tuple[bool, str]:
+    """Compute and store spec coverage in state artifacts.
+
+    Args:
+        state: Current state dict
+
+    Returns:
+        (success, message) tuple
+    """
+    coverage = compute_spec_coverage(state)
+    state["artifacts"]["spec_coverage"] = coverage
+
+    add_event(state, "spec_coverage_computed", details={
+        "coverage_pct": coverage["coverage_pct"],
+        "covered_count": coverage["covered_count"],
+        "total_count": coverage["total_count"],
+    })
+
+    return True, f"Spec coverage: {coverage['covered_count']}/{coverage['total_count']} ({coverage['coverage_pct']}%)"
+
+
+def compute_failure_metrics(state: dict) -> dict:
+    """Compute failure classification metrics.
+
+    Args:
+        state: Current state dict
+
+    Returns:
+        Dict with failure breakdown by category
+    """
+    tasks = state.get("tasks", {})
+
+    by_category: dict[str, list[str]] = {cat: [] for cat in FAILURE_CATEGORIES}
+    by_subcategory: dict[str, int] = {}
+    retryable_count = 0
+    non_retryable_count = 0
+
+    for tid, task in tasks.items():
+        if task.get("status") == "failed":
+            failure = task.get("failure", {})
+            category = failure.get("category", "other")
+            subcategory = failure.get("subcategory", "")
+            retryable = failure.get("retryable", True)
+
+            by_category[category].append(tid)
+
+            if subcategory:
+                by_subcategory[subcategory] = by_subcategory.get(subcategory, 0) + 1
+
+            if retryable:
+                retryable_count += 1
+            else:
+                non_retryable_count += 1
+
+    total_failed = sum(len(tasks) for tasks in by_category.values())
+
+    return {
+        "total_failed": total_failed,
+        "by_category": {cat: len(tasks) for cat, tasks in by_category.items()},
+        "by_category_tasks": by_category,
+        "by_subcategory": by_subcategory,
+        "retryable_count": retryable_count,
+        "non_retryable_count": non_retryable_count,
+        "category_pct": {
+            cat: (len(tasks) / total_failed * 100) if total_failed > 0 else 0.0
+            for cat, tasks in by_category.items()
+        },
     }
 
 
@@ -1185,7 +1441,7 @@ def main():
         ready = get_ready_tasks(state)
         for tid in ready:
             task = state["tasks"][tid]
-            print(f"{tid}: {task['name']} (wave {task['wave']})")
+            print(f"{tid}: {task['name']} (phase {task['phase']})")
     
     elif cmd == "start-task":
         if len(sys.argv) < 3:
@@ -1226,10 +1482,34 @@ def main():
     
     elif cmd == "fail-task":
         if len(sys.argv) < 4:
-            print("Usage: state.py fail-task <task_id> <error>")
+            print("Usage: state.py fail-task <task_id> <error> [--category CAT] [--subcategory SUB] [--no-retry]")
+            print(f"  Categories: {', '.join(FAILURE_CATEGORIES)}")
             sys.exit(1)
         state = load_state()
-        success, msg = fail_task(state, sys.argv[2], sys.argv[3])
+
+        task_id = sys.argv[2]
+        error = sys.argv[3]
+        category = "other"
+        subcategory = ""
+        retryable = True
+
+        # Parse optional args
+        args = sys.argv[4:]
+        i = 0
+        while i < len(args):
+            if args[i] == "--category" and i + 1 < len(args):
+                category = args[i + 1].lower()
+                i += 2
+            elif args[i] == "--subcategory" and i + 1 < len(args):
+                subcategory = args[i + 1]
+                i += 2
+            elif args[i] == "--no-retry":
+                retryable = False
+                i += 1
+            else:
+                i += 1
+
+        success, msg = fail_task(state, task_id, error, category, subcategory, retryable)
         if success:
             save_state(state)
         print(msg)
@@ -1386,8 +1666,8 @@ def main():
             print(f"Avg criteria/task:         {metrics['avg_criteria_per_task']:.1f}")
             print(f"Avg files/task:            {metrics['avg_files_per_task']:.1f}")
             print(f"Dependency density:        {metrics['dependency_density']:.2f}")
-            print(f"Wave count:                {metrics['wave_count']}")
-            print(f"Wave compression:          {metrics['wave_compression']:.2f}x")
+            print(f"Phase count:                {metrics['phase_count']}")
+            print(f"Phase compression:          {metrics['phase_compression']:.2f}x")
             print(f"Steel thread coverage:     {metrics['steel_thread_coverage']:.1%}")
 
     elif cmd == "prepare-rollback":
@@ -1400,7 +1680,7 @@ def main():
             sys.exit(1)
         task_id = sys.argv[2]
         files = sys.argv[3:]
-        rollback_data = prepare_rollback(state, task_id, files)
+        prepare_rollback(state, task_id, files)
         save_state(state)
         print(f"Rollback prepared for {len(files)} file(s)")
 
@@ -1472,6 +1752,77 @@ def main():
         print(f"Correct:                   {cal.get('correct', 0)}")
         print(f"False positives:           {len(cal.get('false_positives', []))}")
         print(f"False negatives:           {len(cal.get('false_negatives', []))}")
+
+    elif cmd == "spec-coverage":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        output_format = "text"
+        if len(sys.argv) > 2 and sys.argv[2] == "--format" and len(sys.argv) > 3:
+            output_format = sys.argv[3]
+
+        # Compute and optionally save
+        save_to_state = "--save" in sys.argv
+        coverage = compute_spec_coverage(state)
+
+        if save_to_state:
+            state["artifacts"]["spec_coverage"] = coverage
+            save_state(state)
+
+        if output_format == "json":
+            print(json.dumps(coverage, indent=2))
+        else:
+            print("Spec Coverage Report")
+            print("=" * 40)
+            print(f"Total requirements:        {coverage['total_count']}")
+            print(f"Covered:                   {coverage['covered_count']}")
+            print(f"Coverage:                  {coverage['coverage_pct']}%")
+            print()
+            if coverage["uncovered"]:
+                print("Uncovered Requirements:")
+                for req_id in coverage["uncovered"]:
+                    req = next((r for r in coverage["requirements"] if r["id"] == req_id), None)
+                    if req:
+                        print(f"  {req_id} (line {req['source_line']}): {req['text'][:60]}...")
+            else:
+                print("All requirements covered!")
+
+    elif cmd == "failure-metrics":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        output_format = "text"
+        if len(sys.argv) > 2 and sys.argv[2] == "--format" and len(sys.argv) > 3:
+            output_format = sys.argv[3]
+
+        metrics = compute_failure_metrics(state)
+
+        if output_format == "json":
+            print(json.dumps(metrics, indent=2))
+        else:
+            print("Failure Classification Report")
+            print("=" * 40)
+            print(f"Total failed tasks:        {metrics['total_failed']}")
+            print()
+            print("By Category:")
+            for cat in FAILURE_CATEGORIES:
+                count = metrics["by_category"].get(cat, 0)
+                pct = metrics["category_pct"].get(cat, 0.0)
+                tasks = metrics["by_category_tasks"].get(cat, [])
+                if count > 0:
+                    print(f"  {cat:15} {count:3} ({pct:5.1f}%)  {', '.join(tasks[:3])}")
+            print()
+            if metrics["by_subcategory"]:
+                print("By Subcategory:")
+                for sub, count in sorted(metrics["by_subcategory"].items(), key=lambda x: -x[1]):
+                    print(f"  {sub:20} {count}")
+            print()
+            print(f"Retryable:                 {metrics['retryable_count']}")
+            print(f"Non-retryable:             {metrics['non_retryable_count']}")
 
     else:
         print(f"Unknown command: {cmd}")

@@ -195,7 +195,7 @@ class TestValidateSteelThread:
         """Test when no steel thread tasks defined."""
         state = {
             "tasks": {
-                "T001": {"id": "T001", "depends_on": [], "wave": 1},
+                "T001": {"id": "T001", "depends_on": [], "phase": 1},
             }
         }
         # Create task file without steel_thread
@@ -208,27 +208,27 @@ class TestValidateSteelThread:
         assert valid is False
         assert any("no steel thread" in i.lower() for i in issues)
 
-    def test_steel_thread_in_late_wave(self, temp_validate_env: Path) -> None:
-        """Test steel thread task in late wave."""
+    def test_steel_thread_in_late_phase(self, temp_validate_env: Path) -> None:
+        """Test steel thread task in late phase."""
         state = {
             "tasks": {
-                "T001": {"id": "T001", "depends_on": [], "wave": 1},
-                "T002": {"id": "T002", "depends_on": [], "wave": 5},
+                "T001": {"id": "T001", "depends_on": [], "phase": 1},
+                "T002": {"id": "T002", "depends_on": [], "phase": 5},
             }
         }
         import validate
 
-        # T001 is steel thread in wave 1 (good)
+        # T001 is steel thread in phase 1 (good)
         task1 = {"id": "T001", "context": {"steel_thread": True}}
         (validate.TASKS_DIR / "T001.json").write_text(json.dumps(task1))
 
-        # T002 is steel thread in wave 5 (bad, given max wave is 5)
+        # T002 is steel thread in phase 5 (bad, given max phase is 5)
         task2 = {"id": "T002", "context": {"steel_thread": True}}
         (validate.TASKS_DIR / "T002.json").write_text(json.dumps(task2))
 
         valid, issues = validate_steel_thread(state)
-        # Should flag T002 as being in a late wave
-        assert any("wave" in i.lower() for i in issues)
+        # Should flag T002 as being in a late phase
+        assert any("phase" in i.lower() for i in issues)
 
 
 class TestComputeCalibrationMetrics:

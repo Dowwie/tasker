@@ -159,7 +159,7 @@ def sample_task() -> dict:
     return {
         "id": "T001",
         "name": "Implement credential validation",
-        "wave": 1,
+        "phase": 1,
         "context": {
             "steel_thread": True,
         },
@@ -200,14 +200,14 @@ def sample_state() -> dict:
                 "id": "T001",
                 "name": "Implement credential validation",
                 "status": "pending",
-                "wave": 1,
+                "phase": 1,
                 "depends_on": [],
             },
             "T002": {
                 "id": "T002",
                 "name": "Implement user repository",
                 "status": "complete",
-                "wave": 1,
+                "phase": 1,
                 "depends_on": [],
                 "files_created": ["src/data/user_repo.py", "tests/data/test_user_repo.py"],
             },
@@ -433,7 +433,7 @@ class TestGenerateBundle:
         assert bundle["version"] == "1.2"
         assert bundle["task_id"] == "T001"
         assert bundle["name"] == "Implement credential validation"
-        assert bundle["wave"] == 1
+        assert bundle["phase"] == 1
         assert bundle["target_dir"] == "/tmp/target-project"
 
         # Verify behaviors were expanded
@@ -665,7 +665,7 @@ class TestBundleIntegration:
         task_with_deps = {
             "id": "T003",
             "name": "Implement login endpoint",
-            "wave": 2,
+            "phase": 2,
             "behaviors": ["B001"],
             "files": [{"path": "src/api/login.py", "action": "create"}],
             "dependencies": {"tasks": ["T002"], "external": []},
@@ -714,7 +714,7 @@ class TestValidateBundleDependencies:
             "version": "2.0",
             "target_dir": str(target_dir),
             "tasks": {
-                "T001": {"id": "T001", "status": "pending", "wave": 1},
+                "T001": {"id": "T001", "status": "pending", "phase": 1},
                 "T002": {
                     "id": "T002",
                     "status": "complete",
@@ -728,7 +728,7 @@ class TestValidateBundleDependencies:
         task_with_deps = {
             "id": "T003",
             "name": "Use user repo",
-            "wave": 2,
+            "phase": 2,
             "behaviors": ["B001"],
             "files": [{"path": "src/api/users.py", "action": "create"}],
             "dependencies": {"tasks": ["T002"], "external": []},
@@ -781,7 +781,7 @@ class TestValidateBundleDependencies:
         task_with_deps = {
             "id": "T003",
             "name": "Use missing file",
-            "wave": 2,
+            "phase": 2,
             "behaviors": ["B001"],
             "files": [{"path": "src/api/users.py", "action": "create"}],
             "dependencies": {"tasks": ["T002"], "external": []},
@@ -851,7 +851,7 @@ class TestValidateVerificationCommands:
         task_empty_cmd = {
             "id": "T001",
             "name": "Task with empty command",
-            "wave": 1,
+            "phase": 1,
             "behaviors": ["B001"],
             "files": [{"path": "src/file.py", "action": "create"}],
             "dependencies": {"tasks": []},
@@ -887,7 +887,7 @@ class TestValidateVerificationCommands:
         task_bad_cmd = {
             "id": "T001",
             "name": "Task with bad command",
-            "wave": 1,
+            "phase": 1,
             "behaviors": ["B001"],
             "files": [{"path": "src/file.py", "action": "create"}],
             "dependencies": {"tasks": []},
@@ -923,7 +923,7 @@ class TestValidateVerificationCommands:
         task_complex = {
             "id": "T001",
             "name": "Task with complex command",
-            "wave": 1,
+            "phase": 1,
             "behaviors": ["B001"],
             "files": [{"path": "src/file.py", "action": "create"}],
             "dependencies": {"tasks": []},
@@ -1025,7 +1025,7 @@ class TestValidateBundleChecksums:
             "version": "1.0",
             "task_id": "T001",
             "name": "Old bundle",
-            "wave": 1,
+            "phase": 1,
             "target_dir": "/tmp/target",
             "behaviors": [],
             "files": [],

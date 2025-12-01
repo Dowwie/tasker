@@ -78,9 +78,21 @@ For each task, evaluate these dimensions:
 | FAIL | Task doesn't map to any spec requirement |
 
 **Evidence to check:**
-- `context.spec_ref` points to real spec section
+- `context.spec_ref` contains quoted spec content that justifies this task
+- The quoted text exists in `project-planning/inputs/spec.md` (search for it)
 - Behaviors in task exist in capability-map
 - Task purpose aligns with spec intent
+
+**Spec reference formats (both valid):**
+```json
+// Content-based (preferred for freeform specs)
+"spec_ref": {"quote": "users must be able to login", "location": "paragraph 3"}
+
+// Legacy (for structured docs)
+"spec_ref": "Section 2.1"
+```
+
+For content-based refs, verify the `quote` text appears in the spec file.
 
 #### B. Strategy Alignment (Required)
 
@@ -122,8 +134,44 @@ For each task, evaluate these dimensions:
 - Estimate is 2-6 hours (per task-author rules)
 - 3 or fewer implementation files
 - All dependencies are declared and exist
-- Acceptance criteria have verification commands
-- Verification commands are actually runnable
+
+#### E. Acceptance Criteria Quality (Required)
+
+| Score | Meaning |
+|-------|---------|
+| PASS | All criteria are specific, measurable, and have runnable verification commands |
+| PARTIAL | Some criteria vague but verification commands compensate, or minor testability issues |
+| FAIL | Criteria are untestable, circular, or missing verification commands |
+
+**Evidence to check:**
+- Criterion text is **specific and measurable** (not "works correctly", "is good", "handles errors")
+- Verification command **actually tests the criterion** (not just "build passes" or "tests pass")
+- No **circular verification** where criterion text ≈ verification command description
+- Verification commands are **syntactically valid** shell commands
+- Commands reference **files that will exist** after task completion
+
+**Examples of BAD criteria (FAIL):**
+```json
+{"criterion": "Feature works correctly", "verification": "manual testing"}
+{"criterion": "Code is clean", "verification": "code review"}
+{"criterion": "Handles edge cases", "verification": "pytest tests/"}
+{"criterion": "API is implemented", "verification": "curl localhost:8000"}
+```
+
+**Examples of GOOD criteria (PASS):**
+```json
+{"criterion": "validate_email() returns True for 'user@example.com'", "verification": "pytest tests/test_validator.py::test_valid_email -v"}
+{"criterion": "Invalid passwords < 8 chars raise ValidationError", "verification": "pytest tests/test_validator.py::test_short_password -v"}
+{"criterion": "GET /users returns 200 with JSON array", "verification": "curl -s localhost:8000/users | jq 'type == \"array\"'"}
+{"criterion": "Config loads from .env file", "verification": "python -c 'from config import settings; assert settings.database_url'"}
+```
+
+**Acceptance Criteria Quality Checklist:**
+1. ✅ Does the criterion describe a **specific, observable behavior**?
+2. ✅ Can you tell **exactly what success looks like** from the criterion text?
+3. ✅ Does the verification command **directly test** the stated behavior?
+4. ✅ Is the verification command **executable** (not manual, not vague)?
+5. ✅ Would the verification command **fail if the criterion isn't met**?
 
 ### 4. Determine Verdict Per Task
 
@@ -132,6 +180,7 @@ For each task, evaluate these dimensions:
 - Strategy Alignment: PASS
 - Preference Compliance: PASS or N/A
 - Viability: PASS
+- Acceptance Criteria Quality: PASS
 
 **CONDITIONAL PASS criteria:**
 - No FAIL scores
@@ -141,6 +190,7 @@ For each task, evaluate these dimensions:
 **FAIL criteria:**
 - ANY dimension scores FAIL
 - Critical issues that block execution
+- Acceptance criteria are untestable or missing verification commands
 
 ### 5. Aggregate Verdict
 
@@ -225,6 +275,7 @@ From `~/.claude/CLAUDE.md`:
 | Strategy Alignment | PASS | Behaviors B1, B2 from capability C1 |
 | Preference Compliance | PASS | Uses Protocol per constraints |
 | Viability | PASS | 3h estimate, 2 files, deps clear |
+| AC Quality | PASS | Specific criteria with targeted pytest commands |
 
 ---
 
@@ -237,9 +288,13 @@ From `~/.claude/CLAUDE.md`:
 | Strategy Alignment | PASS | Behaviors B5, B6 from capability C2 |
 | Preference Compliance | PARTIAL | Missing `constraints.patterns` for Protocol usage |
 | Viability | PASS | 4h estimate, 3 files |
+| AC Quality | PARTIAL | Criterion "models work correctly" is vague |
 
 **Issue:** Task should specify Protocol usage in constraints
 **Fix:** Add `"patterns": ["Use Protocol for repository interface"]` to constraints
+
+**Issue:** Acceptance criterion "models work correctly" is too vague
+**Fix:** Replace with specific criteria like "User model has email, password_hash fields" with verification "pytest tests/test_models.py::test_user_fields -v"
 
 ---
 
@@ -252,6 +307,7 @@ From `~/.claude/CLAUDE.md`:
 | Strategy Alignment | FAIL | Behaviors B15, B16 not in capability-map |
 | Preference Compliance | N/A | Cannot evaluate without valid spec mapping |
 | Viability | PARTIAL | Dependencies unclear |
+| AC Quality | FAIL | Criterion "caching works" with verification "manual testing" |
 
 **Blocking Issue:** Task appears to be scope creep - not in original spec
 **Action Required:** Either add caching to spec or remove this task
@@ -313,6 +369,7 @@ Your final message MUST include:
 
 ### Spec Alignment Issues
 - Task has no `context.spec_ref`
+- Quoted text in `spec_ref.quote` doesn't appear in spec file
 - Behaviors don't exist in capability-map
 - Task scope exceeds spec requirements (scope creep)
 
@@ -331,8 +388,23 @@ Your final message MUST include:
 - Estimate outside 2-6 hour range
 - More than 3 implementation files
 - Circular or missing dependencies
-- Acceptance criteria without verification commands
-- Verification commands that can't actually run
+
+### Acceptance Criteria Quality Issues
+- **Vague criteria**: "works correctly", "is implemented", "handles errors"
+- **Missing verification commands**: Empty or placeholder verification
+- **Manual verification**: "manual testing", "code review", "visual inspection"
+- **Non-specific commands**: "pytest tests/", "npm test" (tests everything, not the criterion)
+- **Circular verification**: Criterion text is just restatement of verification command
+- **Untestable assertions**: "code is clean", "follows best practices", "is secure"
+- **Missing test targets**: Verification references files that won't exist
+
+**Quick fixes for common AC issues:**
+| Bad | Good |
+|-----|------|
+| "API works" | "GET /users returns 200 with JSON array" |
+| "pytest tests/" | "pytest tests/test_users.py::test_list_users -v" |
+| "manual testing" | "curl -s localhost:8000/health \| jq '.status == \"ok\"'" |
+| "handles errors" | "Invalid email raises ValidationError with message containing 'email'" |
 
 ## Integration with Planning
 
@@ -341,7 +413,7 @@ This verifier runs as Phase 4 (validation) in the planning pipeline:
 ```
 Phase 3: definition  → task-author creates tasks
 Phase 4: validation  → task-plan-verifier evaluates tasks  <-- YOU ARE HERE
-Phase 5: sequencing  → plan-auditor assigns waves
+Phase 5: sequencing  → plan-auditor assigns phases
 Phase 6: ready       → planning complete
 ```
 

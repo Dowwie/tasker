@@ -35,9 +35,37 @@ Triggered by `/plan`. Runs phases 0-5.
 ## Plan Inputs
 
 Ask user for:
-1. **Specification** - Requirements document
-2. **Target Directory** - Where code will be written
-3. **Constraints** (optional) - Tech stack, architecture rules
+
+1. **Specification** - Requirements in any format:
+   - Paste directly into chat, OR
+   - Provide a file path to an existing doc
+   - Accept: PRDs, bullet lists, design docs, freeform descriptions, meeting notes
+
+2. **Target Directory** - Where code will be written (required)
+
+3. **Tech Stack** (optional, conversational) - Ask: "Any tech stack requirements?"
+   - If yes: note them for the physical-architect
+   - If no: let agents infer from spec or use sensible defaults
+
+## Ingestion: Storing the Spec
+
+First, check if the spec already exists:
+
+```bash
+mkdir -p project-planning/inputs
+if [ -f project-planning/inputs/spec.md ]; then
+    echo "Spec found, proceeding to planning..."
+fi
+```
+
+**If spec already exists:** Skip ingestion, proceed to logical phase.
+
+**If spec doesn't exist**, ask user for specification, then:
+
+- **User provides a file path** → `cp /path/to/spec project-planning/inputs/spec.md`
+- **User pastes content** → Write it to `project-planning/inputs/spec.md`
+
+**Important:** Store the spec exactly as provided - no transformation, summarization, or normalization.
 
 ## Plan Phase Dispatch
 
@@ -53,13 +81,15 @@ python3 scripts/state.py status
 
 | Phase | Agent | Output | Validation |
 |-------|-------|--------|------------|
-| `ingestion` | (none) | `inputs/spec.md` | File exists |
+| `ingestion` | (none) | `inputs/spec.md` (verbatim) | File exists |
 | `logical` | **logic-architect** | `artifacts/capability-map.json` | `state.py validate capability_map` |
 | `physical` | **physical-architect** | `artifacts/physical-map.json` | `state.py validate physical_map` |
 | `definition` | **task-author** | `tasks/*.json` | `state.py load-tasks` |
 | `validation` | **task-plan-verifier** | Validation report | `state.py validate-tasks <verdict>` |
-| `sequencing` | **plan-auditor** | Updated task waves | DAG is valid |
+| `sequencing` | **plan-auditor** | Updated task phases | DAG is valid |
 | `ready` | (done) | Planning complete | — |
+
+**Note on ingestion:** The spec is stored exactly as provided. Tech stack constraints (if any) are passed to physical-architect via state metadata, not a separate constraints file.
 
 ## Plan Loop
 
@@ -124,7 +154,7 @@ When phase reaches "ready":
 ## Planning Complete ✓
 
 **Tasks:** 24
-**Waves:** 4  
+**Phases:** 4
 **Steel Thread:** T001 → T003 → T007 → T012
 
 Run `/execute` to begin implementation.

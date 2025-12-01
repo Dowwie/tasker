@@ -8,7 +8,7 @@ Tasker is a Claude Code-powered framework that transforms software specification
 
 1. **Breaks specifications into behaviors** (Input/Process/State/Output patterns)
 2. **Maps behaviors to physical files** (concrete code paths and artifacts)
-3. **Sequences tasks into dependency-aware waves** (DAG structure)
+3. **Sequences tasks into dependency-aware phases** (DAG structure)
 4. **Executes tasks via isolated Claude Code subagents** (context-fresh execution)
 
 ### System Architecture
@@ -25,7 +25,7 @@ User Input (spec.md, constraints.md)
 │ Phase 2: physical-architect  → physical-map.json      │
 │ Phase 3: task-author         → tasks/*.json           │
 │ Phase 4: task-plan-verifier  → verification-report.md │
-│ Phase 5: plan-auditor        → wave assignments       │
+│ Phase 5: plan-auditor        → phase assignments       │
 └────────────────────────────────────────┘
          ↓
     /execute command
@@ -123,7 +123,7 @@ Store structured verification output in `state.json` for each task.
   "T001": {
     "id": "T001",
     "status": "complete",
-    "wave": 1,
+    "phase": 1,
     "attempts": 1,
     "verification": {
       "verdict": "PASS",

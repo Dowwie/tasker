@@ -1,14 +1,17 @@
 {
-  "$comment": "Example task file - copy to project-planning/tasks/T001.json",
+  "$comment": "Example task file - created by task-author agent",
 
   "id": "T001",
   "name": "Implement credential validation",
-  "wave": 1,
+  "phase": 1,
 
   "context": {
     "domain": "Authentication",
     "capability": "User Login",
-    "spec_ref": "spec.md#user-authentication",
+    "spec_ref": {
+      "quote": "Users must be able to log in with email and password",
+      "location": "paragraph 3"
+    },
     "steel_thread": true
   },
 
