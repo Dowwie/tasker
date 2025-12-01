@@ -2,6 +2,8 @@
 
 Decompose a specification into an executable task DAG.
 
+**IMPORTANT:** This command uses the `orchestrator` skill. You MUST follow the full plan loop defined in `.claude/skills/orchestrator/SKILL.md`, executing ALL phases 0-5 sequentially. Do NOT stop after task definition - Phase 4 (validation) is mandatory.
+
 ## Input Required
 
 The planner will ask you for:
@@ -21,21 +23,34 @@ The planner will ask you for:
 
 ## What Happens
 
-The planner runs phases 0-6:
+Follow the orchestrator's Plan Loop (see `.claude/skills/orchestrator/SKILL.md`):
 
 ```
 Phase 0: Ingestion     → spec.md saved
-Phase 1: Logical       → capability-map.json (validated)
-Phase 2: Physical      → physical-map.json (validated)
-Phase 3: Definition    → tasks/*.json created
-Phase 4: Validation    → tasks verified against spec & user preferences
-Phase 5: Sequencing    → phases assigned, DAG validated
+Phase 1: Logical       → spawn logic-architect → capability-map.json (validated)
+Phase 2: Physical      → spawn physical-architect → physical-map.json (validated)
+Phase 3: Definition    → spawn task-author → tasks/*.json created
+Phase 4: Validation    → spawn task-plan-verifier → verification-report.md
+Phase 5: Sequencing    → spawn plan-auditor → phases assigned, DAG validated
 Phase 6: Ready         → state.json shows "ready" phase
 ```
 
-### Phase 4: Validation
+**Critical:** After each phase, call `python3 scripts/state.py advance` to proceed. The state machine enforces that validation MUST complete before sequencing.
 
-The `task-plan-verifier` agent uses LLM-as-judge to verify each task:
+### Phase 4: Validation (Mandatory)
+
+When the phase reaches `validation`, spawn the `task-plan-verifier` agent:
+
+```
+Verify task definitions for planning
+
+Spec: project-planning/inputs/spec.md
+Capability Map: project-planning/artifacts/capability-map.json
+Tasks Directory: project-planning/tasks/
+User Preferences: ~/.claude/CLAUDE.md (if exists)
+```
+
+The verifier evaluates each task across these dimensions:
 
 | Dimension | What's Checked |
 |-----------|----------------|
@@ -44,7 +59,7 @@ The `task-plan-verifier` agent uses LLM-as-judge to verify each task:
 | Preference Compliance | Task follows ~/.claude/CLAUDE.md patterns |
 | Viability | Scope, dependencies, and criteria are valid |
 
-If issues are found, planning blocks until they're resolved.
+The verifier registers its verdict via `python3 scripts/state.py validate-tasks <VERDICT>`. If BLOCKED, planning halts until issues are fixed and `/verify-plan` is re-run.
 
 ## Output
 

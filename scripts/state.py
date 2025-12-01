@@ -258,11 +258,13 @@ def can_advance_phase(state: dict) -> tuple[bool, str]:
 
     elif current == "validation":
         validation = state["artifacts"].get("task_validation", {})
+        if not validation:
+            return False, "Task validation not run. Spawn task-plan-verifier agent or run /verify-plan"
         if not validation.get("valid"):
-            return False, "Task validation not complete or has blocking issues"
-        verdict = validation.get("verdict", "")
-        if verdict == "BLOCKED":
-            return False, f"Task validation blocked: {validation.get('error', 'Unknown issue')}"
+            verdict = validation.get("verdict", "UNKNOWN")
+            if verdict == "BLOCKED":
+                return False, f"Task validation BLOCKED: {validation.get('summary', 'See verification-report.md')}. Fix issues and re-run /verify-plan"
+            return False, "Task validation incomplete or invalid"
         return True, ""
 
     elif current == "sequencing":

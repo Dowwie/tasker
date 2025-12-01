@@ -72,15 +72,15 @@ This triggers the planning pipeline:
 4. Task-Plan-Verifier validates task quality
 5. Plan Auditor assigns execution phases and validates DAG
 
-### 3. Review and Execute
+### 3. Execute
 
 ```bash
-/status              # View planning results
-/verify-plan         # Run validation checks
 /execute             # Begin implementation
 /execute T005        # Execute a specific task
 /execute --batch     # Execute all ready tasks without prompts
 ```
+
+Note: Task validation runs automatically during `/plan` (Phase 4). You don't need to run `/verify-plan` manually unless you've edited task files after planning.
 
 ### 4. Monitor Progress
 
@@ -88,6 +88,19 @@ This triggers the planning pipeline:
 /tui                 # Launch interactive TUI dashboard
 /status              # CLI status summary
 ```
+
+### Command Reference
+
+| Command | Type | Purpose |
+|---------|------|---------|
+| `/plan` | Production | Decompose spec → task DAG (runs phases 0-5 automatically) |
+| `/execute` | Production | Implement tasks via isolated subagents |
+| `/status` | Production | View current workflow state |
+| `/tui` | Production | Interactive TUI dashboard |
+| `/verify-plan` | Manual | Re-run task validation after editing task files |
+| `/evaluate` | Manual | Generate performance report after execution |
+
+**Production commands** are the main workflow. **Manual commands** are for debugging, re-running steps, or post-execution analysis.
 
 ---
 
@@ -107,12 +120,12 @@ tasker/
 │   │   ├── task-executor.md       # Execution: Implement tasks
 │   │   └── task-verifier.md       # Execution: Verify implementations
 │   ├── commands/                  # Slash commands
-│   │   ├── plan.md                # /plan - Enter planning mode
-│   │   ├── execute.md             # /execute - Enter execution mode
-│   │   ├── verify-plan.md         # /verify-plan - Validate planning
-│   │   ├── status.md              # /status - Show dashboard
-│   │   ├── tui.md                 # /tui - Launch TUI
-│   │   └── evaluate.md            # /evaluate - Generate report
+│   │   ├── plan.md                # /plan - Enter planning mode (production)
+│   │   ├── execute.md             # /execute - Enter execution mode (production)
+│   │   ├── status.md              # /status - Show dashboard (production)
+│   │   ├── tui.md                 # /tui - Launch TUI (production)
+│   │   ├── verify-plan.md         # /verify-plan - Re-run validation (manual/debug)
+│   │   └── evaluate.md            # /evaluate - Generate report (manual/debug)
 │   ├── hooks/                     # Event hooks
 │   │   ├── launch-tui.sh          # Auto-launch TUI in tmux
 │   │   ├── close-tui.sh           # Close TUI on completion
