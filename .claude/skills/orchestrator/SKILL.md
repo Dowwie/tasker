@@ -179,20 +179,28 @@ while true; do
     # 3. Generate execution bundle (BEFORE starting task)
     python3 scripts/bundle.py generate $TASK_ID
 
-    # 4. Mark started
+    # 4. Validate bundle integrity (dependencies + checksums)
+    python3 scripts/bundle.py validate-integrity $TASK_ID
+    if [ $? -eq 1 ]; then
+        echo "Bundle validation failed for $TASK_ID - missing dependencies"
+        continue  # Skip to next task
+    fi
+    # Exit code 2 = warnings (checksum mismatch) - proceed but notify user
+
+    # 5. Mark started
     python3 scripts/state.py start-task $TASK_ID
 
-    # 5. Spawn isolated task-executor subagent with bundle
+    # 6. Spawn isolated task-executor subagent with bundle
     # (See "Subagent Spawn" section below)
 
-    # 6. Handle result
+    # 7. Handle result
     if [ $SUCCESS ]; then
         python3 scripts/state.py complete-task $TASK_ID
     else
         python3 scripts/state.py fail-task $TASK_ID "$ERROR"
     fi
 
-    # 7. Ask to continue (unless --batch mode)
+    # 8. Ask to continue (unless --batch mode)
     read -p "Continue? (y/n): " CONTINUE
 done
 ```
@@ -208,7 +216,7 @@ Bundle: project-planning/bundles/[TASK_ID]-bundle.json
 
 The bundle contains everything you need:
 - Task definition and acceptance criteria
-- Expanded atom details (what to implement)
+- Expanded behavior details (what to implement)
 - File paths and purposes
 - Target directory
 - Constraints and patterns to follow
@@ -216,7 +224,7 @@ The bundle contains everything you need:
 
 Instructions:
 1. Read the bundle file - it has ALL context
-2. Implement atoms in specified files
+2. Implement behaviors in specified files
 3. Run acceptance criteria verification
 4. Report: files created, tests passed, any issues
 ```
@@ -236,7 +244,7 @@ The bundle (`project-planning/bundles/T001-bundle.json`) includes:
 |-------|---------|
 | `task_id`, `name` | Task identification |
 | `target_dir` | Where to write code |
-| `atoms` | Expanded atom details (not just IDs) |
+| `behaviors` | Expanded behavior details (not just IDs) |
 | `files` | Paths, actions, purposes, layers |
 | `acceptance_criteria` | Verification commands |
 | `constraints` | Tech stack, patterns, testing |
@@ -283,7 +291,8 @@ python3 scripts/state.py load-tasks      # Reload from files
 # Bundles
 python3 scripts/bundle.py generate <id>   # Generate bundle for task
 python3 scripts/bundle.py generate-ready  # Generate all ready bundles
-python3 scripts/bundle.py validate <id>   # Validate existing bundle
+python3 scripts/bundle.py validate <id>   # Validate bundle against schema
+python3 scripts/bundle.py validate-integrity <id>  # Check deps + checksums
 python3 scripts/bundle.py list            # List existing bundles
 python3 scripts/bundle.py clean           # Remove all bundles
 

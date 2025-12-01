@@ -12,7 +12,7 @@
     "steel_thread": true
   },
 
-  "atoms": ["A001", "A002"],
+  "behaviors": ["B001", "B002"],
 
   "files": [
     {

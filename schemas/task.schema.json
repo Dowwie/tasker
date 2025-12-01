@@ -3,7 +3,7 @@
   "title": "Task",
   "description": "Individual task definition - one file per task for parallel work",
   "type": "object",
-  "required": ["id", "name", "wave", "atoms", "files", "acceptance_criteria"],
+  "required": ["id", "name", "wave", "behaviors", "files", "acceptance_criteria"],
   "properties": {
     "id": { "type": "string", "pattern": "^T[0-9]+$" },
     "name": { "type": "string" },
@@ -19,10 +19,10 @@
       }
     },
     
-    "atoms": {
+    "behaviors": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "description": "Atom IDs from capability map" }
+      "items": { "type": "string", "description": "Behavior IDs from capability map" }
     },
     
     "files": {

@@ -11,14 +11,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from bundle import (
     clean_bundles,
-    find_atom_by_id,
+    find_behavior_by_id,
     find_dependencies_files,
-    find_files_for_atom,
+    find_files_for_behavior,
     generate_bundle,
     list_bundles,
     load_json,
     parse_constraints,
     validate_bundle,
+    validate_bundle_checksums,
     validate_bundle_dependencies,
     validate_verification_commands,
 )
@@ -49,7 +50,7 @@ def temp_planning_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     schemas_dir.mkdir()
     schema = {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "required": ["version", "task_id", "name", "target_dir", "atoms", "files", "acceptance_criteria"],
+        "required": ["version", "task_id", "name", "target_dir", "behaviors", "files", "acceptance_criteria"],
     }
     (schemas_dir / "execution-bundle.schema.json").write_text(json.dumps(schema))
 
@@ -70,15 +71,15 @@ def sample_capability_map() -> dict:
                         "id": "C001",
                         "name": "User Login",
                         "spec_ref": "REQ-001",
-                        "atoms": [
+                        "behaviors": [
                             {
-                                "id": "A001",
+                                "id": "B001",
                                 "name": "validate_credentials",
                                 "type": "process",
                                 "description": "Validate user email and password",
                             },
                             {
-                                "id": "A002",
+                                "id": "B002",
                                 "name": "CredentialError",
                                 "type": "output",
                                 "description": "Error for invalid credentials",
@@ -94,9 +95,9 @@ def sample_capability_map() -> dict:
                     {
                         "id": "C002",
                         "name": "User Storage",
-                        "atoms": [
+                        "behaviors": [
                             {
-                                "id": "A003",
+                                "id": "B003",
                                 "name": "UserRepository",
                                 "type": "state",
                                 "description": "User data access layer",
@@ -118,8 +119,8 @@ def sample_physical_map() -> dict:
         "target_dir": "/tmp/target",
         "file_mapping": [
             {
-                "atom_id": "A001",
-                "atom_name": "validate_credentials",
+                "behavior_id": "B001",
+                "behavior_name": "validate_credentials",
                 "files": [
                     {
                         "path": "src/auth/validator.py",
@@ -136,8 +137,8 @@ def sample_physical_map() -> dict:
                 ],
             },
             {
-                "atom_id": "A002",
-                "atom_name": "CredentialError",
+                "behavior_id": "B002",
+                "behavior_name": "CredentialError",
                 "files": [
                     {
                         "path": "src/auth/errors.py",
@@ -162,7 +163,7 @@ def sample_task() -> dict:
         "context": {
             "steel_thread": True,
         },
-        "atoms": ["A001", "A002"],
+        "behaviors": ["B001", "B002"],
         "files": [
             {
                 "path": "src/auth/validator.py",
@@ -235,15 +236,15 @@ class TestLoadJson:
         assert result is None
 
 
-class TestFindAtomById:
-    """Tests for find_atom_by_id function."""
+class TestFindBehaviorById:
+    """Tests for find_behavior_by_id function."""
 
-    def test_find_existing_atom(self, sample_capability_map: dict) -> None:
-        """Test finding an atom that exists."""
-        result = find_atom_by_id(sample_capability_map, "A001")
+    def test_find_existing_behavior(self, sample_capability_map: dict) -> None:
+        """Test finding a behavior that exists."""
+        result = find_behavior_by_id(sample_capability_map, "B001")
 
         assert result is not None
-        assert result["id"] == "A001"
+        assert result["id"] == "B001"
         assert result["name"] == "validate_credentials"
         assert result["type"] == "process"
         assert result["domain"] == "Authentication"
@@ -251,34 +252,34 @@ class TestFindAtomById:
         assert result["capability_id"] == "C001"
         assert result["spec_ref"] == "REQ-001"
 
-    def test_find_atom_in_different_domain(self, sample_capability_map: dict) -> None:
-        """Test finding an atom in a different domain."""
-        result = find_atom_by_id(sample_capability_map, "A003")
+    def test_find_behavior_in_different_domain(self, sample_capability_map: dict) -> None:
+        """Test finding a behavior in a different domain."""
+        result = find_behavior_by_id(sample_capability_map, "B003")
 
         assert result is not None
-        assert result["id"] == "A003"
+        assert result["id"] == "B003"
         assert result["domain"] == "Data"
         assert result["capability"] == "User Storage"
 
-    def test_find_nonexistent_atom(self, sample_capability_map: dict) -> None:
-        """Test finding an atom that doesn't exist."""
-        result = find_atom_by_id(sample_capability_map, "A999")
+    def test_find_nonexistent_behavior(self, sample_capability_map: dict) -> None:
+        """Test finding a behavior that doesn't exist."""
+        result = find_behavior_by_id(sample_capability_map, "B999")
 
         assert result is None
 
-    def test_find_atom_empty_map(self) -> None:
-        """Test finding atom in empty capability map."""
-        result = find_atom_by_id({"domains": []}, "A001")
+    def test_find_behavior_empty_map(self) -> None:
+        """Test finding behavior in empty capability map."""
+        result = find_behavior_by_id({"domains": []}, "B001")
 
         assert result is None
 
 
-class TestFindFilesForAtom:
-    """Tests for find_files_for_atom function."""
+class TestFindFilesForBehavior:
+    """Tests for find_files_for_behavior function."""
 
     def test_find_files_with_tests(self, sample_physical_map: dict) -> None:
         """Test finding files including test files."""
-        result = find_files_for_atom(sample_physical_map, "A001")
+        result = find_files_for_behavior(sample_physical_map, "B001")
 
         assert len(result) == 2
         paths = [f["path"] for f in result]
@@ -287,24 +288,24 @@ class TestFindFilesForAtom:
 
     def test_find_files_without_tests(self, sample_physical_map: dict) -> None:
         """Test finding files when no tests defined."""
-        result = find_files_for_atom(sample_physical_map, "A002")
+        result = find_files_for_behavior(sample_physical_map, "B002")
 
         assert len(result) == 1
         assert result[0]["path"] == "src/auth/errors.py"
 
-    def test_find_files_nonexistent_atom(self, sample_physical_map: dict) -> None:
-        """Test finding files for atom not in physical map."""
-        result = find_files_for_atom(sample_physical_map, "A999")
+    def test_find_files_nonexistent_behavior(self, sample_physical_map: dict) -> None:
+        """Test finding files for behavior not in physical map."""
+        result = find_files_for_behavior(sample_physical_map, "B999")
 
         assert result == []
 
-    def test_files_have_atom_reference(self, sample_physical_map: dict) -> None:
-        """Test that returned files include atom ID reference."""
-        result = find_files_for_atom(sample_physical_map, "A001")
+    def test_files_have_behavior_reference(self, sample_physical_map: dict) -> None:
+        """Test that returned files include behavior ID reference."""
+        result = find_files_for_behavior(sample_physical_map, "B001")
 
         for file_info in result:
-            assert "atoms" in file_info
-            assert "A001" in file_info["atoms"]
+            assert "behaviors" in file_info
+            assert "B001" in file_info["behaviors"]
 
 
 class TestFindDependenciesFiles:
@@ -429,17 +430,17 @@ class TestGenerateBundle:
         assert bundle is not None
 
         # Verify bundle contents
-        assert bundle["version"] == "1.0"
+        assert bundle["version"] == "1.2"
         assert bundle["task_id"] == "T001"
         assert bundle["name"] == "Implement credential validation"
         assert bundle["wave"] == 1
         assert bundle["target_dir"] == "/tmp/target-project"
 
-        # Verify atoms were expanded
-        assert len(bundle["atoms"]) == 2
-        atom_ids = [a["id"] for a in bundle["atoms"]]
-        assert "A001" in atom_ids
-        assert "A002" in atom_ids
+        # Verify behaviors were expanded
+        assert len(bundle["behaviors"]) == 2
+        behavior_ids = [b["id"] for b in bundle["behaviors"]]
+        assert "B001" in behavior_ids
+        assert "B002" in behavior_ids
 
         # Verify acceptance criteria preserved
         assert len(bundle["acceptance_criteria"]) == 2
@@ -665,7 +666,7 @@ class TestBundleIntegration:
             "id": "T003",
             "name": "Implement login endpoint",
             "wave": 2,
-            "atoms": ["A001"],
+            "behaviors": ["B001"],
             "files": [{"path": "src/api/login.py", "action": "create"}],
             "dependencies": {"tasks": ["T002"], "external": []},
             "acceptance_criteria": [
@@ -728,7 +729,7 @@ class TestValidateBundleDependencies:
             "id": "T003",
             "name": "Use user repo",
             "wave": 2,
-            "atoms": ["A001"],
+            "behaviors": ["B001"],
             "files": [{"path": "src/api/users.py", "action": "create"}],
             "dependencies": {"tasks": ["T002"], "external": []},
             "acceptance_criteria": [{"criterion": "Works", "verification": "pytest"}],
@@ -781,7 +782,7 @@ class TestValidateBundleDependencies:
             "id": "T003",
             "name": "Use missing file",
             "wave": 2,
-            "atoms": ["A001"],
+            "behaviors": ["B001"],
             "files": [{"path": "src/api/users.py", "action": "create"}],
             "dependencies": {"tasks": ["T002"], "external": []},
             "acceptance_criteria": [{"criterion": "Works", "verification": "pytest"}],
@@ -851,7 +852,7 @@ class TestValidateVerificationCommands:
             "id": "T001",
             "name": "Task with empty command",
             "wave": 1,
-            "atoms": ["A001"],
+            "behaviors": ["B001"],
             "files": [{"path": "src/file.py", "action": "create"}],
             "dependencies": {"tasks": []},
             "acceptance_criteria": [
@@ -887,7 +888,7 @@ class TestValidateVerificationCommands:
             "id": "T001",
             "name": "Task with bad command",
             "wave": 1,
-            "atoms": ["A001"],
+            "behaviors": ["B001"],
             "files": [{"path": "src/file.py", "action": "create"}],
             "dependencies": {"tasks": []},
             "acceptance_criteria": [
@@ -923,7 +924,7 @@ class TestValidateVerificationCommands:
             "id": "T001",
             "name": "Task with complex command",
             "wave": 1,
-            "atoms": ["A001"],
+            "behaviors": ["B001"],
             "files": [{"path": "src/file.py", "action": "create"}],
             "dependencies": {"tasks": []},
             "acceptance_criteria": [
@@ -956,3 +957,96 @@ class TestValidateVerificationCommands:
 
         assert valid is False
         assert any("not found" in i.lower() for i in invalid)
+
+
+class TestValidateBundleChecksums:
+    """Tests for validate_bundle_checksums function."""
+
+    def test_checksums_valid(
+        self,
+        temp_planning_dir: Path,
+        sample_task: dict,
+        sample_capability_map: dict,
+        sample_physical_map: dict,
+        sample_state: dict,
+    ) -> None:
+        """Test when all checksums match."""
+        (temp_planning_dir / "tasks" / "T001.json").write_text(json.dumps(sample_task))
+        (temp_planning_dir / "artifacts" / "capability-map.json").write_text(
+            json.dumps(sample_capability_map)
+        )
+        (temp_planning_dir / "artifacts" / "physical-map.json").write_text(
+            json.dumps(sample_physical_map)
+        )
+        (temp_planning_dir / "state.json").write_text(json.dumps(sample_state))
+
+        generate_bundle("T001")
+
+        valid, changed = validate_bundle_checksums("T001")
+
+        assert valid is True
+        assert len(changed) == 0
+
+    def test_checksums_artifact_changed(
+        self,
+        temp_planning_dir: Path,
+        sample_task: dict,
+        sample_capability_map: dict,
+        sample_physical_map: dict,
+        sample_state: dict,
+    ) -> None:
+        """Test when artifact changes after bundle generation."""
+        (temp_planning_dir / "tasks" / "T001.json").write_text(json.dumps(sample_task))
+        (temp_planning_dir / "artifacts" / "capability-map.json").write_text(
+            json.dumps(sample_capability_map)
+        )
+        (temp_planning_dir / "artifacts" / "physical-map.json").write_text(
+            json.dumps(sample_physical_map)
+        )
+        (temp_planning_dir / "state.json").write_text(json.dumps(sample_state))
+
+        generate_bundle("T001")
+
+        # Modify capability map after bundle generation
+        sample_capability_map["version"] = "2.0"
+        (temp_planning_dir / "artifacts" / "capability-map.json").write_text(
+            json.dumps(sample_capability_map)
+        )
+
+        valid, changed = validate_bundle_checksums("T001")
+
+        assert valid is False
+        assert any("capability_map" in c for c in changed)
+
+    def test_checksums_old_bundle_format(self, temp_planning_dir: Path) -> None:
+        """Test validation of bundle without checksums (old format)."""
+        # Create old-format bundle without checksums
+        old_bundle = {
+            "version": "1.0",
+            "task_id": "T001",
+            "name": "Old bundle",
+            "wave": 1,
+            "target_dir": "/tmp/target",
+            "behaviors": [],
+            "files": [],
+            "dependencies": {"tasks": [], "files": [], "external": []},
+            "acceptance_criteria": [],
+            "constraints": {},
+            # No checksums field
+        }
+        (temp_planning_dir / "bundles" / "T001-bundle.json").write_text(
+            json.dumps(old_bundle)
+        )
+
+        valid, changed = validate_bundle_checksums("T001")
+
+        # Should pass since no checksums to validate
+        assert valid is True
+        assert len(changed) == 0
+
+    def test_checksums_nonexistent_bundle(self, temp_planning_dir: Path) -> None:
+        """Test checksum validation of nonexistent bundle."""
+        valid, changed = validate_bundle_checksums("T999")
+
+        assert valid is False
+        assert any("not found" in c.lower() for c in changed)

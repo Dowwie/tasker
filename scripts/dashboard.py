@@ -20,6 +20,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 PLANNING_DIR = PROJECT_ROOT / "project-planning"
 STATE_FILE = PLANNING_DIR / "state.json"
+TASKS_DIR = PLANNING_DIR / "tasks"
 
 # Box drawing characters
 BOX_H = "─"
@@ -159,12 +160,51 @@ def render_dashboard(state: dict, use_color: bool = True) -> str:
     lines.append(box_text(f"Phase: {phase_display}    Target: {target}", width))
     lines.append(box_text(f"Updated: {format_time_ago(state.get('updated_at', ''))}", width))
 
+    # Get tasks early for use in multiple sections
+    tasks = state.get("tasks", {})
+
+    # Planning Quality Section (show during planning phases or if tasks exist)
+    phase_idx = ["ingestion", "logical", "physical", "definition", "validation", "sequencing", "ready", "executing", "complete"]
+    current_phase_idx = phase_idx.index(phase) if phase in phase_idx else -1
+
+    if current_phase_idx >= 3 and tasks:  # definition phase or later
+        # Compute planning metrics inline
+        total_behaviors = 0
+        total_criteria = 0
+        steel_thread_count = 0
+
+        for tid in tasks:
+            task_path = TASKS_DIR / f"{tid}.json"
+            if task_path.exists():
+                try:
+                    task_def = json.loads(task_path.read_text())
+                    total_behaviors += len(task_def.get("behaviors", []))
+                    total_criteria += len(task_def.get("acceptance_criteria", []))
+                    if task_def.get("context", {}).get("steel_thread"):
+                        steel_thread_count += 1
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
+        task_count = len(tasks)
+        avg_behaviors = total_behaviors / task_count if task_count > 0 else 0
+        avg_criteria = total_criteria / task_count if task_count > 0 else 0
+
+        lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
+        lines.append(box_text(f"{c(BOLD)}PLANNING QUALITY{c(RESET)}", width, "center"))
+        lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
+
+        # Color code behaviors/task: green if 2-5, yellow otherwise
+        behaviors_color = STATUS_COLORS['complete'] if 2 <= avg_behaviors <= 5 else STATUS_COLORS['ready']
+        plan_line = f"Tasks: {task_count}  Behaviors: {total_behaviors}  "
+        plan_line += f"Avg: {c(behaviors_color)}{avg_behaviors:.1f}{c(RESET)}/task  "
+        plan_line += f"Steel: {steel_thread_count}"
+        lines.append(box_text(plan_line, width, "center"))
+
     # Execution Stats Section
     lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
     lines.append(box_text(f"{c(BOLD)}EXECUTION PROGRESS{c(RESET)}", width, "center"))
     lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
 
-    tasks = state.get("tasks", {})
     execution = state.get("execution", {})
 
     # Count by status
@@ -287,6 +327,52 @@ def render_dashboard(state: dict, use_color: bool = True) -> str:
     total_cost = execution.get("total_cost_usd", 0.0)
 
     lines.append(box_text(f"Tokens: {total_tokens:,}    Cost: ${total_cost:.4f}", width, "center"))
+
+    # Verification & Quality metrics
+    verified_count = 0
+    pass_count = 0
+    block_count = 0
+    for task in tasks.values():
+        verification = task.get("verification", {})
+        if verification:
+            verified_count += 1
+            if verification.get("recommendation") == "PROCEED":
+                pass_count += 1
+            elif verification.get("recommendation") == "BLOCK":
+                block_count += 1
+
+    if verified_count > 0:
+        lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
+        lines.append(box_text(f"{c(BOLD)}VERIFICATION{c(RESET)}", width, "center"))
+        lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
+
+        verify_line = f"Verified: {verified_count}  "
+        verify_line += f"{c(STATUS_COLORS['complete'])}PROCEED: {pass_count}{c(RESET)}  "
+        if block_count > 0:
+            verify_line += f"{c(STATUS_COLORS['failed'])}BLOCK: {block_count}{c(RESET)}"
+        lines.append(box_text(verify_line, width, "center"))
+
+    # Calibration metrics (if available)
+    calibration = state.get("calibration", {})
+    if calibration.get("total_verified", 0) > 0:
+        cal_total = calibration.get("total_verified", 0)
+        cal_correct = calibration.get("correct", 0)
+        fp_count = len(calibration.get("false_positives", []))
+        fn_count = len(calibration.get("false_negatives", []))
+        cal_score = cal_correct / cal_total if cal_total > 0 else 1.0
+
+        lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
+        lines.append(box_text(f"{c(BOLD)}VERIFIER CALIBRATION{c(RESET)}", width, "center"))
+        lines.append(box_line(BOX_L, BOX_H, BOX_R, width))
+
+        score_color = STATUS_COLORS['complete'] if cal_score >= 0.9 else (STATUS_COLORS['ready'] if cal_score >= 0.7 else STATUS_COLORS['failed'])
+        cal_line = f"Score: {c(score_color)}{cal_score:.0%}{c(RESET)}  "
+        cal_line += f"Correct: {cal_correct}  "
+        if fp_count > 0:
+            cal_line += f"{c(STATUS_COLORS['failed'])}FP: {fp_count}{c(RESET)}  "
+        if fn_count > 0:
+            cal_line += f"{c(STATUS_COLORS['ready'])}FN: {fn_count}{c(RESET)}"
+        lines.append(box_text(cal_line, width, "center"))
 
     # Recent events
     events = state.get("events", [])

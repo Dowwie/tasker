@@ -36,33 +36,20 @@ The bundle contains:
 |-------|-------------------|
 | `task_id`, `name` | What task you're implementing |
 | `target_dir` | Where to write code (absolute path) |
-| `atoms` | **What** to implement (functions, types, behaviors) |
+| `behaviors` | **What** to implement (functions, types, behaviors) |
 | `files` | **Where** to implement (paths, actions, purposes) |
 | `acceptance_criteria` | **How** to verify success |
 | `constraints` | **How** to write code (patterns, language, framework) |
 | `dependencies.files` | Files from prior tasks to read for context |
 | `context` | Why this exists (domain, capability, spec reference) |
 
-### 2. Verify Dependencies
-
-Check that dependency files exist:
-
-```bash
-# From bundle.dependencies.files
-for file in <dependency_files>; do
-  [ -f "$TARGET_DIR/$file" ] || echo "Missing: $file"
-done
-```
-
-If any missing → STOP and report.
-
-### 3. Mark Started
+### 2. Mark Started
 
 ```bash
 python3 scripts/state.py start-task T001
 ```
 
-### 4. Track Changes
+### 3. Track Changes
 
 Before modifying anything, record state for rollback:
 
@@ -77,7 +64,7 @@ for file in <files_to_modify>; do
 done
 ```
 
-### 5. Implement
+### 4. Implement
 
 Use the bundle to guide implementation:
 
@@ -96,15 +83,15 @@ file = {
   "action": "create",
   "layer": "domain",
   "purpose": "Credential validation logic",
-  "atoms": ["A001", "A002"]
+  "behaviors": ["B001", "B002"]
 }
 
-# Find atoms for this file
-atoms = [a for a in bundle["atoms"] if a["id"] in file["atoms"]]
+# Find behaviors for this file
+behaviors = [b for b in bundle["behaviors"] if b["id"] in file["behaviors"]]
 
-# Implement atoms:
-# - A001: validate_credentials (type: process)
-# - A002: CredentialError (type: output)
+# Implement behaviors:
+# - B001: validate_credentials (type: process)
+# - B002: CredentialError (type: output)
 ```
 
 **Track what you create/modify:**
@@ -117,7 +104,7 @@ MODIFIED_FILES = []
 CREATED_FILES.append("src/auth/validator.py")
 ```
 
-### 6. Documentation
+### 5. Documentation
 
 After implementation, create documentation artifacts:
 
@@ -183,7 +170,7 @@ If README.md was modified:
 MODIFIED_FILES.append("README.md")
 ```
 
-### 7. Verify Acceptance Criteria
+### 6. Verify Acceptance Criteria
 
 **Spawn the `task-verifier` subagent** to verify in a clean context:
 
@@ -221,7 +208,7 @@ python3 scripts/state.py record-verification T001 \
   --tests '{"coverage": "PASS", "assertions": "PASS", "edge_cases": "PARTIAL"}'
 ```
 
-### 8. Complete or Rollback
+### 7. Complete or Rollback
 
 **If all criteria pass:**
 ```bash
@@ -254,7 +241,7 @@ done
 python3 scripts/state.py fail-task T001 "Acceptance criteria failed: <details>"
 ```
 
-### 9. Report
+### 8. Report
 
 Return structured report:
 
@@ -265,9 +252,9 @@ Return structured report:
 **Status:** COMPLETE | FAILED
 **Bundle:** project-planning/bundles/T001-bundle.json
 
-### Atoms Implemented
-- [x] A001: validate_credentials (process)
-- [x] A002: CredentialError (output)
+### Behaviors Implemented
+- [x] B001: validate_credentials (process)
+- [x] B002: CredentialError (output)
 
 ### Files Created
 - src/auth/validator.py (domain layer)
@@ -304,11 +291,12 @@ This executor runs in an **isolated subagent context**:
 | Scenario | Action |
 |----------|--------|
 | Bundle not found | Report and exit |
-| Dependency file missing | Report and exit |
 | File creation fails | Rollback and fail task |
 | Verifier returns BLOCK | Rollback and fail task |
 | Verifier spawn fails | Rollback and fail task |
 | Crash mid-execution | Rollback files remain for manual recovery |
+
+**Note:** Dependency file validation is performed by the orchestrator before spawning this executor (via `bundle.py validate_bundle_dependencies`).
 
 ## Quality Standards
 
@@ -343,9 +331,9 @@ This executor spawns ONE subagent:
   "name": "Implement credential validation",
   "target_dir": "/home/user/myproject",
 
-  "atoms": [
+  "behaviors": [
     {
-      "id": "A001",
+      "id": "B001",
       "name": "validate_credentials",
       "type": "process",
       "description": "Validate email and password"
@@ -358,7 +346,7 @@ This executor spawns ONE subagent:
       "action": "create",
       "layer": "domain",
       "purpose": "Credential validation logic",
-      "atoms": ["A001"]
+      "behaviors": ["B001"]
     }
   ],
 

@@ -61,7 +61,7 @@ done
 ```
 
 Build a mental model of:
-- Task coverage of atoms
+- Task coverage of behaviors
 - Dependency graph
 - Constraint declarations
 
@@ -73,13 +73,13 @@ For each task, evaluate these dimensions:
 
 | Score | Meaning |
 |-------|---------|
-| PASS | Task atoms trace back to spec requirements |
-| PARTIAL | Some atoms unclear or spec reference missing |
+| PASS | Task behaviors trace back to spec requirements |
+| PARTIAL | Some behaviors unclear or spec reference missing |
 | FAIL | Task doesn't map to any spec requirement |
 
 **Evidence to check:**
 - `context.spec_ref` points to real spec section
-- Atoms in task exist in capability-map
+- Behaviors in task exist in capability-map
 - Task purpose aligns with spec intent
 
 #### B. Strategy Alignment (Required)
@@ -91,7 +91,7 @@ For each task, evaluate these dimensions:
 | FAIL | Task contradicts or ignores capability-map |
 
 **Evidence to check:**
-- Atoms belong to declared domain/capability
+- Behaviors belong to declared domain/capability
 - Steel thread tasks are properly marked
 - Dependencies follow logical flow
 
@@ -222,7 +222,7 @@ From `~/.claude/CLAUDE.md`:
 | Dimension | Score | Evidence |
 |-----------|-------|----------|
 | Spec Alignment | PASS | Maps to Section 2.1 "User Login" |
-| Strategy Alignment | PASS | Atoms A1, A2 from capability C1 |
+| Strategy Alignment | PASS | Behaviors B1, B2 from capability C1 |
 | Preference Compliance | PASS | Uses Protocol per constraints |
 | Viability | PASS | 3h estimate, 2 files, deps clear |
 
@@ -234,7 +234,7 @@ From `~/.claude/CLAUDE.md`:
 | Dimension | Score | Evidence |
 |-----------|-------|----------|
 | Spec Alignment | PASS | Maps to Section 3.1 "Data Model" |
-| Strategy Alignment | PASS | Atoms A5, A6 from capability C2 |
+| Strategy Alignment | PASS | Behaviors B5, B6 from capability C2 |
 | Preference Compliance | PARTIAL | Missing `constraints.patterns` for Protocol usage |
 | Viability | PASS | 4h estimate, 3 files |
 
@@ -249,7 +249,7 @@ From `~/.claude/CLAUDE.md`:
 | Dimension | Score | Evidence |
 |-----------|-------|----------|
 | Spec Alignment | FAIL | No spec reference for caching requirement |
-| Strategy Alignment | FAIL | Atoms A15, A16 not in capability-map |
+| Strategy Alignment | FAIL | Behaviors B15, B16 not in capability-map |
 | Preference Compliance | N/A | Cannot evaluate without valid spec mapping |
 | Viability | PARTIAL | Dependencies unclear |
 
@@ -313,11 +313,11 @@ Your final message MUST include:
 
 ### Spec Alignment Issues
 - Task has no `context.spec_ref`
-- Atoms don't exist in capability-map
+- Behaviors don't exist in capability-map
 - Task scope exceeds spec requirements (scope creep)
 
 ### Strategy Alignment Issues
-- Task atoms from different domains mixed inappropriately
+- Task behaviors from different domains mixed inappropriately
 - Steel thread tasks not marked as such
 - Missing tasks for required flows
 

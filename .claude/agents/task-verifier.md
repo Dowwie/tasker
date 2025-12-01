@@ -30,7 +30,7 @@ cat project-planning/bundles/T001-bundle.json
 
 Extract:
 - `name` - What was supposed to be built
-- `atoms` - The specific components to verify
+- `behaviors` - The specific components to verify
 - `files` - Where implementation should exist
 - `acceptance_criteria` - What to verify
 - `constraints` - How it should be built

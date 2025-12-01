@@ -17,8 +17,10 @@ from state import (
     commit_task_changes,
     complete_task,
     compute_metrics,
+    compute_planning_metrics,
     fail_task,
     file_checksum,
+    get_calibration_score,
     get_next_phase,
     get_phase_order,
     get_ready_tasks,
@@ -27,12 +29,15 @@ from state import (
     load_tasks_from_dir,
     log_tokens,
     now_iso,
+    prepare_rollback,
+    record_calibration,
     record_verification,
     register_artifact,
     register_task_validation,
     save_state,
     start_task,
     validate_json,
+    verify_rollback,
 )
 
 
@@ -1331,3 +1336,391 @@ class TestRecordVerificationExtended:
 
         events = [e for e in state["events"] if e["type"] == "verification_recorded"]
         assert len(events) == 2
+
+
+class TestVerificationEnforcement:
+    """Tests for verification enforcement in get_ready_tasks."""
+
+    def test_block_recommendation_prevents_dependents(self, temp_state_env: Path) -> None:
+        """Test that BLOCK recommendation prevents dependent tasks from starting."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "blocks": ["T002"],
+                "verification": {"verdict": "FAIL", "recommendation": "BLOCK"},
+            },
+            "T002": {"id": "T002", "status": "pending", "depends_on": ["T001"], "blocks": []},
+        }
+
+        ready = get_ready_tasks(state)
+
+        # T002 should NOT be ready because T001 has BLOCK recommendation
+        assert "T002" not in ready
+
+    def test_proceed_recommendation_allows_dependents(self, temp_state_env: Path) -> None:
+        """Test that PROCEED recommendation allows dependent tasks."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "blocks": ["T002"],
+                "verification": {"verdict": "PASS", "recommendation": "PROCEED"},
+            },
+            "T002": {"id": "T002", "status": "pending", "depends_on": ["T001"], "blocks": []},
+        }
+
+        ready = get_ready_tasks(state)
+
+        assert "T002" in ready
+
+    def test_no_verification_allows_dependents(self, temp_state_env: Path) -> None:
+        """Test that tasks without verification don't block dependents."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "blocks": ["T002"],
+                # No verification data
+            },
+            "T002": {"id": "T002", "status": "pending", "depends_on": ["T001"], "blocks": []},
+        }
+
+        ready = get_ready_tasks(state)
+
+        assert "T002" in ready
+
+    def test_skip_verification_check(self, temp_state_env: Path) -> None:
+        """Test that check_verification=False bypasses verification check."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "blocks": ["T002"],
+                "verification": {"verdict": "FAIL", "recommendation": "BLOCK"},
+            },
+            "T002": {"id": "T002", "status": "pending", "depends_on": ["T001"], "blocks": []},
+        }
+
+        ready = get_ready_tasks(state, check_verification=False)
+
+        # T002 should be ready when verification check is disabled
+        assert "T002" in ready
+
+    def test_record_verification_blocks_dependents(self, temp_state_env: Path) -> None:
+        """Test that recording BLOCK recommendation auto-blocks dependents."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "blocks": ["T002", "T003"],
+            },
+            "T002": {"id": "T002", "status": "pending", "depends_on": ["T001"], "blocks": []},
+            "T003": {"id": "T003", "status": "pending", "depends_on": ["T001"], "blocks": []},
+        }
+
+        record_verification(state, "T001", "FAIL", "BLOCK")
+
+        assert state["tasks"]["T002"]["status"] == "blocked"
+        assert state["tasks"]["T003"]["status"] == "blocked"
+        assert "T001" in state["tasks"]["T002"]["error"]
+
+
+class TestRollback:
+    """Tests for rollback preparation and verification."""
+
+    def test_prepare_rollback_new_file(self, temp_state_env: Path, tmp_path: Path) -> None:
+        """Test preparing rollback for a new file (doesn't exist yet)."""
+        import state as state_module
+
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+        state = init_state(str(target_dir))
+        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
+
+        rollback_data = prepare_rollback(state, "T001", ["new_file.py"])
+
+        assert rollback_data["file_existed"]["new_file.py"] is False
+        assert rollback_data["file_checksums"]["new_file.py"] == ""
+        assert "rollback_data" in state["tasks"]["T001"]
+
+    def test_prepare_rollback_existing_file(self, temp_state_env: Path, tmp_path: Path) -> None:
+        """Test preparing rollback for existing file."""
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+        existing_file = target_dir / "existing.py"
+        existing_file.write_text("original content")
+
+        state = init_state(str(target_dir))
+        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
+
+        rollback_data = prepare_rollback(state, "T001", ["existing.py"])
+
+        assert rollback_data["file_existed"]["existing.py"] is True
+        assert rollback_data["file_checksums"]["existing.py"] != ""
+
+    def test_verify_rollback_success(self, temp_state_env: Path, tmp_path: Path) -> None:
+        """Test successful rollback verification."""
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+        existing_file = target_dir / "existing.py"
+        existing_file.write_text("original content")
+
+        state = init_state(str(target_dir))
+        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
+
+        # Prepare rollback
+        prepare_rollback(state, "T001", ["existing.py"])
+
+        # Simulate task execution modifying file
+        existing_file.write_text("modified content")
+
+        # Simulate rollback (restore original)
+        existing_file.write_text("original content")
+
+        success, issues = verify_rollback(state, "T001", [], ["existing.py"])
+
+        assert success is True
+        assert issues == []
+
+    def test_verify_rollback_file_not_restored(self, temp_state_env: Path, tmp_path: Path) -> None:
+        """Test rollback verification when file wasn't restored."""
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+        existing_file = target_dir / "existing.py"
+        existing_file.write_text("original content")
+
+        state = init_state(str(target_dir))
+        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
+
+        prepare_rollback(state, "T001", ["existing.py"])
+
+        # Modify file but don't restore
+        existing_file.write_text("modified content")
+
+        success, issues = verify_rollback(state, "T001", [], ["existing.py"])
+
+        assert success is False
+        assert len(issues) == 1
+        assert "not restored" in issues[0]
+
+    def test_verify_rollback_created_file_not_deleted(self, temp_state_env: Path, tmp_path: Path) -> None:
+        """Test rollback verification when created file wasn't deleted."""
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+
+        state = init_state(str(target_dir))
+        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
+
+        prepare_rollback(state, "T001", ["new_file.py"])
+
+        # Create the file during task execution
+        (target_dir / "new_file.py").write_text("new content")
+
+        # Don't delete it during rollback
+        success, issues = verify_rollback(state, "T001", ["new_file.py"], [])
+
+        assert success is False
+        assert len(issues) == 1
+        assert "not deleted" in issues[0]
+
+
+class TestCalibration:
+    """Tests for verifier calibration tracking."""
+
+    def test_record_calibration_correct(self, temp_state_env: Path) -> None:
+        """Test recording correct calibration."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "verification": {"verdict": "PASS", "recommendation": "PROCEED"},
+            }
+        }
+
+        success, msg = record_calibration(state, "T001", "correct", "Task worked as expected")
+
+        assert success is True
+        assert state["calibration"]["total_verified"] == 1
+        assert state["calibration"]["correct"] == 1
+        assert len(state["calibration"]["history"]) == 1
+        assert state["calibration"]["history"][0]["actual_outcome"] == "correct"
+
+    def test_record_calibration_false_positive(self, temp_state_env: Path) -> None:
+        """Test recording false positive calibration."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "verification": {"verdict": "PASS", "recommendation": "PROCEED"},
+            }
+        }
+
+        success, msg = record_calibration(state, "T001", "false_positive", "Task actually failed")
+
+        assert success is True
+        assert state["calibration"]["total_verified"] == 1
+        assert state["calibration"]["correct"] == 0
+        assert "T001" in state["calibration"]["false_positives"]
+
+    def test_record_calibration_false_negative(self, temp_state_env: Path) -> None:
+        """Test recording false negative calibration."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "verification": {"verdict": "FAIL", "recommendation": "BLOCK"},
+            }
+        }
+
+        success, msg = record_calibration(state, "T001", "false_negative", "Task would have worked")
+
+        assert success is True
+        assert "T001" in state["calibration"]["false_negatives"]
+
+    def test_record_calibration_invalid_outcome(self, temp_state_env: Path) -> None:
+        """Test invalid calibration outcome."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "verification": {"verdict": "PASS", "recommendation": "PROCEED"},
+            }
+        }
+
+        success, msg = record_calibration(state, "T001", "invalid_outcome")
+
+        assert success is False
+        assert "Invalid outcome" in msg
+
+    def test_record_calibration_no_verification(self, temp_state_env: Path) -> None:
+        """Test calibration fails without verification data."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {"T001": {"id": "T001", "status": "complete", "depends_on": []}}
+
+        success, msg = record_calibration(state, "T001", "correct")
+
+        assert success is False
+        assert "No verification" in msg
+
+    def test_get_calibration_score(self, temp_state_env: Path) -> None:
+        """Test calibration score computation."""
+        state = init_state("/tmp/target")
+        state["calibration"] = {
+            "total_verified": 10,
+            "correct": 8,
+            "false_positives": ["T001", "T002"],
+            "false_negatives": [],
+            "history": [],
+        }
+
+        score = get_calibration_score(state)
+
+        assert score == 0.8
+
+    def test_get_calibration_score_no_data(self, temp_state_env: Path) -> None:
+        """Test calibration score with no data returns 1.0."""
+        state = init_state("/tmp/target")
+
+        score = get_calibration_score(state)
+
+        assert score == 1.0
+
+    def test_calibration_accumulates(self, temp_state_env: Path) -> None:
+        """Test that calibration data accumulates across tasks."""
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {
+                "id": "T001",
+                "status": "complete",
+                "depends_on": [],
+                "verification": {"verdict": "PASS", "recommendation": "PROCEED"},
+            },
+            "T002": {
+                "id": "T002",
+                "status": "complete",
+                "depends_on": [],
+                "verification": {"verdict": "PASS", "recommendation": "PROCEED"},
+            },
+        }
+
+        record_calibration(state, "T001", "correct")
+        record_calibration(state, "T002", "false_positive")
+
+        assert state["calibration"]["total_verified"] == 2
+        assert state["calibration"]["correct"] == 1
+        assert get_calibration_score(state) == 0.5
+
+
+class TestPlanningMetrics:
+    """Tests for planning quality metrics."""
+
+    def test_planning_metrics_empty_state(self, temp_state_env: Path) -> None:
+        """Test planning metrics with no tasks."""
+        state = init_state("/tmp/target")
+
+        metrics = compute_planning_metrics(state)
+
+        assert metrics["total_tasks"] == 0
+        assert metrics["total_behaviors"] == 0
+        assert metrics["avg_behaviors_per_task"] == 0.0
+
+    def test_planning_metrics_with_tasks(self, temp_state_env: Path) -> None:
+        """Test planning metrics with task files."""
+        import state as state_module
+
+        state = init_state("/tmp/target")
+        state["tasks"] = {
+            "T001": {"id": "T001", "wave": 1},
+            "T002": {"id": "T002", "wave": 2},
+        }
+
+        # Create task files
+        task1 = {
+            "id": "T001",
+            "behaviors": ["B001", "B002", "B003"],
+            "acceptance_criteria": [{"criterion": "c1"}, {"criterion": "c2"}],
+            "files": [{"path": "f1.py"}, {"path": "f2.py"}],
+            "dependencies": {"tasks": []},
+            "context": {"steel_thread": True},
+        }
+        task2 = {
+            "id": "T002",
+            "behaviors": ["B004", "B005"],
+            "acceptance_criteria": [{"criterion": "c3"}],
+            "files": [{"path": "f3.py"}],
+            "dependencies": {"tasks": ["T001"]},
+            "context": {},
+        }
+
+        (state_module.PLANNING_DIR / "tasks" / "T001.json").write_text(json.dumps(task1))
+        (state_module.PLANNING_DIR / "tasks" / "T002.json").write_text(json.dumps(task2))
+
+        metrics = compute_planning_metrics(state)
+
+        assert metrics["total_tasks"] == 2
+        assert metrics["total_behaviors"] == 5
+        assert metrics["avg_behaviors_per_task"] == 2.5
+        assert metrics["avg_criteria_per_task"] == 1.5
+        assert metrics["avg_files_per_task"] == 1.5
+        assert metrics["dependency_density"] == 0.5
+        assert metrics["wave_count"] == 2
+        assert metrics["steel_thread_coverage"] == 0.5

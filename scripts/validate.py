@@ -389,14 +389,52 @@ def verify_rollback_integrity(
 # =============================================================================
 
 
+def validate_verification_commands_for_criteria(
+    criteria: list[dict],
+) -> tuple[bool, list[str]]:
+    """Validate verification commands for a list of acceptance criteria.
+
+    This is the core validation logic used by both state-based and bundle-based
+    validation functions.
+
+    Args:
+        criteria: List of acceptance criteria dicts with 'criterion' and 'verification' keys
+
+    Returns:
+        (all_valid, [issues]) tuple
+    """
+    import shlex
+
+    issues: list[str] = []
+    all_valid = True
+
+    for criterion in criteria:
+        cmd = criterion.get("verification", "")
+        criterion_name = criterion.get("criterion", "unknown")
+
+        if not cmd:
+            issues.append(f"Empty verification for: {criterion_name}")
+            all_valid = False
+            continue
+
+        try:
+            parts = shlex.split(cmd)
+            if not parts:
+                issues.append(f"Empty command for: {criterion_name}")
+                all_valid = False
+        except ValueError as e:
+            issues.append(f"Invalid command '{cmd}': {e}")
+            all_valid = False
+
+    return all_valid, issues
+
+
 def validate_all_verification_commands(state: dict) -> tuple[bool, dict[str, list[str]]]:
-    """Validate verification commands for all tasks.
+    """Validate verification commands for all tasks in state.
 
     Returns:
         (all_valid, {task_id: [issues]}) tuple
     """
-    import shlex
-
     tasks = state.get("tasks", {})
     issues_by_task: dict[str, list[str]] = {}
     all_valid = True
@@ -406,25 +444,11 @@ def validate_all_verification_commands(state: dict) -> tuple[bool, dict[str, lis
         if not task_def:
             continue
 
-        task_issues = []
-        for criterion in task_def.get("acceptance_criteria", []):
-            cmd = criterion.get("verification", "")
-            criterion_name = criterion.get("criterion", "unknown")
+        criteria = task_def.get("acceptance_criteria", [])
+        task_valid, task_issues = validate_verification_commands_for_criteria(criteria)
 
-            if not cmd:
-                task_issues.append(f"Empty verification for: {criterion_name}")
-                all_valid = False
-                continue
-
-            try:
-                parts = shlex.split(cmd)
-                if not parts:
-                    task_issues.append(f"Empty command for: {criterion_name}")
-                    all_valid = False
-            except ValueError as e:
-                task_issues.append(f"Invalid command '{cmd}': {e}")
-                all_valid = False
-
+        if not task_valid:
+            all_valid = False
         if task_issues:
             issues_by_task[tid] = task_issues
 

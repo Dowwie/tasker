@@ -43,7 +43,7 @@ Read the self-contained bundle:
 
 The bundle contains everything needed:
 - Task ID and name
-- Atoms to implement (expanded details)
+- Behaviors to implement (expanded details)
 - Files to create/modify with purposes
 - Acceptance criteria with verification commands
 - Constraints (language, framework, patterns)
@@ -54,7 +54,7 @@ The bundle contains everything needed:
 Follow the bundle's specifications:
 - Create/modify files as specified
 - Follow constraints.patterns
-- Implement each atom
+- Implement each behavior
 - Track files created/modified for rollback
 
 ### 5. Verify
@@ -94,7 +94,7 @@ python3 {{PLANNING_DIR}}/scripts/state.py skip-task $TASK_ID "reason"
 
 Return completion report:
 - Task ID and status
-- Atoms implemented
+- Behaviors implemented
 - Files created/modified
 - Verification results
 - Notes and recommendations
@@ -102,7 +102,7 @@ Return completion report:
 ## Completion Checklist
 
 Before marking complete:
-- [ ] All atoms from bundle implemented
+- [ ] All behaviors from bundle implemented
 - [ ] All acceptance criteria pass
 - [ ] Linter passes
 - [ ] Type checker passes

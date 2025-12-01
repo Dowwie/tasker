@@ -41,7 +41,7 @@ The executor runs phase 6:
 ### Execution Bundles
 
 Each task gets a self-contained bundle (`project-planning/bundles/T001-bundle.json`) containing:
-- Expanded atom details (what to implement)
+- Expanded behavior details (what to implement)
 - File paths with purposes and layers
 - Acceptance criteria
 - Constraints (language, framework, patterns)

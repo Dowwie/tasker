@@ -6,8 +6,8 @@
 
 Tasker is a Claude Code-powered framework that transforms software specifications into executable task graphs. It implements a **Task Decomposition Protocol** that:
 
-1. **Breaks specifications into behavioral atoms** (Input/Process/State/Output patterns)
-2. **Maps atoms to physical files** (concrete code paths and artifacts)
+1. **Breaks specifications into behaviors** (Input/Process/State/Output patterns)
+2. **Maps behaviors to physical files** (concrete code paths and artifacts)
 3. **Sequences tasks into dependency-aware waves** (DAG structure)
 4. **Executes tasks via isolated Claude Code subagents** (context-fresh execution)
 

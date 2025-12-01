@@ -57,7 +57,7 @@ These constraints are used in Phase 3.
 ## Phase 1 – Logical Decomposition (The “What”)
 
 **Input:** Specification
-**Goal:** Identify all required *behavior* as “behavioral atoms”, mapped to domains and flows.
+**Goal:** Identify all required *behavior* as "behaviors", mapped to domains and flows.
 
 ### 1.1 Map Capabilities to Domains
 
@@ -72,9 +72,9 @@ These constraints are used in Phase 3.
 
 > Result: a **Capability Map**: capabilities × components.
 
-### 1.2 Define Behavioral Atoms
+### 1.2 Define Behaviors
 
-For each capability within a component, break it into the smallest meaningful **behavioral atoms**:
+For each capability within a component, break it into the smallest meaningful **behaviors**:
 
 * **Input**: validating & parsing requests/events.
 * **Process**: core domain logic, calculations, decisions.
@@ -88,7 +88,7 @@ Example for “Refund order” in `BillingService`:
 * `UpdateLedgerWithRefund`
 * `EmitRefundProcessedEvent`
 
-Don’t create tasks yet; just define these atoms as logical units of behavior.
+Don't create tasks yet; just define these behaviors as logical units.
 
 ### 1.3 Trace End-to-End Flows (“Happy Paths”)
 
@@ -101,21 +101,21 @@ Identify key flows from the spec:
 For each flow:
 
 1. List the steps across UI → API → domain → DB → external systems → notifications.
-2. Map each step to one or more **behavioral atoms**.
-3. Ensure every critical flow is fully covered by atoms; if not, define missing atoms.
+2. Map each step to one or more **behaviors**.
+3. Ensure every critical flow is fully covered by behaviors; if not, define missing behaviors.
 
-> Result: behavior is fully understood as a mesh of atoms and flows, aligned to components.
+> Result: behavior is fully understood as a mesh of behaviors and flows, aligned to components.
 
 ---
 
-## Phase 2 – Physical Decomposition (The “Matter”)
+## Phase 2 – Physical Decomposition (The "Matter")
 
-**Input:** Architecture + behavioral atoms
+**Input:** Architecture + behaviors
 **Goal:** Enumerate the concrete artifacts where each behavior will live. *No floating logic.*
 
 ### 2.1 Enumerate Terminal Artifacts
 
-For each behavioral atom, list the concrete **artifacts** required:
+For each behavior, list the concrete **artifacts** required:
 
 * **Code**
 
@@ -139,7 +139,7 @@ You don’t need to be perfect on file paths from day one, but you must identify
 
 ### 2.2 Zero-Missing-Nodes Check
 
-For each behavioral atom, ask:
+For each behavior, ask:
 
 > “Can I point to the file / resource where this logic lives?”
 
@@ -186,7 +186,7 @@ For each relevant area, define **what behavior** is needed and **where** it live
 
 ## Phase 4 – Task Definition (The Unit of Work)
 
-**Input:** Behavioral atoms + artifacts + cross-cutting concerns
+**Input:** Behaviors + artifacts + cross-cutting concerns
 **Goal:** Create atomic, executable tasks that respect cognitive limits and have binary outcomes.
 
 ### 4.1 Task Size and Shape
@@ -325,7 +325,7 @@ Using the DAG:
   * End-to-end flows that validate the architecture and main integration seams.
 * **Batch 3 – Parallel Meat**
 
-  * Remaining behavioral atoms/tasks that can run in parallel given the DAG.
+  * Remaining behaviors/tasks that can run in parallel given the DAG.
 * **Batch 4 – Aggregation & Hardening**
 
   * Reports, dashboards, polish, performance tuning, resilience improvements, cleanup.
@@ -461,7 +461,7 @@ python3 scripts/state.py advance
 ### Execution Bundles
 
 Each task generates a self-contained bundle at `project-planning/bundles/T001-bundle.json` containing:
-- Expanded atoms (not just IDs)
+- Expanded behaviors (not just IDs)
 - File paths with purposes and layers
 - Acceptance criteria with verification commands
 - Constraints (language, framework, patterns)

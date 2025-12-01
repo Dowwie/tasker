@@ -28,6 +28,15 @@ Usage:
                                           [--tests '<json>']
                                           Record verification results for a task
     state.py metrics [--format text|json] Compute and display performance metrics
+    state.py planning-metrics [--format text|json]
+                                          Compute and display planning quality metrics
+    state.py prepare-rollback <task_id> <file1> [file2 ...]
+                                          Prepare rollback data before task execution
+    state.py verify-rollback <task_id> [--created f1] [--modified f2]
+                                          Verify rollback restored files correctly
+    state.py record-calibration <task_id> <outcome> [notes]
+                                          Record verifier calibration data
+    state.py calibration-score            Show verifier calibration metrics
 """
 
 import json
@@ -395,22 +404,46 @@ def load_tasks_from_dir(state: dict) -> int:
     return count
 
 
-def get_ready_tasks(state: dict) -> list[str]:
-    """Get task IDs that are ready to execute (all deps complete)."""
+def get_ready_tasks(state: dict, check_verification: bool = True) -> list[str]:
+    """Get task IDs that are ready to execute (all deps complete and verified).
+
+    Args:
+        state: Current state dict
+        check_verification: If True, also check that dependencies have PROCEED recommendation
+
+    Returns:
+        List of task IDs ready for execution
+    """
     ready = []
     for tid, task in state["tasks"].items():
         if task["status"] != "pending":
             continue
-        
+
         # Check all dependencies are complete
-        deps_met = all(
-            state["tasks"].get(dep, {}).get("status") == "complete"
-            for dep in task["depends_on"]
-        )
-        
-        if deps_met:
+        deps_complete = True
+        deps_verified = True
+
+        for dep in task["depends_on"]:
+            dep_task = state["tasks"].get(dep, {})
+            dep_status = dep_task.get("status")
+
+            # Dependency must be complete or skipped
+            if dep_status not in ["complete", "skipped"]:
+                deps_complete = False
+                break
+
+            # If checking verification, dependency must have PROCEED recommendation
+            if check_verification and dep_status == "complete":
+                verification = dep_task.get("verification", {})
+                recommendation = verification.get("recommendation")
+                # If verification exists and recommends BLOCK, don't allow dependents
+                if recommendation == "BLOCK":
+                    deps_verified = False
+                    break
+
+        if deps_complete and deps_verified:
             ready.append(tid)
-    
+
     return ready
 
 
@@ -638,7 +671,311 @@ def record_verification(
         "criteria_count": len(criteria or []),
     })
 
+    # If BLOCK recommendation, mark dependent tasks as blocked
+    if recommendation == "BLOCK":
+        blocked_count = 0
+        for blocked_id in task.get("blocks", []):
+            if blocked_id in state["tasks"]:
+                blocked_task = state["tasks"][blocked_id]
+                if blocked_task["status"] == "pending":
+                    blocked_task["status"] = "blocked"
+                    blocked_task["error"] = f"Blocked by verification failure of {task_id}"
+                    blocked_count += 1
+        if blocked_count > 0:
+            add_event(state, "tasks_blocked_by_verification", task_id=task_id, details={
+                "blocked_count": blocked_count,
+            })
+
     return True, f"Verification recorded for {task_id}: {verdict} ({recommendation})"
+
+
+def prepare_rollback(state: dict, task_id: str, files_to_modify: list[str]) -> dict:
+    """Prepare rollback data before task execution.
+
+    Computes checksums for existing files that will be modified,
+    enabling restoration if the task fails.
+
+    Args:
+        state: Current state dict
+        task_id: Task being executed
+        files_to_modify: List of relative file paths that may be modified
+
+    Returns:
+        Dict with rollback data (file checksums, timestamps)
+    """
+    target_dir = Path(state.get("target_dir", "."))
+
+    rollback_data = {
+        "task_id": task_id,
+        "prepared_at": now_iso(),
+        "target_dir": str(target_dir),
+        "file_checksums": {},
+        "file_existed": {},
+    }
+
+    for file_path in files_to_modify:
+        full_path = target_dir / file_path
+        if full_path.exists():
+            rollback_data["file_checksums"][file_path] = hashlib.sha256(
+                full_path.read_bytes()
+            ).hexdigest()
+            rollback_data["file_existed"][file_path] = True
+        else:
+            rollback_data["file_checksums"][file_path] = ""
+            rollback_data["file_existed"][file_path] = False
+
+    # Store in state for this task
+    if task_id in state["tasks"]:
+        state["tasks"][task_id]["rollback_data"] = rollback_data
+
+    add_event(state, "rollback_prepared", task_id=task_id, details={
+        "file_count": len(files_to_modify),
+    })
+
+    return rollback_data
+
+
+def verify_rollback(
+    state: dict,
+    task_id: str,
+    files_created: list[str],
+    files_modified: list[str],
+) -> tuple[bool, list[str]]:
+    """Verify rollback restored files to original state.
+
+    Args:
+        state: Current state dict
+        task_id: Task that was rolled back
+        files_created: Files that should have been deleted
+        files_modified: Files that should have been restored
+
+    Returns:
+        (success, issues) tuple
+    """
+    if task_id not in state["tasks"]:
+        return False, [f"Task not found: {task_id}"]
+
+    task = state["tasks"][task_id]
+    rollback_data = task.get("rollback_data", {})
+
+    if not rollback_data:
+        return False, ["No rollback data found for task"]
+
+    target_dir = Path(rollback_data.get("target_dir", state.get("target_dir", ".")))
+    original_checksums = rollback_data.get("file_checksums", {})
+    file_existed = rollback_data.get("file_existed", {})
+
+    issues = []
+
+    # Check created files were deleted
+    for file_path in files_created:
+        full_path = target_dir / file_path
+        if full_path.exists():
+            issues.append(f"Created file not deleted: {file_path}")
+
+    # Check modified files were restored
+    for file_path in files_modified:
+        full_path = target_dir / file_path
+        original = original_checksums.get(file_path, "")
+        existed = file_existed.get(file_path, False)
+
+        if not existed:
+            # File didn't exist before, should not exist now
+            if full_path.exists():
+                issues.append(f"File should not exist after rollback: {file_path}")
+        else:
+            if not full_path.exists():
+                issues.append(f"File should exist after rollback: {file_path}")
+            else:
+                current = hashlib.sha256(full_path.read_bytes()).hexdigest()
+                if current != original:
+                    issues.append(
+                        f"File not restored to original: {file_path} "
+                        f"(expected {original[:8]}..., got {current[:8]}...)"
+                    )
+
+    success = len(issues) == 0
+    add_event(state, "rollback_verified", task_id=task_id, details={
+        "success": success,
+        "issue_count": len(issues),
+    })
+
+    return success, issues
+
+
+def record_calibration(
+    state: dict,
+    task_id: str,
+    actual_outcome: str,
+    notes: str = "",
+) -> tuple[bool, str]:
+    """Record calibration data for verifier accuracy tracking.
+
+    Call this when a verification verdict is later proven correct or incorrect.
+
+    Args:
+        state: Current state dict
+        task_id: Task to record calibration for
+        actual_outcome: "correct" if verdict matched reality, "false_positive" if
+                        PROCEED but task actually failed, "false_negative" if
+                        BLOCK but task would have succeeded
+        notes: Optional notes about the calibration
+
+    Returns:
+        (success, message) tuple
+    """
+    if task_id not in state["tasks"]:
+        return False, f"Task not found: {task_id}"
+
+    valid_outcomes = ["correct", "false_positive", "false_negative"]
+    if actual_outcome not in valid_outcomes:
+        return False, f"Invalid outcome: {actual_outcome}. Must be one of {valid_outcomes}"
+
+    task = state["tasks"][task_id]
+    verification = task.get("verification", {})
+
+    if not verification:
+        return False, f"No verification data for {task_id}"
+
+    # Initialize calibration tracking in state if not present
+    if "calibration" not in state:
+        state["calibration"] = {
+            "total_verified": 0,
+            "correct": 0,
+            "false_positives": [],
+            "false_negatives": [],
+            "history": [],
+        }
+
+    cal = state["calibration"]
+
+    # Record this calibration
+    entry = {
+        "task_id": task_id,
+        "verdict": verification.get("verdict"),
+        "recommendation": verification.get("recommendation"),
+        "actual_outcome": actual_outcome,
+        "notes": notes,
+        "recorded_at": now_iso(),
+    }
+
+    cal["history"].append(entry)
+    cal["total_verified"] += 1
+
+    if actual_outcome == "correct":
+        cal["correct"] += 1
+    elif actual_outcome == "false_positive":
+        cal["false_positives"].append(task_id)
+    elif actual_outcome == "false_negative":
+        cal["false_negatives"].append(task_id)
+
+    add_event(state, "calibration_recorded", task_id=task_id, details={
+        "actual_outcome": actual_outcome,
+        "verdict": verification.get("verdict"),
+    })
+
+    return True, f"Calibration recorded for {task_id}: {actual_outcome}"
+
+
+def get_calibration_score(state: dict) -> float:
+    """Compute current calibration score (1.0 = perfect).
+
+    Returns:
+        Float between 0.0 and 1.0 representing verifier accuracy
+    """
+    cal = state.get("calibration", {})
+    total = cal.get("total_verified", 0)
+
+    if total == 0:
+        return 1.0  # No data yet, assume perfect
+
+    correct = cal.get("correct", 0)
+    return correct / total
+
+
+def compute_planning_metrics(state: dict) -> dict:
+    """Compute planning quality metrics.
+
+    Returns:
+        Dict with planning metrics:
+        - total_tasks: Number of tasks defined
+        - total_behaviors: Number of behaviors across all tasks
+        - avg_behaviors_per_task: Average behaviors per task (target: 2-5)
+        - avg_criteria_per_task: Average acceptance criteria per task
+        - avg_files_per_task: Average files per task
+        - dependency_density: Avg dependencies per task
+        - wave_count: Number of waves
+        - wave_compression: Actual waves / min possible waves
+        - steel_thread_coverage: % of tasks on steel thread
+        - spec_coverage: % of behaviors traced to spec (if available)
+    """
+    tasks = state.get("tasks", {})
+
+    if not tasks:
+        return {
+            "total_tasks": 0,
+            "total_behaviors": 0,
+            "avg_behaviors_per_task": 0.0,
+            "avg_criteria_per_task": 0.0,
+            "avg_files_per_task": 0.0,
+            "dependency_density": 0.0,
+            "wave_count": 0,
+            "wave_compression": 0.0,
+            "steel_thread_coverage": 0.0,
+        }
+
+    # Load task files to get full details
+    tasks_dir = PLANNING_DIR / "tasks"
+    total_behaviors = 0
+    total_criteria = 0
+    total_files = 0
+    total_deps = 0
+    steel_thread_tasks = 0
+    waves = set()
+
+    for tid in tasks:
+        task_path = tasks_dir / f"{tid}.json"
+        if task_path.exists():
+            try:
+                task_def = json.loads(task_path.read_text())
+                total_behaviors += len(task_def.get("behaviors", []))
+                total_criteria += len(task_def.get("acceptance_criteria", []))
+                total_files += len(task_def.get("files", []))
+                total_deps += len(task_def.get("dependencies", {}).get("tasks", []))
+                if task_def.get("context", {}).get("steel_thread"):
+                    steel_thread_tasks += 1
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        wave = tasks[tid].get("wave", 0)
+        if wave > 0:
+            waves.add(wave)
+
+    task_count = len(tasks)
+    wave_count = len(waves) if waves else 0
+
+    # Compute minimum possible waves (longest dependency chain + 1)
+    # This is a simplified computation
+    min_waves = 1
+    if task_count > 0:
+        # Count tasks with no deps as wave 1, rest need at least 1 more
+        no_dep_count = sum(1 for t in tasks.values() if not t.get("depends_on"))
+        if no_dep_count < task_count:
+            min_waves = 2  # At least 2 waves if there are dependencies
+
+    wave_compression = wave_count / min_waves if min_waves > 0 else 1.0
+
+    return {
+        "total_tasks": task_count,
+        "total_behaviors": total_behaviors,
+        "avg_behaviors_per_task": total_behaviors / task_count if task_count > 0 else 0.0,
+        "avg_criteria_per_task": total_criteria / task_count if task_count > 0 else 0.0,
+        "avg_files_per_task": total_files / task_count if task_count > 0 else 0.0,
+        "dependency_density": total_deps / task_count if task_count > 0 else 0.0,
+        "wave_count": wave_count,
+        "wave_compression": wave_compression,
+        "steel_thread_coverage": steel_thread_tasks / task_count if task_count > 0 else 0.0,
+    }
 
 
 def compute_metrics(state: dict) -> dict:
@@ -1025,6 +1362,116 @@ def main():
             print("-" * 40)
             print(f"Completed: {metrics['completed_count']}  Failed: {metrics['failed_count']}")
             print(f"Total tokens: {metrics['total_tokens']:,}  Total cost: ${metrics['total_cost_usd']:.4f}")
+
+    elif cmd == "planning-metrics":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        output_format = "text"
+        if len(sys.argv) > 2 and sys.argv[2] == "--format" and len(sys.argv) > 3:
+            output_format = sys.argv[3]
+
+        metrics = compute_planning_metrics(state)
+
+        if output_format == "json":
+            print(json.dumps(metrics, indent=2))
+        else:
+            print("Planning Quality Metrics")
+            print("=" * 40)
+            print(f"Total tasks:               {metrics['total_tasks']}")
+            print(f"Total behaviors:           {metrics['total_behaviors']}")
+            print(f"Avg behaviors/task:        {metrics['avg_behaviors_per_task']:.1f} (target: 2-5)")
+            print(f"Avg criteria/task:         {metrics['avg_criteria_per_task']:.1f}")
+            print(f"Avg files/task:            {metrics['avg_files_per_task']:.1f}")
+            print(f"Dependency density:        {metrics['dependency_density']:.2f}")
+            print(f"Wave count:                {metrics['wave_count']}")
+            print(f"Wave compression:          {metrics['wave_compression']:.2f}x")
+            print(f"Steel thread coverage:     {metrics['steel_thread_coverage']:.1%}")
+
+    elif cmd == "prepare-rollback":
+        if len(sys.argv) < 4:
+            print("Usage: state.py prepare-rollback <task_id> <file1> [file2 ...]")
+            sys.exit(1)
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+        task_id = sys.argv[2]
+        files = sys.argv[3:]
+        rollback_data = prepare_rollback(state, task_id, files)
+        save_state(state)
+        print(f"Rollback prepared for {len(files)} file(s)")
+
+    elif cmd == "verify-rollback":
+        if len(sys.argv) < 3:
+            print("Usage: state.py verify-rollback <task_id> [--created f1 f2] [--modified f3 f4]")
+            sys.exit(1)
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        task_id = sys.argv[2]
+        files_created = []
+        files_modified = []
+        args = sys.argv[3:]
+        current_list = None
+        for arg in args:
+            if arg == "--created":
+                current_list = files_created
+            elif arg == "--modified":
+                current_list = files_modified
+            elif current_list is not None:
+                current_list.append(arg)
+
+        success, issues = verify_rollback(state, task_id, files_created, files_modified)
+        save_state(state)
+        if success:
+            print("Rollback verified successfully")
+        else:
+            print("Rollback verification failed:")
+            for issue in issues:
+                print(f"  - {issue}")
+        sys.exit(0 if success else 1)
+
+    elif cmd == "record-calibration":
+        if len(sys.argv) < 4:
+            print("Usage: state.py record-calibration <task_id> <outcome> [notes]")
+            print("  outcome: correct, false_positive, or false_negative")
+            sys.exit(1)
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        task_id = sys.argv[2]
+        outcome = sys.argv[3]
+        notes = sys.argv[4] if len(sys.argv) > 4 else ""
+
+        success, msg = record_calibration(state, task_id, outcome, notes)
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+
+    elif cmd == "calibration-score":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        score = get_calibration_score(state)
+        cal = state.get("calibration", {})
+
+        print("Verifier Calibration")
+        print("=" * 40)
+        print(f"Calibration score:         {score:.1%}")
+        print(f"Total verified:            {cal.get('total_verified', 0)}")
+        print(f"Correct:                   {cal.get('correct', 0)}")
+        print(f"False positives:           {len(cal.get('false_positives', []))}")
+        print(f"False negatives:           {len(cal.get('false_negatives', []))}")
 
     else:
         print(f"Unknown command: {cmd}")

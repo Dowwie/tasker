@@ -3,7 +3,7 @@
   "title": "ExecutionBundle",
   "description": "Self-contained package for task execution - everything a task-executor needs",
   "type": "object",
-  "required": ["version", "task_id", "name", "target_dir", "atoms", "files", "acceptance_criteria"],
+  "required": ["version", "task_id", "name", "target_dir", "behaviors", "files", "acceptance_criteria"],
   "properties": {
     "version": { "const": "1.0" },
     "bundle_created_at": { "type": "string", "format": "date-time" },
@@ -29,15 +29,15 @@
       }
     },
 
-    "atoms": {
+    "behaviors": {
       "type": "array",
-      "description": "Expanded atom details (not just IDs)",
+      "description": "Expanded behavior details (not just IDs)",
       "minItems": 1,
       "items": {
         "type": "object",
         "required": ["id", "name", "type"],
         "properties": {
-          "id": { "type": "string", "pattern": "^A[0-9]+$" },
+          "id": { "type": "string", "pattern": "^B[0-9]+$" },
           "name": { "type": "string" },
           "type": { "enum": ["input", "process", "state", "output"] },
           "description": { "type": "string" }
@@ -57,10 +57,10 @@
           "action": { "enum": ["create", "modify", "delete"] },
           "layer": { "enum": ["api", "domain", "data", "infra", "test"] },
           "purpose": { "type": "string" },
-          "atoms": {
+          "behaviors": {
             "type": "array",
             "items": { "type": "string" },
-            "description": "Atom IDs implemented in this file"
+            "description": "Behavior IDs implemented in this file"
           }
         }
       }

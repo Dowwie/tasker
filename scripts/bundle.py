@@ -8,11 +8,13 @@ a task-executor needs to implement a task.
 Usage:
     bundle.py generate <task_id>     Generate bundle for single task
     bundle.py generate-ready         Generate bundles for all ready tasks
-    bundle.py validate <task_id>     Validate existing bundle
+    bundle.py validate <task_id>     Validate existing bundle against schema
+    bundle.py validate-integrity <task_id>  Validate dependencies + checksums
     bundle.py list                   List existing bundles
     bundle.py clean                  Remove all bundles
 """
 
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -31,6 +33,13 @@ SCHEMAS_DIR = PROJECT_ROOT / "schemas"
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def file_checksum(path: Path) -> str:
+    """SHA256 checksum of file contents (truncated to 16 chars)."""
+    if not path.exists():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
 def load_json(path: Path) -> dict | None:
@@ -69,14 +78,14 @@ def load_constraints() -> str | None:
     return None
 
 
-def find_atom_by_id(capability_map: dict, atom_id: str) -> dict | None:
-    """Find atom details from capability map by ID."""
+def find_behavior_by_id(capability_map: dict, behavior_id: str) -> dict | None:
+    """Find behavior details from capability map by ID."""
     for domain in capability_map.get("domains", []):
         for capability in domain.get("capabilities", []):
-            for atom in capability.get("atoms", []):
-                if atom.get("id") == atom_id:
+            for behavior in capability.get("behaviors", []):
+                if behavior.get("id") == behavior_id:
                     return {
-                        **atom,
+                        **behavior,
                         "domain": domain.get("name"),
                         "domain_id": domain.get("id"),
                         "capability": capability.get("name"),
@@ -86,21 +95,21 @@ def find_atom_by_id(capability_map: dict, atom_id: str) -> dict | None:
     return None
 
 
-def find_files_for_atom(physical_map: dict, atom_id: str) -> list[dict]:
-    """Find file mappings for an atom from physical map."""
+def find_files_for_behavior(physical_map: dict, behavior_id: str) -> list[dict]:
+    """Find file mappings for a behavior from physical map."""
     files = []
     for mapping in physical_map.get("file_mapping", []):
-        if mapping.get("atom_id") == atom_id:
+        if mapping.get("behavior_id") == behavior_id:
             for file_info in mapping.get("files", []):
                 files.append({
                     **file_info,
-                    "atoms": [atom_id],
+                    "behaviors": [behavior_id],
                 })
             for test_info in mapping.get("tests", []):
                 files.append({
                     **test_info,
                     "layer": "test",
-                    "atoms": [atom_id],
+                    "behaviors": [behavior_id],
                 })
     return files
 
@@ -176,30 +185,30 @@ def generate_bundle(task_id: str) -> tuple[bool, str, dict | None]:
 
     raw_constraints = load_constraints()
 
-    expanded_atoms = []
+    expanded_behaviors = []
     context = task.get("context", {})
 
-    for atom_id in task.get("atoms", []):
-        atom_details = find_atom_by_id(capability_map, atom_id)
-        if atom_details:
-            expanded_atoms.append({
-                "id": atom_details["id"],
-                "name": atom_details["name"],
-                "type": atom_details.get("type", "process"),
-                "description": atom_details.get("description", ""),
+    for behavior_id in task.get("behaviors", []):
+        behavior_details = find_behavior_by_id(capability_map, behavior_id)
+        if behavior_details:
+            expanded_behaviors.append({
+                "id": behavior_details["id"],
+                "name": behavior_details["name"],
+                "type": behavior_details.get("type", "process"),
+                "description": behavior_details.get("description", ""),
             })
             if not context.get("domain"):
-                context["domain"] = atom_details.get("domain")
+                context["domain"] = behavior_details.get("domain")
             if not context.get("capability"):
-                context["capability"] = atom_details.get("capability")
+                context["capability"] = behavior_details.get("capability")
             if not context.get("capability_id"):
-                context["capability_id"] = atom_details.get("capability_id")
+                context["capability_id"] = behavior_details.get("capability_id")
             if not context.get("spec_ref"):
-                context["spec_ref"] = atom_details.get("spec_ref")
+                context["spec_ref"] = behavior_details.get("spec_ref")
         else:
-            expanded_atoms.append({
-                "id": atom_id,
-                "name": f"Unknown atom {atom_id}",
+            expanded_behaviors.append({
+                "id": behavior_id,
+                "name": f"Unknown behavior {behavior_id}",
                 "type": "process",
                 "description": "",
             })
@@ -213,9 +222,9 @@ def generate_bundle(task_id: str) -> tuple[bool, str, dict | None]:
             files.append(file_info)
             seen_paths.add(path)
 
-    for atom_id in task.get("atoms", []):
-        atom_files = find_files_for_atom(physical_map, atom_id)
-        for file_info in atom_files:
+    for behavior_id in task.get("behaviors", []):
+        behavior_files = find_files_for_behavior(physical_map, behavior_id)
+        for file_info in behavior_files:
             path = file_info.get("path")
             if path and path not in seen_paths:
                 files.append(file_info)
@@ -224,15 +233,30 @@ def generate_bundle(task_id: str) -> tuple[bool, str, dict | None]:
     task_deps = task.get("dependencies", {}).get("tasks", [])
     dep_files = find_dependencies_files(state, task_deps)
 
+    # Compute artifact checksums for validation
+    target_dir = Path(state.get("target_dir", ""))
+    artifact_checksums = {
+        "capability_map": file_checksum(ARTIFACTS_DIR / "capability-map.json"),
+        "physical_map": file_checksum(ARTIFACTS_DIR / "physical-map.json"),
+        "constraints": file_checksum(INPUTS_DIR / "constraints.md"),
+        "task_definition": file_checksum(TASKS_DIR / f"{task_id}.json"),
+    }
+
+    # Compute dependency file checksums
+    dependency_checksums = {}
+    for dep_file in dep_files:
+        full_path = target_dir / dep_file
+        dependency_checksums[dep_file] = file_checksum(full_path)
+
     bundle = {
-        "version": "1.0",
+        "version": "1.2",  # Version bump for behaviors rename
         "bundle_created_at": now_iso(),
         "task_id": task_id,
         "name": task.get("name", ""),
         "wave": task.get("wave", 1),
-        "target_dir": state.get("target_dir", ""),
+        "target_dir": str(target_dir),
         "context": context,
-        "atoms": expanded_atoms,
+        "behaviors": expanded_behaviors,
         "files": files,
         "dependencies": {
             "tasks": task_deps,
@@ -241,6 +265,10 @@ def generate_bundle(task_id: str) -> tuple[bool, str, dict | None]:
         },
         "acceptance_criteria": task.get("acceptance_criteria", []),
         "constraints": parse_constraints(raw_constraints),
+        "checksums": {
+            "artifacts": artifact_checksums,
+            "dependency_files": dependency_checksums,
+        },
     }
 
     BUNDLES_DIR.mkdir(parents=True, exist_ok=True)
@@ -328,13 +356,64 @@ def validate_bundle_dependencies(task_id: str) -> tuple[bool, list[str]]:
     return len(missing) == 0, missing
 
 
+def validate_bundle_checksums(task_id: str) -> tuple[bool, list[str]]:
+    """Validate that bundle checksums match current file states.
+
+    Detects if artifacts or dependency files have changed since bundle generation.
+
+    Returns:
+        (all_valid, changed_files) tuple
+    """
+    bundle_path = BUNDLES_DIR / f"{task_id}-bundle.json"
+    if not bundle_path.exists():
+        return False, [f"Bundle not found: {bundle_path}"]
+
+    bundle = json.loads(bundle_path.read_text())
+    checksums = bundle.get("checksums", {})
+
+    if not checksums:
+        # Old bundle format without checksums
+        return True, []
+
+    changed = []
+
+    # Check artifact checksums
+    artifact_checksums = checksums.get("artifacts", {})
+    artifact_paths = {
+        "capability_map": ARTIFACTS_DIR / "capability-map.json",
+        "physical_map": ARTIFACTS_DIR / "physical-map.json",
+        "constraints": INPUTS_DIR / "constraints.md",
+        "task_definition": TASKS_DIR / f"{task_id}.json",
+    }
+
+    for name, expected in artifact_checksums.items():
+        if name in artifact_paths:
+            current = file_checksum(artifact_paths[name])
+            if expected and current != expected:
+                changed.append(f"Artifact changed: {name} (expected {expected}, got {current})")
+
+    # Check dependency file checksums
+    target_dir = Path(bundle.get("target_dir", ""))
+    dep_checksums = checksums.get("dependency_files", {})
+
+    for dep_file, expected in dep_checksums.items():
+        full_path = target_dir / dep_file
+        current = file_checksum(full_path)
+        if expected and current != expected:
+            changed.append(f"Dependency changed: {dep_file} (expected {expected}, got {current})")
+
+    return len(changed) == 0, changed
+
+
 def validate_verification_commands(task_id: str) -> tuple[bool, list[str]]:
-    """Validate that verification commands are syntactically valid.
+    """Validate that verification commands in a bundle are syntactically valid.
+
+    Reads criteria from the bundle and delegates validation logic to validate.py.
 
     Returns:
         (all_valid, invalid_commands) tuple
     """
-    import shlex
+    from validate import validate_verification_commands_for_criteria
 
     bundle_path = BUNDLES_DIR / f"{task_id}-bundle.json"
     if not bundle_path.exists():
@@ -343,19 +422,8 @@ def validate_verification_commands(task_id: str) -> tuple[bool, list[str]]:
     bundle = json.loads(bundle_path.read_text())
     criteria = bundle.get("acceptance_criteria", [])
 
-    invalid = []
-    for criterion in criteria:
-        cmd = criterion.get("verification", "")
-        if not cmd:
-            invalid.append(f"Empty verification for: {criterion.get('criterion', 'unknown')}")
-            continue
-        try:
-            # Validate command can be parsed
-            shlex.split(cmd)
-        except ValueError as e:
-            invalid.append(f"Invalid command '{cmd}': {e}")
-
-    return len(invalid) == 0, invalid
+    # Use centralized validation logic from validate.py
+    return validate_verification_commands_for_criteria(criteria)
 
 
 def list_bundles() -> list[str]:
@@ -407,6 +475,30 @@ def main() -> None:
         valid, msg = validate_bundle(task_id)
         print(msg)
         sys.exit(0 if valid else 1)
+
+    elif cmd == "validate-integrity":
+        if len(sys.argv) < 3:
+            print("Usage: bundle.py validate-integrity <task_id>")
+            sys.exit(1)
+        task_id = sys.argv[2]
+
+        # Check dependencies
+        deps_ok, missing = validate_bundle_dependencies(task_id)
+        if not deps_ok:
+            print(f"ERROR: Missing dependency files: {', '.join(missing)}")
+            sys.exit(1)
+
+        # Check checksums
+        checksums_ok, changed = validate_bundle_checksums(task_id)
+        if not checksums_ok:
+            print("WARNING: Artifacts changed since bundle generation:")
+            for change in changed:
+                print(f"  - {change}")
+            print(f"Consider regenerating: bundle.py generate {task_id}")
+            sys.exit(2)  # Exit code 2 for warnings (not fatal)
+
+        print(f"Bundle {task_id} integrity validated")
+        sys.exit(0)
 
     elif cmd == "list":
         bundles = list_bundles()

@@ -55,7 +55,7 @@ Read: `project-planning/artifacts/physical-map.json`
     "steel_thread": true
   },
   
-  "atoms": ["A1", "A2"],
+  "behaviors": ["B1", "B2"],
   
   "files": [
     {"path": "src/auth/validator.py", "action": "create", "purpose": "Validation logic"},
@@ -125,7 +125,7 @@ Prefer `pytest` tests as verification when possible.
 ## Checklist
 
 Before declaring done:
-- [ ] Every atom from physical-map has a task
+- [ ] Every behavior from physical-map has a task
 - [ ] Every task is 2-6 hours
 - [ ] Every task has ≤3 implementation files
 - [ ] Every acceptance criterion has verification command

@@ -1,6 +1,6 @@
 ---
 name: physical-architect
-description: Phase 2 - Map atoms to file paths. Outputs JSON to project-planning/artifacts/physical-map.json. Must validate against schema.
+description: Phase 2 - Map behaviors to file paths. Outputs JSON to project-planning/artifacts/physical-map.json. Must validate against schema.
 tools:
   - bash
   - file_read
@@ -9,7 +9,7 @@ tools:
 
 # Physical Architect (v2)
 
-Map behavioral atoms to concrete file paths.
+Map behaviors to concrete file paths.
 
 ## Output Contract
 
@@ -36,8 +36,8 @@ Read:
   
   "file_mapping": [
     {
-      "atom_id": "A1",
-      "atom_name": "ValidateCredentials",
+      "behavior_id": "B1",
+      "behavior_name": "ValidateCredentials",
       "files": [
         {
           "path": "src/auth/validator.py",
@@ -76,7 +76,7 @@ Read:
   ],
   
   "summary": {
-    "total_atoms": 15,
+    "total_behaviors": 15,
     "total_files": 32,
     "files_to_create": 28,
     "files_to_modify": 4
@@ -102,7 +102,7 @@ Add files for:
 
 ## Checklist
 
-- [ ] Every atom has file mapping
+- [ ] Every behavior has file mapping
 - [ ] Every file has layer classification
 - [ ] Test files for all domain/api files
 - [ ] Cross-cutting concerns added
