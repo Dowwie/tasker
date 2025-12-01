@@ -43,9 +43,63 @@ Ask user for:
 
 2. **Target Directory** - Where code will be written (required)
 
-3. **Tech Stack** (optional, conversational) - Ask: "Any tech stack requirements?"
+3. **Project Type** - Ask: "Is this a **new project** (create fresh directory) or **enhancing an existing project**?"
+   - **New project**: Confirm/create target directory, proceed normally
+   - **Existing project**: Run directory structure analysis before proceeding (see below)
+
+4. **Tech Stack** (optional, conversational) - Ask: "Any tech stack requirements?"
    - If yes: note them for the physical-architect
    - If no: let agents infer from spec or use sensible defaults
+
+## Existing Project Analysis
+
+When enhancing an existing project, **BEFORE proceeding to ingestion**, analyze the target directory:
+
+```bash
+# Check directory exists
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "Error: Target directory does not exist"
+    exit 1
+fi
+
+# Analyze structure
+echo "=== Project Structure ==="
+tree -L 2 -I 'node_modules|__pycache__|.git|venv|.venv' "$TARGET_DIR" 2>/dev/null || \
+    find "$TARGET_DIR" -maxdepth 2 -type f | head -50
+
+# Identify key files
+echo "=== Key Configuration Files ==="
+for f in package.json pyproject.toml Cargo.toml go.mod Makefile requirements.txt setup.py; do
+    [ -f "$TARGET_DIR/$f" ] && echo "Found: $f"
+done
+
+# Check for existing patterns
+echo "=== Existing Code Patterns ==="
+find "$TARGET_DIR" -name "*.py" -o -name "*.ts" -o -name "*.js" | head -5 | while read f; do
+    echo "Sample: $f"
+done
+```
+
+**Present findings to user:**
+```markdown
+## Existing Project Analysis
+
+**Directory:** /path/to/project
+**Stack Detected:** Python (pyproject.toml, src/ layout)
+**Key Files:**
+- pyproject.toml (dependencies)
+- src/main.py (entry point)
+- tests/ (existing test suite)
+
+**Considerations:**
+- Will integrate with existing module structure
+- Should follow established patterns in codebase
+- Tests should extend existing test framework
+
+Proceed with planning? (y/n)
+```
+
+This analysis informs the physical-architect about existing structure, ensuring new code integrates properly rather than conflicting with established patterns.
 
 ## Ingestion: Storing the Spec
 

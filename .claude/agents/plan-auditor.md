@@ -53,14 +53,25 @@ From capability-map.json flows where `is_steel_thread: true`:
 
 ### 4. Update Task Files
 
-For each task, update the `phase` field:
+**CRITICAL: You must update the task files using the Write tool or jq. Do NOT just output JSON to the conversation.**
 
+For each task, update the `phase` field. Two approaches:
+
+**Option A: Using Write tool (preferred)**
+1. Read the task file
+2. Update the phase in memory
+3. Write the full JSON back using the Write tool
+
+**Option B: Using jq (shell)**
 ```bash
-# Read task
-task=$(cat project-planning/tasks/T001.json)
+# Read task, update phase, write back
+jq '.phase = 2' project-planning/tasks/T001.json > /tmp/T001.json && \
+  mv /tmp/T001.json project-planning/tasks/T001.json
+```
 
-# Update phase
-echo "$task" | jq '.phase = 2' > project-planning/tasks/T001.json
+**Verify each update:**
+```bash
+cat project-planning/tasks/T001.json | jq '.phase'
 ```
 
 ### 5. Validate
@@ -83,8 +94,10 @@ python3 scripts/state.py load-tasks  # Reload with new phases
 
 ## Checklist
 
+Before declaring done:
 - [ ] All tasks have phase assigned
+- [ ] **Task files updated** using Write tool or jq (not just output to conversation)
 - [ ] No circular dependencies
 - [ ] Steel thread tasks identified
 - [ ] Backward pass validates (deps in earlier phases)
-- [ ] Run: `python3 scripts/state.py load-tasks`
+- [ ] Run: `python3 scripts/state.py load-tasks` (verify success)

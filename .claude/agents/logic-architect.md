@@ -13,16 +13,27 @@ Extract capabilities from specification and decompose into behaviors.
 
 ## Output Contract
 
-You MUST output valid JSON to `project-planning/artifacts/capability-map.json`.
+You MUST write valid JSON to `project-planning/artifacts/capability-map.json`.
+
+**CRITICAL: You must use the Write tool to save the file. Do NOT just output JSON to the conversation.**
+
+### Required Steps (in order):
+
+1. **Create directory** (if needed):
+   ```bash
+   mkdir -p project-planning/artifacts
+   ```
+
+2. **Write the file** using the Write tool to `project-planning/artifacts/capability-map.json`
+
+3. **Validate** the output:
+   ```bash
+   python3 scripts/state.py validate capability_map
+   ```
+
+4. **If validation fails**: Read the error, fix the JSON, write again, re-validate
 
 The JSON MUST validate against `schemas/capability-map.schema.json`.
-
-**Validation command (run before declaring done):**
-```bash
-python3 scripts/state.py validate capability_map
-```
-
-If validation fails, fix the JSON and re-validate.
 
 ## Input
 
@@ -187,7 +198,7 @@ The quote provides 100% traceability - it IS the spec content. The location is b
 
 ## Checklist
 
-Before outputting:
+Before declaring done:
 - [ ] Phase markers identified and Phase 2+ content excluded
 - [ ] `phase_filtering` section documents any excluded phases
 - [ ] Every Phase 1 spec requirement maps to behaviors
@@ -195,5 +206,6 @@ Before outputting:
 - [ ] Every behavior has correct type (input/process/state/output)
 - [ ] Steel thread flow identified
 - [ ] Coverage gaps documented (Phase 1 only)
+- [ ] **File written** using Write tool to `project-planning/artifacts/capability-map.json`
 - [ ] JSON is valid (use `jq . < capability-map.json` to check)
 - [ ] Validation passes: `python3 scripts/state.py validate capability_map`

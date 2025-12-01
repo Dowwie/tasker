@@ -13,12 +13,25 @@ Map behaviors to concrete file paths.
 
 ## Output Contract
 
-Output: `project-planning/artifacts/physical-map.json`
+You MUST write valid JSON to `project-planning/artifacts/physical-map.json`.
 
-**Validate before declaring done:**
-```bash
-python3 scripts/state.py validate physical_map
-```
+**CRITICAL: You must use the Write tool to save the file. Do NOT just output JSON to the conversation.**
+
+### Required Steps (in order):
+
+1. **Create directory** (if needed):
+   ```bash
+   mkdir -p project-planning/artifacts
+   ```
+
+2. **Write the file** using the Write tool to `project-planning/artifacts/physical-map.json`
+
+3. **Validate** the output:
+   ```bash
+   python3 scripts/state.py validate physical_map
+   ```
+
+4. **If validation fails**: Read the error, fix the JSON, write again, re-validate
 
 ## Input
 
@@ -127,6 +140,7 @@ Add files for:
 
 ## Checklist
 
+Before declaring done:
 - [ ] Verified capability-map `phase_filtering` section
 - [ ] Only Phase 1 behaviors from capability-map are mapped
 - [ ] `phase_filtering` metadata included in output
@@ -135,4 +149,5 @@ Add files for:
 - [ ] Test files for all domain/api files
 - [ ] Cross-cutting concerns added
 - [ ] Infrastructure files added
+- [ ] **File written** using Write tool to `project-planning/artifacts/physical-map.json`
 - [ ] JSON validates: `python3 scripts/state.py validate physical_map`

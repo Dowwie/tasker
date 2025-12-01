@@ -13,7 +13,7 @@ Create **individual task files** - one JSON file per task.
 
 ## Output Contract
 
-Create files in `project-planning/tasks/`:
+You MUST write individual JSON files to `project-planning/tasks/`:
 ```
 project-planning/tasks/
 ├── T001.json
@@ -22,12 +22,25 @@ project-planning/tasks/
 └── ...
 ```
 
-Each file MUST validate against `schemas/task.schema.json`.
+**CRITICAL: You must use the Write tool to save each file. Do NOT just output JSON to the conversation.**
 
-**After creating all tasks:**
-```bash
-python3 scripts/state.py load-tasks
-```
+### Required Steps (in order):
+
+1. **Create directory** (if needed):
+   ```bash
+   mkdir -p project-planning/tasks
+   ```
+
+2. **Write each task file** using the Write tool (e.g., `project-planning/tasks/T001.json`)
+
+3. **After creating ALL tasks**, register them:
+   ```bash
+   python3 scripts/state.py load-tasks
+   ```
+
+4. **If load-tasks fails**: Read the error, fix the offending JSON files, run again
+
+Each file MUST validate against `schemas/task.schema.json`.
 
 ## Why Individual Files?
 
@@ -161,5 +174,5 @@ Before declaring done:
 - [ ] Every task has ≤3 implementation files
 - [ ] Every acceptance criterion has verification command
 - [ ] Dependencies are explicit
-- [ ] Individual JSON files created in `tasks/`
-- [ ] Run: `python3 scripts/state.py load-tasks` to register
+- [ ] **Files written** using Write tool to `project-planning/tasks/T*.json`
+- [ ] Run: `python3 scripts/state.py load-tasks` to register (and verify success)
