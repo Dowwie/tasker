@@ -3,7 +3,7 @@
   "title": "CapabilityMap",
   "description": "Phase 1 output: Logical decomposition of spec into domains, capabilities, and behaviors",
   "type": "object",
-  "required": ["version", "domains", "flows"],
+  "required": ["version", "domains", "flows", "phase_filtering"],
   "definitions": {
     "spec_ref": {
       "description": "Reference to source spec content. Supports both legacy string format and content-based format.",
@@ -109,6 +109,49 @@
         "gaps": {
           "type": "array",
           "items": { "type": "string" }
+        }
+      }
+    },
+
+    "phase_filtering": {
+      "type": "object",
+      "description": "Documents which development phases were processed vs excluded",
+      "required": ["active_phase", "excluded_phases", "total_excluded_requirements"],
+      "properties": {
+        "active_phase": {
+          "type": "integer",
+          "description": "The phase being planned (always 1 for now)",
+          "const": 1
+        },
+        "excluded_phases": {
+          "type": "array",
+          "description": "Phases that were identified but excluded from planning",
+          "items": {
+            "type": "object",
+            "required": ["phase", "heading", "summary"],
+            "properties": {
+              "phase": {
+                "type": "integer",
+                "description": "Phase number (2, 3, etc.)"
+              },
+              "heading": {
+                "type": "string",
+                "description": "The heading text that marked this phase in the spec"
+              },
+              "location": {
+                "type": "string",
+                "description": "Best-effort location in spec (line number, etc.)"
+              },
+              "summary": {
+                "type": "string",
+                "description": "Brief summary of what was excluded"
+              }
+            }
+          }
+        },
+        "total_excluded_requirements": {
+          "type": "integer",
+          "description": "Count of requirements that were excluded"
         }
       }
     }

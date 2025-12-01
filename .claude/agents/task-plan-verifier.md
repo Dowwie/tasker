@@ -33,6 +33,9 @@ cat project-planning/inputs/spec.md
 # Load capability map (the decomposition strategy)
 cat project-planning/artifacts/capability-map.json
 
+# Load physical map (for phase filtering verification)
+cat project-planning/artifacts/physical-map.json
+
 # Load user preferences (global coding standards)
 cat ~/.claude/CLAUDE.md 2>/dev/null || echo "No global CLAUDE.md found"
 
@@ -44,6 +47,10 @@ Extract from capability map:
 - `domains` - High-level organization
 - `flows` - Expected sequences, especially `is_steel_thread: true`
 - `coverage` - What spec requirements should be covered
+- `phase_filtering` - Which phases were excluded (Critical!)
+
+Extract from physical map:
+- `phase_filtering` - Confirms only Phase 1 behaviors were mapped
 
 Extract from user preferences (if present):
 - Language/framework requirements
@@ -94,7 +101,36 @@ For each task, evaluate these dimensions:
 
 For content-based refs, verify the `quote` text appears in the spec file.
 
-#### B. Strategy Alignment (Required)
+#### B. Phase Compliance (Required - Check First!)
+
+| Score | Meaning |
+|-------|---------|
+| PASS | Task only references Phase 1 behaviors |
+| FAIL | Task references Phase 2+ content |
+
+**This is a BLOCKING check. If any task fails Phase Compliance, the entire plan is BLOCKED.**
+
+**Evidence to check:**
+1. Read `capability-map.json` → `phase_filtering.excluded_phases`
+2. For each excluded phase, note the `summary` of what was excluded
+3. Check if ANY task's `spec_ref.quote` matches excluded Phase 2+ content
+4. Check if ANY task's behaviors reference functionality from excluded phases
+
+**How to detect Phase 2+ leakage:**
+```bash
+# Get excluded phase summaries
+cat project-planning/artifacts/capability-map.json | jq '.phase_filtering.excluded_phases[].summary'
+
+# For each task, check if spec_ref quotes Phase 2+ content
+# Compare task descriptions against excluded summaries
+```
+
+**If Phase 2+ content detected:**
+- Score: FAIL
+- Evidence: "Task references [quote] which is Phase 2 content (excluded: [summary])"
+- Action: Remove task or move to future phase
+
+#### C. Strategy Alignment (Required)
 
 | Score | Meaning |
 |-------|---------|
@@ -107,7 +143,7 @@ For content-based refs, verify the `quote` text appears in the spec file.
 - Steel thread tasks are properly marked
 - Dependencies follow logical flow
 
-#### C. Preference Compliance (Required if CLAUDE.md exists)
+#### D. Preference Compliance (Required if CLAUDE.md exists)
 
 | Score | Meaning |
 |-------|---------|
@@ -122,7 +158,7 @@ For content-based refs, verify the `quote` text appears in the spec file.
 - Testing approach matches CLAUDE.md requirements
 - Architecture patterns (Protocol vs ABC, composition, etc.)
 
-#### D. Viability (Required)
+#### E. Viability (Required)
 
 | Score | Meaning |
 |-------|---------|
@@ -135,7 +171,7 @@ For content-based refs, verify the `quote` text appears in the spec file.
 - 3 or fewer implementation files
 - All dependencies are declared and exist
 
-#### E. Acceptance Criteria Quality (Required)
+#### F. Acceptance Criteria Quality (Required)
 
 | Score | Meaning |
 |-------|---------|
@@ -177,6 +213,7 @@ For content-based refs, verify the `quote` text appears in the spec file.
 
 **PASS criteria:**
 - Spec Alignment: PASS
+- Phase Compliance: PASS
 - Strategy Alignment: PASS
 - Preference Compliance: PASS or N/A
 - Viability: PASS
@@ -189,6 +226,7 @@ For content-based refs, verify the `quote` text appears in the spec file.
 
 **FAIL criteria:**
 - ANY dimension scores FAIL
+- Phase Compliance FAIL is always blocking (Phase 2+ leakage)
 - Critical issues that block execution
 - Acceptance criteria are untestable or missing verification commands
 
@@ -254,6 +292,15 @@ This registration is required for the orchestrator to advance the phase.
 **Tasks Evaluated:** 12
 **Aggregate Verdict:** READY | READY_WITH_NOTES | BLOCKED
 
+### Phase Filtering Status
+
+From `capability-map.json`:
+- **Active Phase:** 1
+- **Excluded Phases:** 2 (OAuth integration, SSO, admin dashboard)
+- **Total Excluded Requirements:** 8
+
+(or "No phase filtering - all spec content is Phase 1")
+
 ### User Preferences Detected
 
 From `~/.claude/CLAUDE.md`:
@@ -272,6 +319,7 @@ From `~/.claude/CLAUDE.md`:
 | Dimension | Score | Evidence |
 |-----------|-------|----------|
 | Spec Alignment | PASS | Maps to Section 2.1 "User Login" |
+| Phase Compliance | PASS | All behaviors are Phase 1 |
 | Strategy Alignment | PASS | Behaviors B1, B2 from capability C1 |
 | Preference Compliance | PASS | Uses Protocol per constraints |
 | Viability | PASS | 3h estimate, 2 files, deps clear |
@@ -285,6 +333,7 @@ From `~/.claude/CLAUDE.md`:
 | Dimension | Score | Evidence |
 |-----------|-------|----------|
 | Spec Alignment | PASS | Maps to Section 3.1 "Data Model" |
+| Phase Compliance | PASS | All behaviors are Phase 1 |
 | Strategy Alignment | PASS | Behaviors B5, B6 from capability C2 |
 | Preference Compliance | PARTIAL | Missing `constraints.patterns` for Protocol usage |
 | Viability | PASS | 4h estimate, 3 files |
@@ -304,13 +353,14 @@ From `~/.claude/CLAUDE.md`:
 | Dimension | Score | Evidence |
 |-----------|-------|----------|
 | Spec Alignment | FAIL | No spec reference for caching requirement |
+| Phase Compliance | FAIL | References "Redis caching" from Phase 2 exclusions |
 | Strategy Alignment | FAIL | Behaviors B15, B16 not in capability-map |
 | Preference Compliance | N/A | Cannot evaluate without valid spec mapping |
 | Viability | PARTIAL | Dependencies unclear |
 | AC Quality | FAIL | Criterion "caching works" with verification "manual testing" |
 
-**Blocking Issue:** Task appears to be scope creep - not in original spec
-**Action Required:** Either add caching to spec or remove this task
+**Blocking Issue:** Task references Phase 2 content (caching was excluded)
+**Action Required:** Remove this task - caching is Phase 2 scope
 
 ---
 
@@ -366,6 +416,14 @@ Your final message MUST include:
 5. `### Next Steps` with clear instructions
 
 ## Common Issues to Flag
+
+### Phase Compliance Issues (Check First!)
+- Task references content from Phase 2+ sections of the spec
+- Task's `spec_ref.quote` matches text under a "Phase 2" heading
+- Task behaviors implement functionality listed in `excluded_phases` summary
+- Task name/description suggests Phase 2+ features (e.g., "OAuth", "SSO" when excluded)
+
+**Phase Compliance failures are always BLOCKING.** Tasks with Phase 2+ content must be removed.
 
 ### Spec Alignment Issues
 - Task has no `context.spec_ref`

@@ -739,6 +739,74 @@ You can provide constraints conversationally when running `/plan`, or create a `
 - Testing requirements
 - Architecture patterns to follow or avoid
 
+### Development Phases in Specs
+
+Tasker supports **phased development** by allowing you to mark sections of your spec for later phases. This is useful when your spec contains features you want to defer.
+
+**How it works:**
+- **Phase 1 (implicit)** - Any content NOT under a phase heading is Phase 1
+- **Phase 2+ (explicit)** - Content under "Phase 2", "Phase 3", etc. headings is excluded
+
+**Example spec with phases:**
+
+```markdown
+# My Application Spec
+
+## User Authentication
+- Users can log in with email/password
+- Users can reset their password
+- Sessions expire after 24 hours
+
+## Data Management
+- Users can create, read, update, delete items
+- Items have a title, description, and status
+
+## Phase 2: Advanced Features
+- OAuth integration with Google/GitHub
+- Single Sign-On (SSO) for enterprise
+- Admin dashboard with analytics
+
+## Phase 3: Scale & Performance
+- Redis caching layer
+- Read replicas for database
+- CDN integration
+```
+
+When you run `/plan`, Tasker will:
+1. **Extract** only Phase 1 content (Authentication + Data Management)
+2. **Document** excluded phases in `capability-map.json`
+3. **Verify** no Phase 2+ content leaks into tasks
+
+**Phase markers recognized:**
+- `## Phase 2`
+- `## Phase 2: Title`
+- `### Phase 3 - Description`
+- `# Phase 2 Requirements`
+- `**Phase 2:**`
+
+**Verification:**
+The task-plan-verifier checks that no tasks reference Phase 2+ content. If leakage is detected, planning is BLOCKED until the offending tasks are removed.
+
+**Output:**
+The `capability-map.json` includes a `phase_filtering` section:
+
+```json
+{
+  "phase_filtering": {
+    "active_phase": 1,
+    "excluded_phases": [
+      {
+        "phase": 2,
+        "heading": "## Phase 2: Advanced Features",
+        "location": "line 15",
+        "summary": "OAuth, SSO, admin dashboard"
+      }
+    ],
+    "total_excluded_requirements": 5
+  }
+}
+```
+
 ---
 
 ## Development

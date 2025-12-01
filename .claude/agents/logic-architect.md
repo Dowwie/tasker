@@ -30,6 +30,64 @@ Read: `project-planning/inputs/spec.md`
 
 **Important:** The spec may be in any format (freeform, PRD, bullet list, etc.). Do not expect structured sections. Extract requirements from whatever format is provided.
 
+## Phase Filtering (Critical)
+
+The spec may contain content for multiple development phases. You MUST only extract capabilities for **Phase 1**.
+
+### Phase Detection Rules
+
+1. **Implicit Phase 1**: Any content NOT under a "Phase N" heading is Phase 1
+2. **Explicit Phase 2+**: Content under headings like "Phase 2", "Phase 3", "## Phase 2", "### Future Phase", etc.
+
+### Examples of Phase Markers to EXCLUDE
+
+```markdown
+## Phase 2
+## Phase 2: Advanced Features
+### Phase 3 - Future Work
+# Phase 2 Requirements
+**Phase 2:**
+```
+
+### What to Do
+
+1. **Scan the spec** for phase markers before extracting capabilities
+2. **Identify sections** that belong to Phase 2 or later
+3. **Skip all content** under Phase 2+ headings
+4. **Document excluded phases** in the `phase_filtering` section of output
+
+### Phase Filtering Output
+
+Add a `phase_filtering` section to your output:
+
+```json
+{
+  "phase_filtering": {
+    "active_phase": 1,
+    "excluded_phases": [
+      {
+        "phase": 2,
+        "heading": "## Phase 2: Advanced Features",
+        "location": "line 145",
+        "summary": "OAuth integration, SSO, admin dashboard"
+      }
+    ],
+    "total_excluded_requirements": 8
+  }
+}
+```
+
+If no phase markers are found, output:
+```json
+{
+  "phase_filtering": {
+    "active_phase": 1,
+    "excluded_phases": [],
+    "total_excluded_requirements": 0
+  }
+}
+```
+
 ## I.P.S.O. Decomposition (Behavior Taxonomy)
 
 For each capability, identify behaviors:
@@ -130,10 +188,12 @@ The quote provides 100% traceability - it IS the spec content. The location is b
 ## Checklist
 
 Before outputting:
-- [ ] Every spec requirement maps to behaviors
+- [ ] Phase markers identified and Phase 2+ content excluded
+- [ ] `phase_filtering` section documents any excluded phases
+- [ ] Every Phase 1 spec requirement maps to behaviors
 - [ ] Every capability has a `spec_ref` with a quoted snippet from the spec
 - [ ] Every behavior has correct type (input/process/state/output)
 - [ ] Steel thread flow identified
-- [ ] Coverage gaps documented
+- [ ] Coverage gaps documented (Phase 1 only)
 - [ ] JSON is valid (use `jq . < capability-map.json` to check)
 - [ ] Validation passes: `python3 scripts/state.py validate capability_map`

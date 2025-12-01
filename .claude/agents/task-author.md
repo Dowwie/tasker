@@ -40,6 +40,32 @@ python3 scripts/state.py load-tasks
 
 Read: `project-planning/artifacts/physical-map.json`
 
+## Phase Filtering (Critical)
+
+The physical-map contains only Phase 1 behaviors (filtered by upstream agents). You MUST:
+
+1. **Verify phase filtering** - Check `phase_filtering` section in physical-map.json
+2. **Only create tasks** for behaviors listed in the physical-map
+3. **Do NOT invent behaviors** - If a behavior isn't in physical-map, it's Phase 2+ and excluded
+
+### Verification Before Task Creation
+
+```bash
+# Check phase filtering was applied
+cat project-planning/artifacts/physical-map.json | jq '.phase_filtering'
+```
+
+Expected output confirms Phase 1 only:
+```json
+{
+  "active_phase": 1,
+  "source": "capability-map.json",
+  "behaviors_mapped": 15
+}
+```
+
+**If `phase_filtering` is missing or shows issues, STOP and report to orchestrator.**
+
 ## Task Structure
 
 ```json
@@ -128,6 +154,8 @@ Prefer `pytest` tests as verification when possible.
 ## Checklist
 
 Before declaring done:
+- [ ] Verified `phase_filtering` in physical-map.json shows Phase 1 only
+- [ ] Only behaviors from physical-map have tasks (no invented behaviors)
 - [ ] Every behavior from physical-map has a task
 - [ ] Every task is 2-6 hours
 - [ ] Every task has ≤3 implementation files

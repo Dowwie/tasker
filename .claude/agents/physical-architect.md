@@ -26,6 +26,31 @@ Read:
 - `project-planning/artifacts/capability-map.json`
 - `project-planning/inputs/constraints.md` (if exists)
 
+## Phase Filtering (Critical)
+
+The capability-map includes a `phase_filtering` section that documents which phases were excluded from planning. You MUST:
+
+1. **Check the `phase_filtering` section** in capability-map.json
+2. **Only map behaviors** that are included in the capability-map (Phase 1 only)
+3. **Propagate phase info** to your output for downstream verification
+
+### Phase Filtering Output
+
+Include phase filtering metadata in your output:
+
+```json
+{
+  "phase_filtering": {
+    "active_phase": 1,
+    "source": "capability-map.json",
+    "behaviors_mapped": 15,
+    "note": "Only Phase 1 behaviors mapped per capability-map phase_filtering"
+  }
+}
+```
+
+**Important:** Do NOT add behaviors that don't exist in the capability-map. The logic-architect has already filtered to Phase 1 only.
+
 ## Output Structure
 
 ```json
@@ -102,6 +127,9 @@ Add files for:
 
 ## Checklist
 
+- [ ] Verified capability-map `phase_filtering` section
+- [ ] Only Phase 1 behaviors from capability-map are mapped
+- [ ] `phase_filtering` metadata included in output
 - [ ] Every behavior has file mapping
 - [ ] Every file has layer classification
 - [ ] Test files for all domain/api files
