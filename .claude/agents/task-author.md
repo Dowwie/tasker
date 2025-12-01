@@ -26,19 +26,22 @@ project-planning/tasks/
 
 ### Required Steps (in order):
 
-1. **Create directory** (if needed):
+1. **Create directory FIRST** (MANDATORY - do this before any Write):
    ```bash
    mkdir -p project-planning/tasks
    ```
+   **You MUST run this command before attempting to write any file.**
 
 2. **Write each task file** using the Write tool (e.g., `project-planning/tasks/T001.json`)
 
-3. **After creating ALL tasks**, register them:
+3. **If Write fails with "directory does not exist"**: Run `mkdir -p project-planning/tasks` again, then retry the Write.
+
+4. **After creating ALL tasks**, register them:
    ```bash
    python3 scripts/state.py load-tasks
    ```
 
-4. **If load-tasks fails**: Read the error, fix the offending JSON files, run again
+5. **If load-tasks fails**: Read the error, fix the offending JSON files, run again
 
 Each file MUST validate against `schemas/task.schema.json`.
 

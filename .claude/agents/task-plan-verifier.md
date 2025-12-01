@@ -244,11 +244,15 @@ After evaluating all tasks:
 
 **Save the verification report to a file:**
 
+**MANDATORY: Create the directory FIRST before writing:**
 ```bash
 mkdir -p project-planning/reports
 ```
+**You MUST run this command before attempting to write any file.**
 
-Write the full report to `project-planning/reports/verification-report.md`:
+Write the full report to `project-planning/reports/verification-report.md`.
+
+**If Write fails with "directory does not exist"**: Run `mkdir -p project-planning/reports` again, then retry the Write.
 
 ```bash
 cat > project-planning/reports/verification-report.md << 'EOF'

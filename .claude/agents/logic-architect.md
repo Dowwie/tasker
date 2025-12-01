@@ -19,19 +19,22 @@ You MUST write valid JSON to `project-planning/artifacts/capability-map.json`.
 
 ### Required Steps (in order):
 
-1. **Create directory** (if needed):
+1. **Create directory FIRST** (MANDATORY - do this before any Write):
    ```bash
    mkdir -p project-planning/artifacts
    ```
+   **You MUST run this command before attempting to write any file.**
 
 2. **Write the file** using the Write tool to `project-planning/artifacts/capability-map.json`
 
-3. **Validate** the output:
+3. **If Write fails with "directory does not exist"**: Run `mkdir -p project-planning/artifacts` again, then retry the Write.
+
+4. **Validate** the output:
    ```bash
    python3 scripts/state.py validate capability_map
    ```
 
-4. **If validation fails**: Read the error, fix the JSON, write again, re-validate
+5. **If validation fails**: Read the error, fix the JSON, write again, re-validate
 
 The JSON MUST validate against `schemas/capability-map.schema.json`.
 

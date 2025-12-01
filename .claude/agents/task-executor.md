@@ -94,6 +94,16 @@ behaviors = [b for b in bundle["behaviors"] if b["id"] in file["behaviors"]]
 # - B002: CredentialError (type: output)
 ```
 
+**CRITICAL: Create parent directories before writing files:**
+
+Before writing any file, ensure parent directories exist:
+```bash
+# For src/auth/validator.py, create src/auth/ first
+mkdir -p "$TARGET_DIR/src/auth"
+```
+
+**If Write fails with "directory does not exist"**: Run `mkdir -p` for the parent directory, then retry the Write.
+
 **Track what you create/modify:**
 
 ```python
@@ -107,6 +117,11 @@ CREATED_FILES.append("src/auth/validator.py")
 ### 5. Documentation
 
 After implementation, create documentation artifacts:
+
+**First, ensure docs directory exists:**
+```bash
+mkdir -p "$TARGET_DIR/docs"
+```
 
 #### Task Spec (Required)
 
