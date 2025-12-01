@@ -54,7 +54,14 @@ Each file MUST validate against `schemas/task.schema.json`.
 
 ## Input
 
-Read: `project-planning/artifacts/physical-map.json`
+**From Orchestrator Spawn Prompt:** You will receive context including:
+- Target directory
+- Project type (new or existing)
+- Tech stack constraints (if any)
+
+**From Files:**
+- `project-planning/artifacts/physical-map.json`
+- `project-planning/artifacts/capability-map.json` (for behavior details and spec refs)
 
 ## Phase Filtering (Critical)
 

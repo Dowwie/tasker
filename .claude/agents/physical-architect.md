@@ -38,7 +38,14 @@ You MUST write valid JSON to `project-planning/artifacts/physical-map.json`.
 
 ## Input
 
-Read:
+**From Orchestrator Spawn Prompt:** You will receive context including:
+- Target directory
+- Project type (new or existing)
+- Tech stack constraints (if any)
+- Existing project analysis (if enhancing an existing codebase)
+- Key patterns to follow (if existing project)
+
+**From Files:**
 - `project-planning/artifacts/capability-map.json`
 - `project-planning/inputs/constraints.md` (if exists)
 

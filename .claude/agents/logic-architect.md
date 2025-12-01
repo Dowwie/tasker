@@ -40,7 +40,13 @@ The JSON MUST validate against `schemas/capability-map.schema.json`.
 
 ## Input
 
-Read: `project-planning/inputs/spec.md`
+**From Orchestrator Spawn Prompt:** You will receive context including:
+- Target directory
+- Project type (new or existing)
+- Tech stack constraints (if any)
+- Existing project analysis (if enhancing an existing codebase)
+
+**From File:** Read `project-planning/inputs/spec.md`
 
 **Important:** The spec may be in any format (freeform, PRD, bullet list, etc.). Do not expect structured sections. Extract requirements from whatever format is provided.
 

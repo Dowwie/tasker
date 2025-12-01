@@ -150,13 +150,97 @@ python3 scripts/state.py status
 ```python
 while phase not in ["ready", "executing", "complete"]:
     1. Query current phase
-    2. Spawn appropriate agent
+    2. Spawn appropriate agent WITH FULL CONTEXT (see spawn templates below)
     3. Wait for agent to complete
     4. Validate output:
        - For artifacts: state.py validate <artifact>
        - For task validation: state.py validate-tasks <verdict>
     5. If valid: state.py advance
     6. If invalid: Tell agent to fix, re-validate
+```
+
+## Agent Spawn Templates
+
+**CRITICAL:** Each sub-agent is context-isolated. They CANNOT see the orchestrator's conversation or any information you've gathered from the user. You MUST pass ALL relevant context explicitly in the spawn prompt.
+
+### Logical Phase: logic-architect
+
+```
+Extract capabilities and behaviors from the specification.
+
+## Context
+
+Target Directory: {TARGET_DIR}
+Project Type: {new | existing}
+Tech Stack: {user-provided constraints or "none specified"}
+
+## Existing Project Analysis (if applicable)
+{paste the project structure analysis you performed}
+
+## Specification Location
+
+The full specification is in: project-planning/inputs/spec.md
+
+Read that file for the complete requirements. The spec has already been stored verbatim.
+
+## Your Task
+
+1. Read project-planning/inputs/spec.md
+2. Extract capabilities using I.P.S.O. decomposition
+3. Apply phase filtering (Phase 1 only)
+4. Write output to project-planning/artifacts/capability-map.json
+5. Validate with: python3 scripts/state.py validate capability_map
+```
+
+### Physical Phase: physical-architect
+
+```
+Map behaviors to concrete file paths.
+
+## Context
+
+Target Directory: {TARGET_DIR}
+Project Type: {new | existing}
+Tech Stack: {user-provided constraints or "infer from capability-map"}
+
+## Existing Project Analysis (if applicable)
+{paste the project structure analysis - this informs where new files should go}
+
+## Key Patterns to Follow
+{if existing project, list discovered patterns like:
+- Source layout: src/ with modules
+- Test layout: tests/ mirroring src/
+- Naming: snake_case for files
+}
+
+## Your Task
+
+1. Read project-planning/artifacts/capability-map.json
+2. Map each behavior to file paths respecting existing project structure
+3. Add cross-cutting concerns and infrastructure
+4. Write output to project-planning/artifacts/physical-map.json
+5. Validate with: python3 scripts/state.py validate physical_map
+```
+
+### Definition Phase: task-author
+
+```
+Create individual task files from the physical map.
+
+## Context
+
+Target Directory: {TARGET_DIR}
+Project Type: {new | existing}
+
+## Tech Stack Constraints
+{user-provided constraints that affect implementation}
+
+## Your Task
+
+1. Read project-planning/artifacts/physical-map.json
+2. Read project-planning/artifacts/capability-map.json (for behavior details)
+3. Create task files in project-planning/tasks/
+4. Load tasks with: python3 scripts/state.py load-tasks
 ```
 
 ### Validation Phase Details
