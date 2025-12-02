@@ -13,25 +13,27 @@ Extract capabilities from specification and decompose into behaviors.
 
 ## Output Contract
 
-You MUST write valid JSON to `project-planning/artifacts/capability-map.json`.
+You MUST write valid JSON to `{PLANNING_DIR}/artifacts/capability-map.json`.
 
-**CRITICAL: You must use the Write tool to save the file. Do NOT just output JSON to the conversation.**
+**CRITICAL:
+- You must use the Write tool to save the file. Do NOT just output JSON to the conversation.
+- Use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.**
 
 ### Required Steps (in order):
 
 1. **Create directory FIRST** (MANDATORY - do this before any Write):
    ```bash
-   mkdir -p project-planning/artifacts
+   mkdir -p {PLANNING_DIR}/artifacts
    ```
-   **You MUST run this command before attempting to write any file.**
+   **You MUST run this command before attempting to write any file. Replace {PLANNING_DIR} with the actual path from context.**
 
-2. **Write the file** using the Write tool to `project-planning/artifacts/capability-map.json`
+2. **Write the file** using the Write tool to `{PLANNING_DIR}/artifacts/capability-map.json`
 
-3. **If Write fails with "directory does not exist"**: Run `mkdir -p project-planning/artifacts` again, then retry the Write.
+3. **If Write fails with "directory does not exist"**: Run `mkdir -p {PLANNING_DIR}/artifacts` again, then retry the Write.
 
 4. **Validate** the output:
    ```bash
-   python3 scripts/state.py validate capability_map
+   cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map
    ```
 
 5. **If validation fails**: Read the error, fix the JSON, write again, re-validate
@@ -41,12 +43,13 @@ The JSON MUST validate against `schemas/capability-map.schema.json`.
 ## Input
 
 **From Orchestrator Spawn Prompt:** You will receive context including:
-- Target directory
+- **PLANNING_DIR** - Absolute path to project-planning directory (e.g., `/Users/foo/tasker/project-planning`)
+- Target directory (where code will be written)
 - Project type (new or existing)
 - Tech stack constraints (if any)
 - Existing project analysis (if enhancing an existing codebase)
 
-**From File:** Read `project-planning/inputs/spec.md`
+**From File:** Read `{PLANNING_DIR}/inputs/spec.md`
 
 **Important:** The spec may be in any format (freeform, PRD, bullet list, etc.). Do not expect structured sections. Extract requirements from whatever format is provided.
 
@@ -215,6 +218,6 @@ Before declaring done:
 - [ ] Every behavior has correct type (input/process/state/output)
 - [ ] Steel thread flow identified
 - [ ] Coverage gaps documented (Phase 1 only)
-- [ ] **File written** using Write tool to `project-planning/artifacts/capability-map.json`
-- [ ] JSON is valid (use `jq . < capability-map.json` to check)
-- [ ] Validation passes: `python3 scripts/state.py validate capability_map`
+- [ ] **File written** using Write tool to `{PLANNING_DIR}/artifacts/capability-map.json` (absolute path!)
+- [ ] JSON is valid (use `jq . < {PLANNING_DIR}/artifacts/capability-map.json` to check)
+- [ ] Validation passes: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`

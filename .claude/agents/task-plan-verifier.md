@@ -12,35 +12,40 @@ Evaluate task **definitions** (not implementations) against the spec, decomposit
 
 ## Input
 
-You receive:
+You receive from orchestrator:
 ```
 Verify task definitions for planning
 
-Spec: project-planning/inputs/spec.md
-Capability Map: project-planning/artifacts/capability-map.json
-Tasks Directory: project-planning/tasks/
+PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+Spec: {PLANNING_DIR}/inputs/spec.md
+Capability Map: {PLANNING_DIR}/artifacts/capability-map.json
+Tasks Directory: {PLANNING_DIR}/tasks/
 User Preferences: ~/.claude/CLAUDE.md (if exists)
 ```
+
+**CRITICAL:** Use the `PLANNING_DIR` absolute path provided. Do NOT use relative paths like `project-planning/`.
 
 ## Protocol
 
 ### 1. Load Context
 
+Replace `{PLANNING_DIR}` with the absolute path from your spawn context:
+
 ```bash
 # Load the spec
-cat project-planning/inputs/spec.md
+cat {PLANNING_DIR}/inputs/spec.md
 
 # Load capability map (the decomposition strategy)
-cat project-planning/artifacts/capability-map.json
+cat {PLANNING_DIR}/artifacts/capability-map.json
 
 # Load physical map (for phase filtering verification)
-cat project-planning/artifacts/physical-map.json
+cat {PLANNING_DIR}/artifacts/physical-map.json
 
 # Load user preferences (global coding standards)
 cat ~/.claude/CLAUDE.md 2>/dev/null || echo "No global CLAUDE.md found"
 
 # List all task files
-ls project-planning/tasks/*.json
+ls {PLANNING_DIR}/tasks/*.json
 ```
 
 Extract from capability map:
@@ -61,8 +66,8 @@ Extract from user preferences (if present):
 ### 2. Load All Tasks
 
 ```bash
-# Read each task file
-for task in project-planning/tasks/*.json; do
+# Read each task file (use absolute PLANNING_DIR path)
+for task in {PLANNING_DIR}/tasks/*.json; do
   cat "$task"
 done
 ```
@@ -86,7 +91,7 @@ For each task, evaluate these dimensions:
 
 **Evidence to check:**
 - `context.spec_ref` contains quoted spec content that justifies this task
-- The quoted text exists in `project-planning/inputs/spec.md` (search for it)
+- The quoted text exists in `{PLANNING_DIR}/inputs/spec.md` (search for it)
 - Behaviors in task exist in capability-map
 - Task purpose aligns with spec intent
 
@@ -118,8 +123,8 @@ For content-based refs, verify the `quote` text appears in the spec file.
 
 **How to detect Phase 2+ leakage:**
 ```bash
-# Get excluded phase summaries
-cat project-planning/artifacts/capability-map.json | jq '.phase_filtering.excluded_phases[].summary'
+# Get excluded phase summaries (use absolute PLANNING_DIR path)
+cat {PLANNING_DIR}/artifacts/capability-map.json | jq '.phase_filtering.excluded_phases[].summary'
 
 # For each task, check if spec_ref quotes Phase 2+ content
 # Compare task descriptions against excluded summaries
@@ -244,18 +249,18 @@ After evaluating all tasks:
 
 **Save the verification report to a file:**
 
-**MANDATORY: Create the directory FIRST before writing:**
+**MANDATORY: Create the directory FIRST before writing (use absolute PLANNING_DIR path):**
 ```bash
-mkdir -p project-planning/reports
+mkdir -p {PLANNING_DIR}/reports
 ```
 **You MUST run this command before attempting to write any file.**
 
-Write the full report to `project-planning/reports/verification-report.md`.
+Write the full report to `{PLANNING_DIR}/reports/verification-report.md`.
 
-**If Write fails with "directory does not exist"**: Run `mkdir -p project-planning/reports` again, then retry the Write.
+**If Write fails with "directory does not exist"**: Run `mkdir -p {PLANNING_DIR}/reports` again, then retry the Write.
 
 ```bash
-cat > project-planning/reports/verification-report.md << 'EOF'
+cat > {PLANNING_DIR}/reports/verification-report.md << 'EOF'
 # Plan Verification Report
 
 **Generated:** $(date -Iseconds)
@@ -270,18 +275,18 @@ This file persists for review and debugging.
 
 ### 7. Register Verdict
 
-**Register the verdict with state.py:**
+**Register the verdict with state.py (run from parent of PLANNING_DIR):**
 
 ```bash
 # For READY (all tasks pass)
-python3 scripts/state.py validate-tasks READY "All tasks aligned with spec and preferences"
+cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks READY "All tasks aligned with spec and preferences"
 
 # For READY_WITH_NOTES (pass with minor issues)
-python3 scripts/state.py validate-tasks READY_WITH_NOTES "Minor issues found" \
+cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks READY_WITH_NOTES "Minor issues found" \
   --issues "T002: missing constraints" "T012: unclear verification"
 
 # For BLOCKED (critical issues)
-python3 scripts/state.py validate-tasks BLOCKED "Critical issues block planning" \
+cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks BLOCKED "Critical issues block planning" \
   --issues "T005: not traceable to spec"
 ```
 
@@ -292,7 +297,7 @@ This registration is required for the orchestrator to advance the phase.
 ```markdown
 ## Task Plan Verification Report
 
-**Spec:** project-planning/inputs/spec.md
+**Spec:** {PLANNING_DIR}/inputs/spec.md
 **Tasks Evaluated:** 12
 **Aggregate Verdict:** READY | READY_WITH_NOTES | BLOCKED
 
@@ -409,12 +414,12 @@ If READY or READY_WITH_NOTES:
 ## Output Contract
 
 Before your final message, you MUST:
-1. Save full report to `project-planning/reports/verification-report.md`
-2. Run `python3 scripts/state.py validate-tasks <VERDICT> "<summary>" [--issues ...]`
+1. Save full report to `{PLANNING_DIR}/reports/verification-report.md` (absolute path!)
+2. Run `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks <VERDICT> "<summary>" [--issues ...]`
 
 Your final message MUST include:
 1. `**Aggregate Verdict:** READY` or `READY_WITH_NOTES` or `BLOCKED`
-2. `**Report:** project-planning/reports/verification-report.md`
+2. `**Report:** {PLANNING_DIR}/reports/verification-report.md`
 3. Per-task evaluation summary (details in report file)
 4. For BLOCKED: List of blocking issues with fix suggestions
 5. `### Next Steps` with clear instructions

@@ -13,32 +13,34 @@ Create **individual task files** - one JSON file per task.
 
 ## Output Contract
 
-You MUST write individual JSON files to `project-planning/tasks/`:
+You MUST write individual JSON files to `{PLANNING_DIR}/tasks/`:
 ```
-project-planning/tasks/
+{PLANNING_DIR}/tasks/
 ├── T001.json
 ├── T002.json
 ├── T003.json
 └── ...
 ```
 
-**CRITICAL: You must use the Write tool to save each file. Do NOT just output JSON to the conversation.**
+**CRITICAL:
+- You must use the Write tool to save each file. Do NOT just output JSON to the conversation.
+- Use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.**
 
 ### Required Steps (in order):
 
 1. **Create directory FIRST** (MANDATORY - do this before any Write):
    ```bash
-   mkdir -p project-planning/tasks
+   mkdir -p {PLANNING_DIR}/tasks
    ```
-   **You MUST run this command before attempting to write any file.**
+   **You MUST run this command before attempting to write any file. Replace {PLANNING_DIR} with the actual path from context.**
 
-2. **Write each task file** using the Write tool (e.g., `project-planning/tasks/T001.json`)
+2. **Write each task file** using the Write tool (e.g., `{PLANNING_DIR}/tasks/T001.json`)
 
-3. **If Write fails with "directory does not exist"**: Run `mkdir -p project-planning/tasks` again, then retry the Write.
+3. **If Write fails with "directory does not exist"**: Run `mkdir -p {PLANNING_DIR}/tasks` again, then retry the Write.
 
 4. **After creating ALL tasks**, register them:
    ```bash
-   python3 scripts/state.py load-tasks
+   cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks
    ```
 
 5. **If load-tasks fails**: Read the error, fix the offending JSON files, run again
@@ -55,13 +57,14 @@ Each file MUST validate against `schemas/task.schema.json`.
 ## Input
 
 **From Orchestrator Spawn Prompt:** You will receive context including:
-- Target directory
+- **PLANNING_DIR** - Absolute path to project-planning directory (e.g., `/Users/foo/tasker/project-planning`)
+- Target directory (where code will be written)
 - Project type (new or existing)
 - Tech stack constraints (if any)
 
 **From Files:**
-- `project-planning/artifacts/physical-map.json`
-- `project-planning/artifacts/capability-map.json` (for behavior details and spec refs)
+- `{PLANNING_DIR}/artifacts/physical-map.json`
+- `{PLANNING_DIR}/artifacts/capability-map.json` (for behavior details and spec refs)
 
 ## Phase Filtering (Critical)
 
@@ -75,7 +78,7 @@ The physical-map contains only Phase 1 behaviors (filtered by upstream agents). 
 
 ```bash
 # Check phase filtering was applied
-cat project-planning/artifacts/physical-map.json | jq '.phase_filtering'
+cat {PLANNING_DIR}/artifacts/physical-map.json | jq '.phase_filtering'
 ```
 
 Expected output confirms Phase 1 only:
@@ -184,5 +187,5 @@ Before declaring done:
 - [ ] Every task has ≤3 implementation files
 - [ ] Every acceptance criterion has verification command
 - [ ] Dependencies are explicit
-- [ ] **Files written** using Write tool to `project-planning/tasks/T*.json`
-- [ ] Run: `python3 scripts/state.py load-tasks` to register (and verify success)
+- [ ] **Files written** using Write tool to `{PLANNING_DIR}/tasks/T*.json` (absolute paths!)
+- [ ] Run: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks` to register (and verify success)

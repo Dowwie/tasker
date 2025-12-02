@@ -26,6 +26,19 @@ The orchestrator ONLY:
 - Dispatches agents based on mode/phase
 - Handles user interaction
 
+## CRITICAL: Path Management
+
+**PLANNING_DIR must be an absolute path.** Sub-agents run in isolated contexts and cannot resolve relative paths correctly.
+
+At the start of any planning session, compute and store:
+```bash
+# Get absolute path to project-planning directory
+PLANNING_DIR="$(pwd)/project-planning"
+echo "PLANNING_DIR: $PLANNING_DIR"
+```
+
+This `PLANNING_DIR` value (e.g., `/Users/foo/tasker/project-planning`) MUST be passed to every sub-agent spawn. Do NOT use relative paths like `project-planning/` in spawn prompts.
+
 ---
 
 # Plan Mode
@@ -199,33 +212,35 @@ while phase not in ["ready", "executing", "complete"]:
 
 **MANDATORY STEP:** After each agent completes, you MUST verify its output file exists before attempting validation.
 
+Note: `$PLANNING_DIR` below refers to the absolute path you passed to the agent (e.g., `/Users/foo/tasker/project-planning`).
+
 ```bash
 # After logic-architect completes:
-if [ ! -f project-planning/artifacts/capability-map.json ]; then
+if [ ! -f $PLANNING_DIR/artifacts/capability-map.json ]; then
     echo "ERROR: capability-map.json not written. Agent must retry."
     # Re-spawn the agent with explicit reminder to use Write tool
 fi
 
 # After physical-architect completes:
-if [ ! -f project-planning/artifacts/physical-map.json ]; then
+if [ ! -f $PLANNING_DIR/artifacts/physical-map.json ]; then
     echo "ERROR: physical-map.json not written. Agent must retry."
     # Re-spawn the agent with explicit reminder to use Write tool
 fi
 
 # After task-author completes:
-task_count=$(ls project-planning/tasks/*.json 2>/dev/null | wc -l)
+task_count=$(ls $PLANNING_DIR/tasks/*.json 2>/dev/null | wc -l)
 if [ "$task_count" -eq 0 ]; then
     echo "ERROR: No task files written. Agent must retry."
     # Re-spawn the agent with explicit reminder to use Write tool
 fi
 ```
 
-**Why this matters:** Sub-agents may fail silently (e.g., output JSON to conversation instead of writing to file). The orchestrator MUST verify files exist before calling `state.py validate`, otherwise validation will fail with "Artifact not found" which is confusing.
+**Why this matters:** Sub-agents may fail silently (e.g., output JSON to conversation instead of writing to file, or write to wrong directory). The orchestrator MUST verify files exist at the correct absolute path before calling `state.py validate`, otherwise validation will fail with "Artifact not found" which is confusing.
 
 **Recovery procedure:** If file doesn't exist:
-1. Check if directory exists: `ls -la project-planning/artifacts/`
+1. Check if directory exists: `ls -la $PLANNING_DIR/artifacts/`
 2. Re-spawn the agent with this explicit reminder:
-   > "IMPORTANT: You must use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient. The file must exist at the specified path."
+   > "IMPORTANT: You must use the Write tool to save the file to the absolute path {PLANNING_DIR}/artifacts/. Simply outputting JSON to the conversation is NOT sufficient. Do NOT use relative paths like project-planning/."
 
 ## Agent Spawn Templates
 
@@ -238,6 +253,7 @@ Extract capabilities and behaviors from the specification.
 
 ## Context
 
+PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
 Target Directory: {TARGET_DIR}
 Project Type: {new | existing}
 Tech Stack: {user-provided constraints or "none specified"}
@@ -247,21 +263,23 @@ Tech Stack: {user-provided constraints or "none specified"}
 
 ## Specification Location
 
-The full specification is in: project-planning/inputs/spec.md
+The full specification is in: {PLANNING_DIR}/inputs/spec.md
 
 Read that file for the complete requirements. The spec has already been stored verbatim.
 
 ## Your Task
 
-1. Read project-planning/inputs/spec.md
+1. Read {PLANNING_DIR}/inputs/spec.md
 2. Extract capabilities using I.P.S.O. decomposition
 3. Apply phase filtering (Phase 1 only)
-4. **CRITICAL: Create directory first**: `mkdir -p project-planning/artifacts`
-5. **CRITICAL: Use the Write tool** to save to project-planning/artifacts/capability-map.json
-6. **Verify file exists**: `ls -la project-planning/artifacts/capability-map.json`
-7. Validate with: python3 scripts/state.py validate capability_map
+4. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/artifacts`
+5. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/capability-map.json
+6. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
+7. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
 
-IMPORTANT: You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
+IMPORTANT:
+- You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
+- Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
 ```
 
 ### Physical Phase: physical-architect
@@ -271,6 +289,7 @@ Map behaviors to concrete file paths.
 
 ## Context
 
+PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
 Target Directory: {TARGET_DIR}
 Project Type: {new | existing}
 Tech Stack: {user-provided constraints or "infer from capability-map"}
@@ -287,15 +306,17 @@ Tech Stack: {user-provided constraints or "infer from capability-map"}
 
 ## Your Task
 
-1. Read project-planning/artifacts/capability-map.json
+1. Read {PLANNING_DIR}/artifacts/capability-map.json
 2. Map each behavior to file paths respecting existing project structure
 3. Add cross-cutting concerns and infrastructure
-4. **CRITICAL: Create directory first**: `mkdir -p project-planning/artifacts`
-5. **CRITICAL: Use the Write tool** to save to project-planning/artifacts/physical-map.json
-6. **Verify file exists**: `ls -la project-planning/artifacts/physical-map.json`
-7. Validate with: python3 scripts/state.py validate physical_map
+4. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/artifacts`
+5. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/physical-map.json
+6. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/physical-map.json`
+7. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map`
 
-IMPORTANT: You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
+IMPORTANT:
+- You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
+- Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
 ```
 
 ### Definition Phase: task-author
@@ -305,6 +326,7 @@ Create individual task files from the physical map.
 
 ## Context
 
+PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
 Target Directory: {TARGET_DIR}
 Project Type: {new | existing}
 
@@ -313,14 +335,16 @@ Project Type: {new | existing}
 
 ## Your Task
 
-1. Read project-planning/artifacts/physical-map.json
-2. Read project-planning/artifacts/capability-map.json (for behavior details)
-3. **CRITICAL: Create directory first**: `mkdir -p project-planning/tasks`
-4. **CRITICAL: Use the Write tool** to save each task file to project-planning/tasks/T001.json, etc.
-5. **Verify files exist**: `ls -la project-planning/tasks/`
-6. Load tasks with: python3 scripts/state.py load-tasks
+1. Read {PLANNING_DIR}/artifacts/physical-map.json
+2. Read {PLANNING_DIR}/artifacts/capability-map.json (for behavior details)
+3. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/tasks`
+4. **CRITICAL: Use the Write tool** to save each task file to {PLANNING_DIR}/tasks/T001.json, etc.
+5. **Verify files exist**: `ls -la {PLANNING_DIR}/tasks/`
+6. Load tasks with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
 
-IMPORTANT: You MUST use the Write tool to save each file. Simply outputting JSON to the conversation is NOT sufficient.
+IMPORTANT:
+- You MUST use the Write tool to save each file. Simply outputting JSON to the conversation is NOT sufficient.
+- Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
 ```
 
 ### Validation Phase Details
@@ -331,9 +355,10 @@ The `validation` phase runs **task-plan-verifier** to evaluate task definitions:
 # Spawn task-plan-verifier with context
 Verify task definitions for planning
 
-Spec: project-planning/inputs/spec.md
-Capability Map: project-planning/artifacts/capability-map.json
-Tasks Directory: project-planning/tasks/
+PLANNING_DIR: {absolute path to project-planning}
+Spec: {PLANNING_DIR}/inputs/spec.md
+Capability Map: {PLANNING_DIR}/artifacts/capability-map.json
+Tasks Directory: {PLANNING_DIR}/tasks/
 User Preferences: ~/.claude/CLAUDE.md (if exists)
 ```
 
@@ -355,10 +380,34 @@ python3 scripts/state.py advance
 
 If BLOCKED, the orchestrator:
 1. Displays the verifier's summary to user
-2. Points user to full report: `project-planning/reports/verification-report.md`
+2. Points user to full report: `{PLANNING_DIR}/reports/verification-report.md`
 3. Waits for user to fix task files
 4. Re-runs task-plan-verifier (or user runs `/verify-plan`)
 5. Repeats until READY or READY_WITH_NOTES
+
+### Sequencing Phase: plan-auditor
+
+```
+Assign phases to tasks and validate the dependency graph.
+
+## Context
+
+PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+
+## Your Task
+
+1. Read {PLANNING_DIR}/tasks/*.json
+2. Read {PLANNING_DIR}/artifacts/capability-map.json (for steel thread flows)
+3. Build dependency graph
+4. Assign phases (1: foundations, 2: steel thread, 3+: features)
+5. **CRITICAL: Update task files** using Write tool to {PLANNING_DIR}/tasks/T001.json etc.
+6. Validate DAG (no cycles, deps in earlier phases)
+7. Run: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
+
+IMPORTANT:
+- You MUST update task files using the Write tool or jq.
+- Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
+```
 
 The report file contains:
 - Per-task evaluations with evidence
@@ -460,7 +509,8 @@ Spawn task-executor with self-contained bundle:
 ```
 Execute task [TASK_ID]
 
-Bundle: project-planning/bundles/[TASK_ID]-bundle.json
+PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+Bundle: {PLANNING_DIR}/bundles/[TASK_ID]-bundle.json
 
 The bundle contains everything you need:
 - Task definition and acceptance criteria
@@ -475,6 +525,8 @@ Instructions:
 2. Implement behaviors in specified files
 3. Run acceptance criteria verification
 4. Report: files created, tests passed, any issues
+
+IMPORTANT: Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
 ```
 
 The subagent:
@@ -486,7 +538,7 @@ The subagent:
 
 ## Bundle Contents
 
-The bundle (`project-planning/bundles/T001-bundle.json`) includes:
+The bundle (`{PLANNING_DIR}/bundles/T001-bundle.json`) includes:
 
 | Field | Purpose |
 |-------|---------|

@@ -12,20 +12,24 @@ Evaluate a completed task's implementation against acceptance criteria. You are 
 
 ## Input
 
-You receive:
+You receive from task-executor:
 ```
 Verify task T001
 
-Bundle: project-planning/bundles/T001-bundle.json
+PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+Bundle: {PLANNING_DIR}/bundles/T001-bundle.json
 Target: /path/to/target/project
 ```
+
+**CRITICAL:** Use the `PLANNING_DIR` absolute path provided. Do NOT use relative paths like `project-planning/`.
 
 ## Protocol
 
 ### 1. Load Context
 
 ```bash
-cat project-planning/bundles/T001-bundle.json
+# Use absolute PLANNING_DIR path from context
+cat {PLANNING_DIR}/bundles/T001-bundle.json
 ```
 
 Extract:
@@ -225,7 +229,7 @@ At the very end of your report, include a JSON block for programmatic parsing:
 
 This JSON block enables the executor to persist verification results via:
 ```bash
-python3 scripts/state.py record-verification T001 \
+cd {PLANNING_DIR}/.. && python3 scripts/state.py record-verification T001 \
   --verdict PASS \
   --recommendation PROCEED \
   --criteria '[...]' \

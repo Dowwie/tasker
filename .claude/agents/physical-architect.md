@@ -13,25 +13,27 @@ Map behaviors to concrete file paths.
 
 ## Output Contract
 
-You MUST write valid JSON to `project-planning/artifacts/physical-map.json`.
+You MUST write valid JSON to `{PLANNING_DIR}/artifacts/physical-map.json`.
 
-**CRITICAL: You must use the Write tool to save the file. Do NOT just output JSON to the conversation.**
+**CRITICAL:
+- You must use the Write tool to save the file. Do NOT just output JSON to the conversation.
+- Use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.**
 
 ### Required Steps (in order):
 
 1. **Create directory FIRST** (MANDATORY - do this before any Write):
    ```bash
-   mkdir -p project-planning/artifacts
+   mkdir -p {PLANNING_DIR}/artifacts
    ```
-   **You MUST run this command before attempting to write any file.**
+   **You MUST run this command before attempting to write any file. Replace {PLANNING_DIR} with the actual path from context.**
 
-2. **Write the file** using the Write tool to `project-planning/artifacts/physical-map.json`
+2. **Write the file** using the Write tool to `{PLANNING_DIR}/artifacts/physical-map.json`
 
-3. **If Write fails with "directory does not exist"**: Run `mkdir -p project-planning/artifacts` again, then retry the Write.
+3. **If Write fails with "directory does not exist"**: Run `mkdir -p {PLANNING_DIR}/artifacts` again, then retry the Write.
 
 4. **Validate** the output:
    ```bash
-   python3 scripts/state.py validate physical_map
+   cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map
    ```
 
 5. **If validation fails**: Read the error, fix the JSON, write again, re-validate
@@ -39,15 +41,16 @@ You MUST write valid JSON to `project-planning/artifacts/physical-map.json`.
 ## Input
 
 **From Orchestrator Spawn Prompt:** You will receive context including:
-- Target directory
+- **PLANNING_DIR** - Absolute path to project-planning directory (e.g., `/Users/foo/tasker/project-planning`)
+- Target directory (where code will be written)
 - Project type (new or existing)
 - Tech stack constraints (if any)
 - Existing project analysis (if enhancing an existing codebase)
 - Key patterns to follow (if existing project)
 
 **From Files:**
-- `project-planning/artifacts/capability-map.json`
-- `project-planning/inputs/constraints.md` (if exists)
+- `{PLANNING_DIR}/artifacts/capability-map.json`
+- `{PLANNING_DIR}/inputs/constraints.md` (if exists)
 
 ## Phase Filtering (Critical)
 
@@ -159,5 +162,5 @@ Before declaring done:
 - [ ] Test files for all domain/api files
 - [ ] Cross-cutting concerns added
 - [ ] Infrastructure files added
-- [ ] **File written** using Write tool to `project-planning/artifacts/physical-map.json`
-- [ ] JSON validates: `python3 scripts/state.py validate physical_map`
+- [ ] **File written** using Write tool to `{PLANNING_DIR}/artifacts/physical-map.json` (absolute path!)
+- [ ] JSON validates: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map`

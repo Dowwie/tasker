@@ -13,12 +13,15 @@ Execute ONE task from a self-contained bundle. Track all changes for potential r
 
 ## Input
 
-You receive:
+You receive from orchestrator:
 ```
 Execute task T001
 
-Bundle: project-planning/bundles/T001-bundle.json
+PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+Bundle: {PLANNING_DIR}/bundles/T001-bundle.json
 ```
+
+**CRITICAL:** Use the `PLANNING_DIR` absolute path provided. Do NOT use relative paths like `project-planning/`.
 
 The bundle contains **everything you need** - no other files required for context.
 
@@ -27,7 +30,8 @@ The bundle contains **everything you need** - no other files required for contex
 ### 1. Load Bundle
 
 ```bash
-cat project-planning/bundles/T001-bundle.json
+# Use absolute PLANNING_DIR path from context
+cat {PLANNING_DIR}/bundles/T001-bundle.json
 ```
 
 The bundle contains:
@@ -46,7 +50,8 @@ The bundle contains:
 ### 2. Mark Started
 
 ```bash
-python3 scripts/state.py start-task T001
+# Run state.py from orchestrator root (parent of PLANNING_DIR)
+cd {PLANNING_DIR}/.. && python3 scripts/state.py start-task T001
 ```
 
 ### 3. Track Changes
@@ -192,7 +197,8 @@ MODIFIED_FILES.append("README.md")
 ```
 Verify task T001
 
-Bundle: project-planning/bundles/T001-bundle.json
+PLANNING_DIR: {PLANNING_DIR}
+Bundle: {PLANNING_DIR}/bundles/T001-bundle.json
 Target: $TARGET_DIR
 ```
 
@@ -215,7 +221,7 @@ The verifier includes a JSON block at the end of its report. Extract it and pers
 # Parse the JSON block from verifier output
 # The JSON contains: task_id, verdict, recommendation, criteria, quality, tests
 
-python3 scripts/state.py record-verification T001 \
+cd {PLANNING_DIR}/.. && python3 scripts/state.py record-verification T001 \
   --verdict PASS \
   --recommendation PROCEED \
   --criteria '[{"name": "...", "score": "PASS", "evidence": "..."}]' \
@@ -228,12 +234,12 @@ python3 scripts/state.py record-verification T001 \
 **If all criteria pass:**
 ```bash
 # Complete with file tracking (include docs and README if modified)
-python3 scripts/state.py complete-task T001 \
+cd {PLANNING_DIR}/.. && python3 scripts/state.py complete-task T001 \
   --created src/auth/validator.py src/auth/errors.py docs/T001-spec.md \
   --modified src/auth/__init__.py README.md
 
 # Commit changes to git
-python3 scripts/state.py commit-task T001
+cd {PLANNING_DIR}/.. && python3 scripts/state.py commit-task T001
 
 # Clean up rollback files
 rm -rf /tmp/rollback-T001
@@ -253,7 +259,7 @@ for bak in /tmp/rollback-T001/*.bak; do
 done
 
 # Mark failed
-python3 scripts/state.py fail-task T001 "Acceptance criteria failed: <details>"
+cd {PLANNING_DIR}/.. && python3 scripts/state.py fail-task T001 "Acceptance criteria failed: <details>"
 ```
 
 ### 8. Report
@@ -265,7 +271,7 @@ Return structured report:
 
 **Task:** T001 - Implement credential validation
 **Status:** COMPLETE | FAILED
-**Bundle:** project-planning/bundles/T001-bundle.json
+**Bundle:** {PLANNING_DIR}/bundles/T001-bundle.json
 
 ### Behaviors Implemented
 - [x] B001: validate_credentials (process)
