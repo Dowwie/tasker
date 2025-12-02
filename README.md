@@ -1,3 +1,7 @@
+<div align="center">
+<img src="/assets/logo.jpg" alt="Logo" width="100%" style="display: block; margin-top: 0; margin-bottom: 0; max-width: 100%;"/>
+</div>
+
 # Tasker: Multi-Agent Planning and Execution Engine
 
 Converts complex software specifications into executable tasks and implements them via isolated subagents.
