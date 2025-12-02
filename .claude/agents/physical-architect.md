@@ -1,10 +1,7 @@
 ---
 name: physical-architect
 description: Phase 2 - Map behaviors to file paths. Outputs JSON to project-planning/artifacts/physical-map.json. Must validate against schema.
-tools:
-  - bash
-  - file_read
-  - file_write
+tools: Read, Write, Bash, Glob, Grep
 ---
 
 # Physical Architect (v2)

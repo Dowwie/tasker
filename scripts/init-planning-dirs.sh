@@ -9,7 +9,7 @@
 #   project-planning/artifacts/  - For capability-map.json, physical-map.json
 #   project-planning/inputs/     - For spec.md
 #   project-planning/tasks/      - For T001.json, T002.json, etc.
-#   project-planning/reports/    - For verification-report.md
+#   project-planning/reports/    - For task-validation-report.md
 #   project-planning/bundles/    - For execution bundles
 #   .claude/logs/                - For activity logging
 

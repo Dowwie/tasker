@@ -44,7 +44,7 @@ This creates:
 - `project-planning/artifacts/` - For capability-map.json, physical-map.json
 - `project-planning/inputs/` - For spec.md
 - `project-planning/tasks/` - For T001.json, T002.json, etc.
-- `project-planning/reports/` - For verification-report.md
+- `project-planning/reports/` - For task-validation-report.md
 - `project-planning/bundles/` - For execution bundles
 - `.claude/logs/` - For activity logging
 
@@ -364,6 +364,8 @@ fi
 
 ### Logical Phase: logic-architect
 
+**Spawn prompt for logic-architect:**
+
 ```
 Extract capabilities and behaviors from the specification.
 
@@ -371,11 +373,9 @@ Extract capabilities and behaviors from the specification.
 
 Log your activity using the logging script:
 
-```bash
 ./scripts/log-activity.sh INFO logic-architect start "Extracting capabilities from spec"
 ./scripts/log-activity.sh INFO logic-architect decision "What decision and why"
 ./scripts/log-activity.sh INFO logic-architect complete "Outcome description"
-```
 
 ## Context
 
@@ -442,6 +442,8 @@ If you complete without the file existing at the absolute path, you have FAILED.
 
 ### Physical Phase: physical-architect
 
+**Spawn prompt for physical-architect:**
+
 ```
 Map behaviors to concrete file paths.
 
@@ -449,11 +451,9 @@ Map behaviors to concrete file paths.
 
 Log your activity using the logging script:
 
-```bash
 ./scripts/log-activity.sh INFO physical-architect start "Mapping behaviors to file paths"
 ./scripts/log-activity.sh INFO physical-architect decision "What decision and why"
 ./scripts/log-activity.sh INFO physical-architect complete "Outcome description"
-```
 
 ## Context
 
@@ -502,6 +502,8 @@ If you complete without the file existing at the absolute path, you have FAILED.
 
 ### Definition Phase: task-author
 
+**Spawn prompt for task-author:**
+
 ```
 Create individual task files from the physical map.
 
@@ -509,11 +511,9 @@ Create individual task files from the physical map.
 
 Log your activity using the logging script:
 
-```bash
 ./scripts/log-activity.sh INFO task-author start "Creating task files from physical map"
 ./scripts/log-activity.sh INFO task-author decision "What decision and why"
 ./scripts/log-activity.sh INFO task-author complete "Outcome description"
-```
 
 ## Context
 
@@ -560,27 +560,33 @@ If you complete without task files existing at the absolute path, you have FAILE
 
 ### Validation Phase Details
 
-The `validation` phase runs **task-plan-verifier** to evaluate task definitions:
+The `validation` phase runs **task-plan-verifier** to evaluate task definitions.
 
-```bash
-# Spawn task-plan-verifier with context
+**Spawn prompt for task-plan-verifier:**
+
+```
 Verify task definitions for planning
 
 ## Logging (MANDATORY)
 
 Log your activity using the logging script:
 
-```bash
 ./scripts/log-activity.sh INFO task-plan-verifier start "Verifying task definitions"
 ./scripts/log-activity.sh INFO task-plan-verifier decision "What decision and why"
 ./scripts/log-activity.sh INFO task-plan-verifier complete "Outcome description"
-```
+
+## Context
 
 PLANNING_DIR: {absolute path to project-planning}
 Spec: {PLANNING_DIR}/inputs/spec.md
 Capability Map: {PLANNING_DIR}/artifacts/capability-map.json
 Tasks Directory: {PLANNING_DIR}/tasks/
 User Preferences: ~/.claude/CLAUDE.md (if exists)
+
+## Required Command
+
+Register verdict using: python3 scripts/state.py validate-tasks <VERDICT> "<summary>"
+(IMPORTANT: The command is validate-tasks, NOT validate-complete or any other variant)
 ```
 
 The verifier:
@@ -601,12 +607,14 @@ python3 scripts/state.py advance
 
 If BLOCKED, the orchestrator:
 1. Displays the verifier's summary to user
-2. Points user to full report: `{PLANNING_DIR}/reports/verification-report.md`
+2. Points user to full report: `{PLANNING_DIR}/reports/task-validation-report.md`
 3. Waits for user to fix task files
 4. Re-runs task-plan-verifier (or user runs `/verify-plan`)
 5. Repeats until READY or READY_WITH_NOTES
 
 ### Sequencing Phase: plan-auditor
+
+**Spawn prompt for plan-auditor:**
 
 ```
 Assign phases to tasks and validate the dependency graph.
@@ -615,11 +623,9 @@ Assign phases to tasks and validate the dependency graph.
 
 Log your activity using the logging script:
 
-```bash
 ./scripts/log-activity.sh INFO plan-auditor start "Assigning phases and validating DAG"
 ./scripts/log-activity.sh INFO plan-auditor decision "What decision and why"
 ./scripts/log-activity.sh INFO plan-auditor complete "Outcome description"
-```
 
 ## Context
 
@@ -633,7 +639,7 @@ PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/projec
 4. Assign phases (1: foundations, 2: steel thread, 3+: features)
 5. **CRITICAL: Update task files** using Write tool to {PLANNING_DIR}/tasks/T001.json etc.
 6. Validate DAG (no cycles, deps in earlier phases)
-7. Run: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
+7. Run: cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks
 
 IMPORTANT:
 - You MUST update task files using the Write tool or jq.

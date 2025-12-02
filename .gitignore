@@ -1,8 +1,10 @@
 # Project-specific state (contains paths, progress)
 project-planning/
 
+
 # Configured settings
 .claude/settings.local.json
+.claude/logs
 
 # Python
 __pycache__/

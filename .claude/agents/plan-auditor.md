@@ -1,10 +1,7 @@
 ---
 name: plan-auditor
 description: Phase 4 - Assign phases, identify steel thread, validate DAG. Updates task files with final phase assignments.
-tools:
-  - bash
-  - file_read
-  - file_write
+tools: Read, Write, Bash, Glob, Grep
 ---
 
 # Plan Auditor (v2)

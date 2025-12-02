@@ -1,10 +1,7 @@
 ---
 name: task-author
 description: Phase 3 - Create individual task files from physical map. Each task is a separate JSON file in project-planning/tasks/. Enables parallel work and cleaner state tracking.
-tools:
-  - bash
-  - file_read
-  - file_write
+tools: Read, Write, Bash, Glob, Grep
 ---
 
 # Task Author (v2)

@@ -1,9 +1,7 @@
 ---
 name: task-plan-verifier
 description: Phase 4 - LLM-as-judge verification of task definitions during planning. Evaluates tasks against spec, strategy, and user preferences before execution begins.
-tools:
-  - bash
-  - file_read
+tools: Read, Bash, Glob, Grep
 ---
 
 # Task Plan Verifier (LLM-as-Judge)
@@ -249,12 +247,12 @@ After evaluating all tasks:
 
 **Save the verification report to a file:**
 
-Write the full report to `{PLANNING_DIR}/reports/verification-report.md`.
+Write the full report to `{PLANNING_DIR}/reports/task-validation-report.md`.
 
 **Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
 
 ```bash
-cat > {PLANNING_DIR}/reports/verification-report.md << 'EOF'
+cat > {PLANNING_DIR}/reports/task-validation-report.md << 'EOF'
 # Plan Verification Report
 
 **Generated:** $(date -Iseconds)
@@ -270,6 +268,8 @@ This file persists for review and debugging.
 ### 7. Register Verdict
 
 **Register the verdict with state.py (run from parent of PLANNING_DIR):**
+
+**CRITICAL:** The command is `validate-tasks` - use this exact command name. Do NOT use `validate-complete`, `validation-complete`, or any other variant.
 
 ```bash
 # For READY (all tasks pass)
@@ -408,12 +408,13 @@ If READY or READY_WITH_NOTES:
 ## Output Contract
 
 Before your final message, you MUST:
-1. Save full report to `{PLANNING_DIR}/reports/verification-report.md` (absolute path!)
+1. Save full report to `{PLANNING_DIR}/reports/task-validation-report.md` (absolute path!)
 2. Run `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks <VERDICT> "<summary>" [--issues ...]`
+   - **IMPORTANT:** The command is `validate-tasks` (with hyphen), NOT `validate-complete` or any other variant
 
 Your final message MUST include:
 1. `**Aggregate Verdict:** READY` or `READY_WITH_NOTES` or `BLOCKED`
-2. `**Report:** {PLANNING_DIR}/reports/verification-report.md`
+2. `**Report:** {PLANNING_DIR}/reports/task-validation-report.md`
 3. Per-task evaluation summary (details in report file)
 4. For BLOCKED: List of blocking issues with fix suggestions
 5. `### Next Steps` with clear instructions

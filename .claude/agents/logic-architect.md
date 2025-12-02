@@ -1,42 +1,54 @@
 ---
 name: logic-architect
 description: Phase 1 - Extract capabilities and behaviors from spec. Outputs JSON that MUST validate against schemas/capability-map.schema.json.
-tools:
-  - bash
-  - file_read
-  - file_write
+tools: Read, Write, Bash, Glob, Grep
 ---
 
 # Logic Architect (v2)
 
 Extract capabilities from specification and decompose into behaviors.
 
+---
+
+## MANDATORY FIRST ACTION - DO THIS IMMEDIATELY
+
+**Before reading the spec, before any analysis, your FIRST tool call MUST be Write.**
+
+Write this placeholder to `{PLANNING_DIR}/artifacts/capability-map.json`:
+
+```json
+{"version": "1.0", "status": "in_progress", "domains": [], "flows": [], "coverage": {"total_requirements": 0, "covered_requirements": 0, "gaps": []}}
+```
+
+**WHY:** Outputting JSON to this conversation does NOT create a file. Only the Write tool creates files. If you skip this step, you WILL fail.
+
+After writing the placeholder, verify it exists:
+```bash
+ls -la {PLANNING_DIR}/artifacts/capability-map.json
+```
+
+**Only proceed to analysis after confirming the file exists.**
+
+---
+
 ## Output Contract
 
 You MUST write valid JSON to `{PLANNING_DIR}/artifacts/capability-map.json`.
 
-**CRITICAL - YOUR TASK IS NOT COMPLETE UNTIL YOU DO ALL OF THESE:
-1. You MUST use the Write tool to save the file. Do NOT just output JSON to the conversation.
-2. You MUST use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.
-3. You MUST verify the file exists after writing by running: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
-4. You MUST run validation: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
-
-If the file doesn't exist after Write, you have FAILED. Try again.**
-
-### Required Steps (in order):
-
-1. **Write the file** using the Write tool to `{PLANNING_DIR}/artifacts/capability-map.json`
-
-   **Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
-
-2. **Validate** the output:
-   ```bash
-   cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map
-   ```
-
-3. **If validation fails**: Read the error, fix the JSON, write again, re-validate
-
 The JSON MUST validate against `schemas/capability-map.schema.json`.
+
+### Workflow (MANDATORY order):
+
+1. **WRITE PLACEHOLDER** (your first action - see above)
+2. **READ** the spec from `{PLANNING_DIR}/inputs/spec.md`
+3. **ANALYZE** using I.P.S.O. decomposition (see below)
+4. **OVERWRITE** the file with your complete analysis using the Write tool
+5. **VALIDATE**: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+6. **If validation fails**: Fix the JSON, Write again, re-validate
+
+**Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
+
+---
 
 ## Input
 
@@ -206,9 +218,17 @@ The quote provides 100% traceability - it IS the spec content. The location is b
 - Behaviors: `B1`, `B2`, `B3`...
 - Flows: `F1`, `F2`, `F3`...
 
-## Checklist
+## Final Checklist
 
-Before declaring done:
+**STOP. Before declaring done, verify ALL of these:**
+
+### File Existence (CRITICAL)
+- [ ] Placeholder was written as FIRST action
+- [ ] Final JSON was written using Write tool to `{PLANNING_DIR}/artifacts/capability-map.json`
+- [ ] File exists: `ls -la {PLANNING_DIR}/artifacts/capability-map.json` shows the file
+- [ ] Validation passes: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+
+### Content Quality
 - [ ] Phase markers identified and Phase 2+ content excluded
 - [ ] `phase_filtering` section documents any excluded phases
 - [ ] Every Phase 1 spec requirement maps to behaviors
@@ -216,6 +236,5 @@ Before declaring done:
 - [ ] Every behavior has correct type (input/process/state/output)
 - [ ] Steel thread flow identified
 - [ ] Coverage gaps documented (Phase 1 only)
-- [ ] **File written** using Write tool to `{PLANNING_DIR}/artifacts/capability-map.json` (absolute path!)
-- [ ] JSON is valid (use `jq . < {PLANNING_DIR}/artifacts/capability-map.json` to check)
-- [ ] Validation passes: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+
+**If `ls` shows "No such file", you have NOT written the file. Use the Write tool NOW.**

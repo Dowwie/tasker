@@ -1,10 +1,7 @@
 ---
 name: task-executor
 description: Execute a single task in isolation. Uses state.py for all state transitions. Tracks files for rollback capability. Context-isolated - no memory of previous tasks.
-tools:
-  - bash
-  - file_read
-  - file_write
+tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 # Task Executor (v2)

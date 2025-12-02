@@ -1,9 +1,7 @@
 ---
 name: task-verifier
 description: LLM-as-judge verification of completed tasks. Evaluates implementation against acceptance criteria using a structured rubric. Returns pass/fail with reasoning.
-tools:
-  - bash
-  - file_read
+tools: Read, Bash, Glob, Grep
 ---
 
 # Task Verifier (LLM-as-Judge)

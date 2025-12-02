@@ -263,14 +263,14 @@ def can_advance_phase(state: dict) -> tuple[bool, str]:
         if not validation.get("valid"):
             verdict = validation.get("verdict", "UNKNOWN")
             if verdict == "BLOCKED":
-                return False, f"Task validation BLOCKED: {validation.get('summary', 'See verification-report.md')}. Fix issues and re-run /verify-plan"
+                return False, f"Task validation BLOCKED: {validation.get('summary', 'See task-validation-report.md')}. Fix issues and re-run /verify-plan"
             return False, "Task validation incomplete or invalid"
         return True, ""
 
     elif current == "sequencing":
-        # Check that all tasks have phases assigned
+        # Check that all tasks have phases assigned (phase can be 0, so check for None)
         for tid, task in state["tasks"].items():
-            if task.get("phase", 0) == 0:
+            if task.get("phase") is None:
                 return False, f"Task {tid} has no phase assigned"
         return True, ""
     
