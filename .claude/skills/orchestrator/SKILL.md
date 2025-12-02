@@ -47,7 +47,7 @@ Triggered by `/plan`. Runs phases 0-5.
 
 ## MANDATORY: Proactive Discovery Phase
 
-**BEFORE asking the user anything**, you MUST perform automatic discovery:
+**BEFORE asking the user anything**, you MUST perform automatic discovery. This phase gathers ALL context needed for planning.
 
 ### Step 1: Search for Existing Specifications
 ```bash
@@ -55,53 +55,26 @@ Triggered by `/plan`. Runs phases 0-5.
 find project-planning -name "*.md" -o -name "*.txt" 2>/dev/null | head -10
 ```
 
-### Step 2: Present Discovery Results
+### Step 2: Gather Initial Inputs
 
-**ALWAYS present what you found** before asking questions:
+Present spec discovery results and gather basic inputs:
 
 ```markdown
 ## Planning Discovery
 
-**Existing specs found:**
-- `project-planning/my_spec.md` (2.3KB)
-- `project-planning/design_doc.md` (5.1KB)
+**Existing specs found:** [list what you found, or "none"]
 
-Would you like me to use one of these existing specs, or do you have a new specification to provide?
+I need a few details to proceed:
+
+1. **Specification** - Use an existing spec above, paste requirements, or provide a file path
+2. **Target Directory** - Where will the code be written?
+3. **Project Type** - Is this a **new project** or **enhancing an existing project**?
+4. **Tech Stack** (optional) - Any specific requirements? (e.g., "Python with FastAPI")
 ```
 
-If NO specs found, say so explicitly:
-```markdown
-## Planning Discovery
+### Step 3: Existing Project Analysis (MANDATORY for existing projects)
 
-No existing specification files found in project-planning/.
-
-I'll need you to provide a specification. You can:
-1. Paste requirements directly into chat
-2. Provide a file path to an existing document
-```
-
-## Plan Inputs
-
-After discovery, gather any remaining inputs:
-
-1. **Specification** - Requirements in any format:
-   - Paste directly into chat, OR
-   - Provide a file path to an existing doc
-   - Accept: PRDs, bullet lists, design docs, freeform descriptions, meeting notes
-
-2. **Target Directory** - Where code will be written (required)
-
-3. **Project Type** - Ask: "Is this a **new project** (create fresh directory) or **enhancing an existing project**?"
-   - **New project**: Confirm/create target directory, proceed normally
-   - **Existing project**: Run directory structure analysis before proceeding (see below)
-
-4. **Tech Stack** (optional, conversational) - Ask: "Any tech stack requirements?"
-   - If yes: note them for the physical-architect
-   - If no: let agents infer from spec or use sensible defaults
-
-## Existing Project Analysis
-
-When enhancing an existing project, **BEFORE proceeding to ingestion**, analyze the target directory:
+**If enhancing an existing project**, you MUST analyze the target directory **BEFORE proceeding to ingestion**. This analysis is CRITICAL - sub-agents cannot see the codebase, so you must extract and pass this context to them.
 
 ```bash
 # Check directory exists
@@ -110,44 +83,103 @@ if [ ! -d "$TARGET_DIR" ]; then
     exit 1
 fi
 
-# Analyze structure
+# Analyze structure (capture output for context)
 echo "=== Project Structure ==="
-tree -L 2 -I 'node_modules|__pycache__|.git|venv|.venv' "$TARGET_DIR" 2>/dev/null || \
-    find "$TARGET_DIR" -maxdepth 2 -type f | head -50
+tree -L 3 -I 'node_modules|__pycache__|.git|venv|.venv|dist|build|.pytest_cache' "$TARGET_DIR" 2>/dev/null || \
+    find "$TARGET_DIR" -maxdepth 3 -type f | head -50
 
-# Identify key files
+# Identify key configuration files
 echo "=== Key Configuration Files ==="
-for f in package.json pyproject.toml Cargo.toml go.mod Makefile requirements.txt setup.py; do
+for f in package.json pyproject.toml Cargo.toml go.mod Makefile requirements.txt setup.py tsconfig.json; do
     [ -f "$TARGET_DIR/$f" ] && echo "Found: $f"
 done
 
-# Check for existing patterns
-echo "=== Existing Code Patterns ==="
-find "$TARGET_DIR" -name "*.py" -o -name "*.ts" -o -name "*.js" | head -5 | while read f; do
-    echo "Sample: $f"
+# Detect source layout patterns
+echo "=== Source Layout ==="
+for d in src lib app pkg cmd internal; do
+    [ -d "$TARGET_DIR/$d" ] && echo "Found directory: $d/"
 done
+
+# Detect test layout
+echo "=== Test Layout ==="
+for d in tests test spec __tests__; do
+    [ -d "$TARGET_DIR/$d" ] && echo "Found test directory: $d/"
+done
+
+# Sample existing code files to understand patterns
+echo "=== Code Samples ==="
+find "$TARGET_DIR" \( -name "*.py" -o -name "*.ts" -o -name "*.js" -o -name "*.go" -o -name "*.rs" \) \
+    -not -path "*node_modules*" -not -path "*__pycache__*" -not -path "*.venv*" | head -10
 ```
 
-**Present findings to user:**
+**Read key files to understand patterns:**
+```bash
+# Read config files to understand dependencies and structure
+[ -f "$TARGET_DIR/pyproject.toml" ] && cat "$TARGET_DIR/pyproject.toml"
+[ -f "$TARGET_DIR/package.json" ] && cat "$TARGET_DIR/package.json"
+
+# Sample a few source files to understand coding patterns
+# (naming conventions, import style, architecture patterns)
+```
+
+**Present findings and store context:**
 ```markdown
 ## Existing Project Analysis
 
 **Directory:** /path/to/project
-**Stack Detected:** Python (pyproject.toml, src/ layout)
-**Key Files:**
-- pyproject.toml (dependencies)
-- src/main.py (entry point)
-- tests/ (existing test suite)
+**Stack Detected:** Python 3.11+ (pyproject.toml with uv)
+**Source Layout:** src/ with module structure
+**Test Layout:** tests/ mirroring src/
 
-**Considerations:**
-- Will integrate with existing module structure
-- Should follow established patterns in codebase
-- Tests should extend existing test framework
+**Key Configuration:**
+- pyproject.toml: dependencies include fastapi, pydantic, loguru
+- Uses ruff for linting, pytest for testing
+
+**Discovered Patterns:**
+- Naming: snake_case for files and functions
+- Imports: absolute imports from src root
+- Architecture: Protocol-based interfaces in src/interfaces/
+- Testing: pytest with fixtures in conftest.py
+
+**Key Files:**
+- src/main.py (entry point)
+- src/interfaces/ (Protocol definitions)
+- src/services/ (business logic)
+- tests/conftest.py (shared fixtures)
+
+**Integration Considerations:**
+- New code must follow existing module structure
+- Must use existing Protocols for interfaces
+- Tests should extend existing fixtures
+- Must pass ruff and existing test suite
 
 Proceed with planning? (y/n)
 ```
 
-This analysis informs the physical-architect about existing structure, ensuring new code integrates properly rather than conflicting with established patterns.
+### Step 4: Store Discovery Context
+
+**CRITICAL:** You must retain this analysis for passing to sub-agents. Store it as a structured context block:
+
+```
+PROJECT_CONTEXT = """
+Directory: {TARGET_DIR}
+Project Type: existing
+Stack: {detected stack}
+Source Layout: {layout pattern}
+Test Layout: {test pattern}
+
+Key Patterns:
+- {pattern 1}
+- {pattern 2}
+- {pattern 3}
+
+Integration Requirements:
+- {requirement 1}
+- {requirement 2}
+"""
+```
+
+This `PROJECT_CONTEXT` MUST be included in every sub-agent spawn prompt (logic-architect, physical-architect, task-author). Without it, sub-agents will design solutions that conflict with existing code.
 
 ## Ingestion: Storing the Spec
 
@@ -246,6 +278,8 @@ fi
 
 **CRITICAL:** Each sub-agent is context-isolated. They CANNOT see the orchestrator's conversation or any information you've gathered from the user. You MUST pass ALL relevant context explicitly in the spawn prompt.
 
+**MANDATORY:** For existing projects, you MUST include the full PROJECT_CONTEXT from the discovery phase. Sub-agents have no visibility into the target codebase - they rely entirely on the context you provide.
+
 ### Logical Phase: logic-architect
 
 ```
@@ -258,8 +292,33 @@ Target Directory: {TARGET_DIR}
 Project Type: {new | existing}
 Tech Stack: {user-provided constraints or "none specified"}
 
-## Existing Project Analysis (if applicable)
-{paste the project structure analysis you performed}
+## Project Context (CRITICAL for existing projects)
+
+{INSERT FULL PROJECT_CONTEXT HERE - this is MANDATORY for existing projects}
+
+Example for existing project:
+"""
+Directory: /Users/foo/my-app
+Project Type: existing
+Stack: Python 3.11+ with FastAPI, managed by uv
+Source Layout: src/ with module packages
+Test Layout: tests/ mirroring src structure
+
+Key Patterns:
+- Naming: snake_case for files and functions
+- Imports: absolute imports from src root
+- Architecture: Protocol-based interfaces in src/interfaces/
+- Error handling: Custom exceptions in src/exceptions.py
+- Logging: loguru with structured logging
+
+Integration Requirements:
+- New capabilities must define Protocols in src/interfaces/
+- Implementations go in src/services/ or src/domain/
+- Must not duplicate existing functionality
+- Must integrate with existing error handling patterns
+"""
+
+For new projects, state: "New project - no existing patterns to follow"
 
 ## Specification Location
 
@@ -270,16 +329,18 @@ Read that file for the complete requirements. The spec has already been stored v
 ## Your Task
 
 1. Read {PLANNING_DIR}/inputs/spec.md
-2. Extract capabilities using I.P.S.O. decomposition
-3. Apply phase filtering (Phase 1 only)
-4. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/artifacts`
-5. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/capability-map.json
-6. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
-7. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+2. **For existing projects:** Consider how new capabilities integrate with existing structure
+3. Extract capabilities using I.P.S.O. decomposition
+4. Apply phase filtering (Phase 1 only)
+5. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/artifacts`
+6. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/capability-map.json
+7. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
+8. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
 
 IMPORTANT:
 - You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
 - Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
+- For existing projects, ensure capabilities don't duplicate what already exists in the codebase.
 ```
 
 ### Physical Phase: physical-architect
@@ -294,29 +355,37 @@ Target Directory: {TARGET_DIR}
 Project Type: {new | existing}
 Tech Stack: {user-provided constraints or "infer from capability-map"}
 
-## Existing Project Analysis (if applicable)
-{paste the project structure analysis - this informs where new files should go}
+## Project Context (CRITICAL for existing projects)
 
-## Key Patterns to Follow
-{if existing project, list discovered patterns like:
-- Source layout: src/ with modules
-- Test layout: tests/ mirroring src/
-- Naming: snake_case for files
-}
+{INSERT FULL PROJECT_CONTEXT HERE - this is MANDATORY for existing projects}
+
+This context tells you:
+- Where source files should go (e.g., src/services/, src/domain/)
+- Where tests should go (e.g., tests/ mirroring src/)
+- Naming conventions to follow
+- Existing patterns to integrate with
+- Files/modules that already exist (don't recreate them)
+
+For new projects, state: "New project - establish sensible conventions"
 
 ## Your Task
 
 1. Read {PLANNING_DIR}/artifacts/capability-map.json
-2. Map each behavior to file paths respecting existing project structure
-3. Add cross-cutting concerns and infrastructure
-4. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/artifacts`
-5. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/physical-map.json
-6. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/physical-map.json`
-7. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map`
+2. **For existing projects:** Map behaviors to paths that FIT the existing structure
+   - Use existing directories (don't create parallel structures)
+   - Follow established naming conventions
+   - Integrate with existing modules where appropriate
+3. For new projects: Establish clean, conventional structure
+4. Add cross-cutting concerns and infrastructure
+5. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/artifacts`
+6. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/physical-map.json
+7. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/physical-map.json`
+8. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map`
 
 IMPORTANT:
 - You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
 - Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
+- For existing projects, respect the established structure - don't fight it.
 ```
 
 ### Definition Phase: task-author
@@ -330,6 +399,16 @@ PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/projec
 Target Directory: {TARGET_DIR}
 Project Type: {new | existing}
 
+## Project Context (for existing projects)
+
+{INSERT FULL PROJECT_CONTEXT HERE if existing project}
+
+Key information for task definitions:
+- Testing patterns (what framework, where fixtures live)
+- Linting/formatting requirements (ruff, eslint, etc.)
+- Build/run commands (make test, uv run pytest, npm test)
+- Integration points with existing code
+
 ## Tech Stack Constraints
 {user-provided constraints that affect implementation}
 
@@ -337,14 +416,19 @@ Project Type: {new | existing}
 
 1. Read {PLANNING_DIR}/artifacts/physical-map.json
 2. Read {PLANNING_DIR}/artifacts/capability-map.json (for behavior details)
-3. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/tasks`
-4. **CRITICAL: Use the Write tool** to save each task file to {PLANNING_DIR}/tasks/T001.json, etc.
-5. **Verify files exist**: `ls -la {PLANNING_DIR}/tasks/`
-6. Load tasks with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
+3. **For existing projects:** Include acceptance criteria that verify integration:
+   - Tests pass with existing test suite
+   - Linting passes (ruff, eslint, etc.)
+   - New code follows established patterns
+4. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/tasks`
+5. **CRITICAL: Use the Write tool** to save each task file to {PLANNING_DIR}/tasks/T001.json, etc.
+6. **Verify files exist**: `ls -la {PLANNING_DIR}/tasks/`
+7. Load tasks with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
 
 IMPORTANT:
 - You MUST use the Write tool to save each file. Simply outputting JSON to the conversation is NOT sufficient.
 - Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
+- For existing projects, tasks must include verification that new code integrates cleanly.
 ```
 
 ### Validation Phase Details

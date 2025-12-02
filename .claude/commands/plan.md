@@ -8,33 +8,80 @@ Decompose a specification into an executable task DAG.
 
 **You MUST immediately perform these actions before asking the user anything:**
 
-1. **Search for existing specification files in project-planning/:**
-   ```bash
-   find project-planning -name "*.md" -o -name "*.txt" 2>/dev/null | head -10
-   ```
+### Step 1: Search for Existing Specs
+```bash
+find project-planning -name "*.md" -o -name "*.txt" 2>/dev/null | head -10
+```
 
-2. **Present your findings** to the user with a summary like:
-   ```
-   ## Planning Discovery
+### Step 2: Gather Initial Inputs
 
-   Found specs: [list what you found, or "none"]
+Present findings and ask:
+```
+## Planning Discovery
 
-   [Then ask if they want to use an existing spec or provide a new one]
-   ```
+**Existing specs found:** [list what you found, or "none"]
 
-## Input Required
+I need a few details:
+1. **Specification** - Use existing spec, paste requirements, or provide a file path
+2. **Target Directory** - Where will the code be written?
+3. **Project Type** - Is this a **new project** or **enhancing an existing project**?
+4. **Tech Stack** (optional) - Any specific requirements?
+```
 
-After discovery, gather any remaining inputs:
+### Step 3: Existing Project Analysis (MANDATORY for existing projects)
 
-1. **Specification** - Paste your requirements directly, or provide a file path. Any format works:
+**If the user says "existing project"**, you MUST analyze the target directory BEFORE proceeding. Sub-agents cannot see the codebase - you must extract this context for them.
+
+```bash
+# Analyze structure
+tree -L 3 -I 'node_modules|__pycache__|.git|venv|.venv' "$TARGET_DIR" 2>/dev/null
+
+# Find config files
+for f in package.json pyproject.toml Cargo.toml go.mod Makefile; do
+    [ -f "$TARGET_DIR/$f" ] && echo "Found: $f"
+done
+
+# Read key config files to understand stack and patterns
+[ -f "$TARGET_DIR/pyproject.toml" ] && cat "$TARGET_DIR/pyproject.toml"
+[ -f "$TARGET_DIR/package.json" ] && cat "$TARGET_DIR/package.json"
+```
+
+**Present analysis to user:**
+```
+## Existing Project Analysis
+
+**Directory:** /path/to/project
+**Stack Detected:** [what you found]
+**Source Layout:** [src/, lib/, etc.]
+**Test Layout:** [tests/, __tests__, etc.]
+
+**Discovered Patterns:**
+- [naming conventions]
+- [architecture patterns]
+- [existing modules]
+
+**Integration Considerations:**
+- [how new code should fit]
+
+Proceed with planning? (y/n)
+```
+
+**Store this as PROJECT_CONTEXT** - you MUST pass it to every sub-agent spawn.
+
+## Input Summary
+
+After discovery, you should have:
+
+1. **Specification** - Requirements in any format:
    - PRDs, design docs, Notion exports
    - Bullet lists, freeform descriptions
-   - Slack thread summaries, meeting notes
    - Existing README or spec files
 
-2. **Target Directory** - Where the code will be written (e.g., `/path/to/my-project`)
+2. **Target Directory** - Where the code will be written
 
-3. **Tech Stack** (optional) - Any constraints like:
+3. **Project Type** - New or existing (if existing, you have PROJECT_CONTEXT)
+
+4. **Tech Stack** (optional) - Any constraints like:
    - "Python with FastAPI"
    - "Use existing React setup"
    - "Must integrate with PostgreSQL"
