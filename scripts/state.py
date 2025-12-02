@@ -310,7 +310,15 @@ def register_artifact(state: dict, artifact_type: str, path: str) -> tuple[bool,
     """Register and validate an artifact."""
     artifact_path = Path(path)
     if not artifact_path.exists():
-        return False, f"Artifact not found: {path}"
+        # Provide helpful guidance on the expected location
+        expected_dir = artifact_path.parent
+        dir_exists = expected_dir.exists()
+        hint = ""
+        if not dir_exists:
+            hint = f" (directory {expected_dir} does not exist - agent may need to run 'mkdir -p {expected_dir}' first)"
+        else:
+            hint = f" (directory exists but file is missing - agent may not have written the file)"
+        return False, f"Artifact not found: {path}{hint}"
     
     # Load and validate
     try:

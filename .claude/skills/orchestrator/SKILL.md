@@ -187,12 +187,45 @@ while phase not in ["ready", "executing", "complete"]:
     1. Query current phase
     2. Spawn appropriate agent WITH FULL CONTEXT (see spawn templates below)
     3. Wait for agent to complete
-    4. Validate output:
+    4. **VERIFY OUTPUT EXISTS** (critical - see below)
+    5. Validate output:
        - For artifacts: state.py validate <artifact>
        - For task validation: state.py validate-tasks <verdict>
-    5. If valid: state.py advance
-    6. If invalid: Tell agent to fix, re-validate
+    6. If valid: state.py advance
+    7. If invalid: Tell agent to fix, re-validate
 ```
+
+## CRITICAL: Output Verification Before Validation
+
+**MANDATORY STEP:** After each agent completes, you MUST verify its output file exists before attempting validation.
+
+```bash
+# After logic-architect completes:
+if [ ! -f project-planning/artifacts/capability-map.json ]; then
+    echo "ERROR: capability-map.json not written. Agent must retry."
+    # Re-spawn the agent with explicit reminder to use Write tool
+fi
+
+# After physical-architect completes:
+if [ ! -f project-planning/artifacts/physical-map.json ]; then
+    echo "ERROR: physical-map.json not written. Agent must retry."
+    # Re-spawn the agent with explicit reminder to use Write tool
+fi
+
+# After task-author completes:
+task_count=$(ls project-planning/tasks/*.json 2>/dev/null | wc -l)
+if [ "$task_count" -eq 0 ]; then
+    echo "ERROR: No task files written. Agent must retry."
+    # Re-spawn the agent with explicit reminder to use Write tool
+fi
+```
+
+**Why this matters:** Sub-agents may fail silently (e.g., output JSON to conversation instead of writing to file). The orchestrator MUST verify files exist before calling `state.py validate`, otherwise validation will fail with "Artifact not found" which is confusing.
+
+**Recovery procedure:** If file doesn't exist:
+1. Check if directory exists: `ls -la project-planning/artifacts/`
+2. Re-spawn the agent with this explicit reminder:
+   > "IMPORTANT: You must use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient. The file must exist at the specified path."
 
 ## Agent Spawn Templates
 
@@ -223,8 +256,12 @@ Read that file for the complete requirements. The spec has already been stored v
 1. Read project-planning/inputs/spec.md
 2. Extract capabilities using I.P.S.O. decomposition
 3. Apply phase filtering (Phase 1 only)
-4. Write output to project-planning/artifacts/capability-map.json
-5. Validate with: python3 scripts/state.py validate capability_map
+4. **CRITICAL: Create directory first**: `mkdir -p project-planning/artifacts`
+5. **CRITICAL: Use the Write tool** to save to project-planning/artifacts/capability-map.json
+6. **Verify file exists**: `ls -la project-planning/artifacts/capability-map.json`
+7. Validate with: python3 scripts/state.py validate capability_map
+
+IMPORTANT: You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
 ```
 
 ### Physical Phase: physical-architect
@@ -253,8 +290,12 @@ Tech Stack: {user-provided constraints or "infer from capability-map"}
 1. Read project-planning/artifacts/capability-map.json
 2. Map each behavior to file paths respecting existing project structure
 3. Add cross-cutting concerns and infrastructure
-4. Write output to project-planning/artifacts/physical-map.json
-5. Validate with: python3 scripts/state.py validate physical_map
+4. **CRITICAL: Create directory first**: `mkdir -p project-planning/artifacts`
+5. **CRITICAL: Use the Write tool** to save to project-planning/artifacts/physical-map.json
+6. **Verify file exists**: `ls -la project-planning/artifacts/physical-map.json`
+7. Validate with: python3 scripts/state.py validate physical_map
+
+IMPORTANT: You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
 ```
 
 ### Definition Phase: task-author
@@ -274,8 +315,12 @@ Project Type: {new | existing}
 
 1. Read project-planning/artifacts/physical-map.json
 2. Read project-planning/artifacts/capability-map.json (for behavior details)
-3. Create task files in project-planning/tasks/
-4. Load tasks with: python3 scripts/state.py load-tasks
+3. **CRITICAL: Create directory first**: `mkdir -p project-planning/tasks`
+4. **CRITICAL: Use the Write tool** to save each task file to project-planning/tasks/T001.json, etc.
+5. **Verify files exist**: `ls -la project-planning/tasks/`
+6. Load tasks with: python3 scripts/state.py load-tasks
+
+IMPORTANT: You MUST use the Write tool to save each file. Simply outputting JSON to the conversation is NOT sufficient.
 ```
 
 ### Validation Phase Details
