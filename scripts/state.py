@@ -44,6 +44,10 @@ Usage:
     state.py record-calibration <task_id> <outcome> [notes]
                                           Record verifier calibration data
     state.py calibration-score            Show verifier calibration metrics
+    state.py halt [reason]                Request graceful halt of execution
+    state.py check-halt                   Check if halt requested (STOP file or flag)
+    state.py resume                       Clear halt flag and resume execution
+    state.py halt-status                  Show current halt status
 """
 
 import json
@@ -59,6 +63,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 PLANNING_DIR = PROJECT_ROOT / "project-planning"
 STATE_FILE = PLANNING_DIR / "state.json"
 SCHEMAS_DIR = PROJECT_ROOT / "schemas"
+STOP_FILE = PLANNING_DIR / "STOP"  # Touch file to signal halt
 
 
 def now_iso() -> str:
@@ -951,6 +956,192 @@ def get_calibration_score(state: dict) -> float:
     return correct / total
 
 
+# =============================================================================
+# Graceful Halt / Resume
+# =============================================================================
+
+
+def check_stop_file() -> bool:
+    """Check if STOP file exists in project-planning directory."""
+    return STOP_FILE.exists()
+
+
+def remove_stop_file() -> bool:
+    """Remove STOP file if it exists. Returns True if file was removed."""
+    if STOP_FILE.exists():
+        STOP_FILE.unlink()
+        return True
+    return False
+
+
+def check_halt(state: dict) -> tuple[bool, str | None]:
+    """Check if halt has been requested via STOP file or state flag.
+
+    Returns:
+        (is_halted, reason) tuple
+    """
+    # Check STOP file first (takes precedence)
+    if check_stop_file():
+        return True, "stop_file"
+
+    # Check state flag
+    halt = state.get("halt", {})
+    if halt.get("requested"):
+        return True, halt.get("reason", "manual")
+
+    return False, None
+
+
+def request_halt(
+    state: dict,
+    reason: str = "manual",
+    active_task: str | None = None,
+) -> tuple[bool, str]:
+    """Request graceful halt of execution.
+
+    Args:
+        state: Current state dict
+        reason: Why halt was requested (user_message, stop_file, manual)
+        active_task: Task that was running when halt was requested
+
+    Returns:
+        (success, message) tuple
+    """
+    # Initialize halt section if not present
+    if "halt" not in state:
+        state["halt"] = {
+            "requested": False,
+            "requested_at": None,
+            "reason": None,
+            "halted_at": None,
+            "active_task": None,
+            "resumable": True,
+        }
+
+    halt = state["halt"]
+
+    # Already halted?
+    if halt.get("requested"):
+        return False, f"Halt already requested at {halt.get('requested_at')}"
+
+    halt["requested"] = True
+    halt["requested_at"] = now_iso()
+    halt["reason"] = reason
+    halt["active_task"] = active_task
+    halt["resumable"] = True
+
+    add_event(state, "halt_requested", details={
+        "reason": reason,
+        "active_task": active_task,
+    })
+
+    return True, f"Halt requested: {reason}"
+
+
+def confirm_halt(state: dict) -> tuple[bool, str]:
+    """Confirm that halt has completed (all tasks stopped).
+
+    Called after the executor has finished its current task and stopped.
+
+    Returns:
+        (success, message) tuple
+    """
+    halt = state.get("halt", {})
+    if not halt.get("requested"):
+        return False, "No halt was requested"
+
+    halt["halted_at"] = now_iso()
+
+    # Check for any running tasks
+    running_tasks = [
+        tid for tid, task in state.get("tasks", {}).items()
+        if task.get("status") == "running"
+    ]
+
+    if running_tasks:
+        halt["active_task"] = running_tasks[0]  # Track first running task
+
+    add_event(state, "halt_confirmed", details={
+        "running_tasks": running_tasks,
+    })
+
+    return True, f"Halt confirmed. Running tasks: {running_tasks}"
+
+
+def resume_execution(state: dict) -> tuple[bool, str]:
+    """Clear halt flag and prepare for resumed execution.
+
+    Returns:
+        (success, message) tuple
+    """
+    halt = state.get("halt", {})
+
+    if not halt.get("requested"):
+        return False, "No halt to resume from"
+
+    if not halt.get("resumable", True):
+        return False, "Halt is not resumable (requires manual intervention)"
+
+    # Remove STOP file if present
+    stop_file_removed = remove_stop_file()
+
+    # Clear halt state
+    previous_reason = halt.get("reason")
+    previous_task = halt.get("active_task")
+
+    state["halt"] = {
+        "requested": False,
+        "requested_at": None,
+        "reason": None,
+        "halted_at": None,
+        "active_task": None,
+        "resumable": True,
+    }
+
+    add_event(state, "execution_resumed", details={
+        "previous_reason": previous_reason,
+        "previous_active_task": previous_task,
+        "stop_file_removed": stop_file_removed,
+    })
+
+    msg = "Execution resumed"
+    if stop_file_removed:
+        msg += " (STOP file removed)"
+    if previous_task:
+        msg += f". Previously active task: {previous_task}"
+
+    return True, msg
+
+
+def get_halt_status(state: dict) -> dict:
+    """Get current halt status including STOP file check.
+
+    Returns:
+        Dict with halt status information
+    """
+    halt = state.get("halt", {})
+    stop_file_exists = check_stop_file()
+
+    is_halted, reason = check_halt(state)
+
+    # Find any running tasks
+    running_tasks = [
+        tid for tid, task in state.get("tasks", {}).items()
+        if task.get("status") == "running"
+    ]
+
+    return {
+        "is_halted": is_halted,
+        "reason": reason,
+        "requested_at": halt.get("requested_at"),
+        "halted_at": halt.get("halted_at"),
+        "stop_file_exists": stop_file_exists,
+        "active_task": halt.get("active_task"),
+        "running_tasks": running_tasks,
+        "resumable": halt.get("resumable", True),
+    }
+
+
 def compute_planning_metrics(state: dict) -> dict:
     """Compute planning quality metrics.
 
@@ -1326,23 +1517,35 @@ def compute_metrics(state: dict) -> dict:
 
 def print_status(state: dict) -> None:
     """Print human-readable status."""
+    # Check halt status first
+    is_halted, halt_reason = check_halt(state)
+    if is_halted:
+        print(f"⚠️  HALTED: {halt_reason}")
+        halt = state.get("halt", {})
+        if halt.get("active_task"):
+            print(f"   Active task at halt: {halt['active_task']}")
+        print()
+
     print(f"Phase: {state['phase']['current']}")
     print(f"Target: {state['target_dir']}")
     print(f"Tasks: {len(state['tasks'])}")
-    
+
     if state["tasks"]:
         by_status = {}
         for task in state["tasks"].values():
             status = task["status"]
             by_status[status] = by_status.get(status, 0) + 1
         print(f"Status: {by_status}")
-    
+
     print(f"Tokens: {state['execution']['total_tokens']:,}")
     print(f"Cost: ${state['execution']['total_cost_usd']:.4f}")
-    
+
     ready = get_ready_tasks(state)
     if ready:
-        print(f"Ready tasks: {ready}")
+        if is_halted:
+            print(f"Ready tasks (paused): {ready}")
+        else:
+            print(f"Ready tasks: {ready}")
 
 
 def main():
@@ -1833,6 +2036,109 @@ def main():
             print()
             print(f"Retryable:                 {metrics['retryable_count']}")
             print(f"Non-retryable:             {metrics['non_retryable_count']}")
+
+    elif cmd == "halt":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        reason = sys.argv[2] if len(sys.argv) > 2 else "manual"
+
+        # Get current active task if any
+        active_tasks = state["execution"].get("active_tasks", [])
+        active_task = active_tasks[0] if active_tasks else None
+
+        success, msg = request_halt(state, reason, active_task)
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+
+    elif cmd == "check-halt":
+        state = load_state()
+        if not state:
+            # Even without state, check for STOP file
+            if check_stop_file():
+                print("HALTED: stop_file")
+                sys.exit(1)
+            print("OK")
+            sys.exit(0)
+
+        is_halted, reason = check_halt(state)
+        if is_halted:
+            print(f"HALTED: {reason}")
+            sys.exit(1)
+        else:
+            print("OK")
+            sys.exit(0)
+
+    elif cmd == "resume":
+        state = load_state()
+        if not state:
+            # Even without state, we can remove the STOP file
+            if remove_stop_file():
+                print("STOP file removed. No state to resume.")
+                sys.exit(0)
+            else:
+                print("No halt state or STOP file to clear.")
+                sys.exit(1)
+
+        success, msg = resume_execution(state)
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
+
+    elif cmd == "halt-status":
+        state = load_state()
+        if not state:
+            # Just check STOP file
+            stop_exists = check_stop_file()
+            status = {
+                "is_halted": stop_exists,
+                "reason": "stop_file" if stop_exists else None,
+                "stop_file_exists": stop_exists,
+                "running_tasks": [],
+                "resumable": True,
+            }
+        else:
+            status = get_halt_status(state)
+
+        output_format = "text"
+        if len(sys.argv) > 2 and sys.argv[2] == "--format" and len(sys.argv) > 3:
+            output_format = sys.argv[3]
+
+        if output_format == "json":
+            print(json.dumps(status, indent=2))
+        else:
+            print("Halt Status")
+            print("=" * 40)
+            print(f"Halted:                    {'YES' if status['is_halted'] else 'NO'}")
+            if status["is_halted"]:
+                print(f"Reason:                    {status['reason']}")
+                if status.get("requested_at"):
+                    print(f"Requested at:              {status['requested_at']}")
+                if status.get("halted_at"):
+                    print(f"Halted at:                 {status['halted_at']}")
+            print(f"STOP file exists:          {'YES' if status['stop_file_exists'] else 'NO'}")
+            if status.get("active_task"):
+                print(f"Active task at halt:       {status['active_task']}")
+            if status.get("running_tasks"):
+                print(f"Running tasks:             {', '.join(status['running_tasks'])}")
+            print(f"Resumable:                 {'YES' if status['resumable'] else 'NO'}")
+
+    elif cmd == "confirm-halt":
+        state = load_state()
+        if not state:
+            print("No state file.")
+            sys.exit(1)
+
+        success, msg = confirm_halt(state)
+        if success:
+            save_state(state)
+        print(msg)
+        sys.exit(0 if success else 1)
 
     else:
         print(f"Unknown command: {cmd}")

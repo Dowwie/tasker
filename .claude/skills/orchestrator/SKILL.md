@@ -691,6 +691,17 @@ python3 scripts/state.py status
 
 ```bash
 while true; do
+    # 0. CHECK FOR HALT (CRITICAL - must check before each task)
+    python3 scripts/state.py check-halt
+    if [ $? -ne 0 ]; then
+        echo "⚠️  Halt requested. Stopping execution gracefully."
+        python3 scripts/state.py confirm-halt
+        python3 scripts/state.py status
+        echo ""
+        echo "To resume: python3 scripts/state.py resume"
+        break
+    fi
+
     # 1. Get ready tasks
     READY=$(python3 scripts/state.py ready-tasks)
 
@@ -734,9 +745,80 @@ while true; do
         python3 scripts/state.py fail-task $TASK_ID "$ERROR"
     fi
 
-    # 8. Ask to continue (unless --batch mode)
+    # 8. Check for halt AFTER task completion
+    python3 scripts/state.py check-halt
+    if [ $? -ne 0 ]; then
+        echo "⚠️  Halt requested after task $TASK_ID. Stopping gracefully."
+        python3 scripts/state.py confirm-halt
+        break
+    fi
+
+    # 9. Ask to continue (unless --batch mode)
     read -p "Continue? (y/n): " CONTINUE
 done
+```
+
+## Graceful Halt and Resume
+
+The executor supports graceful halt via two mechanisms:
+
+### 1. STOP File (Recommended for External Control)
+
+Create a `STOP` file in the `project-planning/` directory:
+
+```bash
+touch project-planning/STOP
+```
+
+The executor checks for this file before starting each new task and after completing each task. When detected:
+1. Current task (if running) completes normally
+2. No new tasks are started
+3. State is saved with halt information
+4. Clean exit with instructions to resume
+
+### 2. User Message (For Interactive Sessions)
+
+If a user sends "STOP" during an interactive `/execute` session, the orchestrator should:
+1. Call `python3 scripts/state.py halt user_message`
+2. Allow current task to complete
+3. Exit gracefully
+
+### Resuming Execution
+
+To resume after a halt:
+
+```bash
+# Check current halt status
+python3 scripts/state.py halt-status
+
+# Clear halt and resume
+python3 scripts/state.py resume
+
+# Then run /execute again
+```
+
+The resume command:
+- Removes the STOP file if present
+- Clears the halt flag in state
+- Logs the resume event
+
+### Halt Status Commands
+
+```bash
+# Request halt (called by orchestrator when user sends STOP)
+python3 scripts/state.py halt [reason]
+
+# Check if halted (exit code 1 = halted, 0 = ok)
+python3 scripts/state.py check-halt
+
+# Confirm halt completed (after executor stops)
+python3 scripts/state.py confirm-halt
+
+# Show detailed halt status
+python3 scripts/state.py halt-status [--format json]
+
+# Clear halt and resume
+python3 scripts/state.py resume
 ```
 
 ## Subagent Spawn
@@ -836,6 +918,13 @@ python3 scripts/state.py start-task <id> # Mark running
 python3 scripts/state.py complete-task <id>  # Mark done
 python3 scripts/state.py fail-task <id> <e>  # Mark failed
 python3 scripts/state.py load-tasks      # Reload from files
+
+# Halt / Resume
+python3 scripts/state.py halt [reason]   # Request graceful halt
+python3 scripts/state.py check-halt      # Check if halted (exit 1 = halted)
+python3 scripts/state.py confirm-halt    # Confirm halt completed
+python3 scripts/state.py halt-status     # Show halt status
+python3 scripts/state.py resume          # Clear halt, resume execution
 
 # Bundles
 python3 scripts/bundle.py generate <id>   # Generate bundle for task
