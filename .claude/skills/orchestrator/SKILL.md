@@ -32,9 +32,44 @@ The orchestrator ONLY:
 
 Triggered by `/plan`. Runs phases 0-5.
 
+## MANDATORY: Proactive Discovery Phase
+
+**BEFORE asking the user anything**, you MUST perform automatic discovery:
+
+### Step 1: Search for Existing Specifications
+```bash
+# Search project-planning directory for spec files
+find project-planning -name "*.md" -o -name "*.txt" 2>/dev/null | head -10
+```
+
+### Step 2: Present Discovery Results
+
+**ALWAYS present what you found** before asking questions:
+
+```markdown
+## Planning Discovery
+
+**Existing specs found:**
+- `project-planning/my_spec.md` (2.3KB)
+- `project-planning/design_doc.md` (5.1KB)
+
+Would you like me to use one of these existing specs, or do you have a new specification to provide?
+```
+
+If NO specs found, say so explicitly:
+```markdown
+## Planning Discovery
+
+No existing specification files found in project-planning/.
+
+I'll need you to provide a specification. You can:
+1. Paste requirements directly into chat
+2. Provide a file path to an existing document
+```
+
 ## Plan Inputs
 
-Ask user for:
+After discovery, gather any remaining inputs:
 
 1. **Specification** - Requirements in any format:
    - Paste directly into chat, OR

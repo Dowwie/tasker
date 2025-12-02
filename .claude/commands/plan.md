@@ -4,9 +4,27 @@ Decompose a specification into an executable task DAG.
 
 **IMPORTANT:** This command uses the `orchestrator` skill. You MUST follow the full plan loop defined in `.claude/skills/orchestrator/SKILL.md`, executing ALL phases 0-5 sequentially. Do NOT stop after task definition - Phase 4 (validation) is mandatory.
 
+## FIRST: Automatic Discovery (MANDATORY)
+
+**You MUST immediately perform these actions before asking the user anything:**
+
+1. **Search for existing specification files in project-planning/:**
+   ```bash
+   find project-planning -name "*.md" -o -name "*.txt" 2>/dev/null | head -10
+   ```
+
+2. **Present your findings** to the user with a summary like:
+   ```
+   ## Planning Discovery
+
+   Found specs: [list what you found, or "none"]
+
+   [Then ask if they want to use an existing spec or provide a new one]
+   ```
+
 ## Input Required
 
-The planner will ask you for:
+After discovery, gather any remaining inputs:
 
 1. **Specification** - Paste your requirements directly, or provide a file path. Any format works:
    - PRDs, design docs, Notion exports
