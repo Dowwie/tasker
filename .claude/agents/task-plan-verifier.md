@@ -249,15 +249,9 @@ After evaluating all tasks:
 
 **Save the verification report to a file:**
 
-**MANDATORY: Create the directory FIRST before writing (use absolute PLANNING_DIR path):**
-```bash
-mkdir -p {PLANNING_DIR}/reports
-```
-**You MUST run this command before attempting to write any file.**
-
 Write the full report to `{PLANNING_DIR}/reports/verification-report.md`.
 
-**If Write fails with "directory does not exist"**: Run `mkdir -p {PLANNING_DIR}/reports` again, then retry the Write.
+**Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
 
 ```bash
 cat > {PLANNING_DIR}/reports/verification-report.md << 'EOF'

@@ -15,28 +15,26 @@ Extract capabilities from specification and decompose into behaviors.
 
 You MUST write valid JSON to `{PLANNING_DIR}/artifacts/capability-map.json`.
 
-**CRITICAL:
-- You must use the Write tool to save the file. Do NOT just output JSON to the conversation.
-- Use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.**
+**CRITICAL - YOUR TASK IS NOT COMPLETE UNTIL YOU DO ALL OF THESE:
+1. You MUST use the Write tool to save the file. Do NOT just output JSON to the conversation.
+2. You MUST use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.
+3. You MUST verify the file exists after writing by running: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
+4. You MUST run validation: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+
+If the file doesn't exist after Write, you have FAILED. Try again.**
 
 ### Required Steps (in order):
 
-1. **Create directory FIRST** (MANDATORY - do this before any Write):
-   ```bash
-   mkdir -p {PLANNING_DIR}/artifacts
-   ```
-   **You MUST run this command before attempting to write any file. Replace {PLANNING_DIR} with the actual path from context.**
+1. **Write the file** using the Write tool to `{PLANNING_DIR}/artifacts/capability-map.json`
 
-2. **Write the file** using the Write tool to `{PLANNING_DIR}/artifacts/capability-map.json`
+   **Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
 
-3. **If Write fails with "directory does not exist"**: Run `mkdir -p {PLANNING_DIR}/artifacts` again, then retry the Write.
-
-4. **Validate** the output:
+2. **Validate** the output:
    ```bash
    cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map
    ```
 
-5. **If validation fails**: Read the error, fix the JSON, write again, re-validate
+3. **If validation fails**: Read the error, fix the JSON, write again, re-validate
 
 The JSON MUST validate against `schemas/capability-map.schema.json`.
 

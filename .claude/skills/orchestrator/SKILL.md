@@ -26,6 +26,84 @@ The orchestrator ONLY:
 - Dispatches agents based on mode/phase
 - Handles user interaction
 
+---
+
+## Directory Initialization (MANDATORY FIRST STEP)
+
+**CRITICAL:** Before ANY other operation in `/plan` or `/execute` mode, the orchestrator MUST initialize the complete directory structure. This is the ONLY place where directories are created - sub-agents assume directories already exist.
+
+### Setup (Run at start of any /plan or /execute session)
+
+Run the initialization script:
+
+```bash
+./scripts/init-planning-dirs.sh
+```
+
+This creates:
+- `project-planning/artifacts/` - For capability-map.json, physical-map.json
+- `project-planning/inputs/` - For spec.md
+- `project-planning/tasks/` - For T001.json, T002.json, etc.
+- `project-planning/reports/` - For verification-report.md
+- `project-planning/bundles/` - For execution bundles
+- `.claude/logs/` - For activity logging
+
+The script outputs the `PLANNING_DIR` absolute path which you must capture and pass to all sub-agents.
+
+**Why centralized initialization?**
+1. **Reliability**: Sub-agents run in isolated contexts and directory creation has been unreliable
+2. **Single responsibility**: Orchestrator owns the directory structure, sub-agents own the content
+3. **Fail-fast**: If directory creation fails, we catch it immediately rather than mid-workflow
+
+**IMPORTANT:** Sub-agents must NOT create directories. They assume the directory structure already exists. If a sub-agent encounters a "directory does not exist" error, it indicates the orchestrator failed to initialize properly.
+
+## Runtime Logging (MANDATORY)
+
+All orchestrator activity and sub-agent activity MUST be logged using `./scripts/log-activity.sh`.
+
+### Logging Script Usage
+
+```bash
+./scripts/log-activity.sh <LEVEL> <AGENT> <EVENT> "<MESSAGE>"
+```
+
+**Parameters:**
+- `LEVEL`: INFO, WARN, ERROR
+- `AGENT`: orchestrator, logic-architect, physical-architect, task-author, etc.
+- `EVENT`: start, decision, tool, complete, spawn, spawn-complete, phase-transition, validation
+- `MESSAGE`: Description of the activity
+
+### Orchestrator Logging Examples
+
+```bash
+./scripts/log-activity.sh INFO orchestrator phase-transition "moving from logical to physical"
+./scripts/log-activity.sh INFO orchestrator spawn "launching logic-architect for capability extraction"
+./scripts/log-activity.sh INFO orchestrator spawn-complete "logic-architect finished with SUCCESS"
+./scripts/log-activity.sh INFO orchestrator validation "capability_map - PASSED"
+```
+
+### Sub-Agent Logging Instructions
+
+**CRITICAL:** Include these logging instructions in EVERY sub-agent spawn prompt. Sub-agents are context-isolated and will not see this skill file - they must receive logging instructions explicitly.
+
+Add this block to every spawn prompt:
+
+```
+## Logging (MANDATORY)
+
+Log your activity using the logging script:
+
+\`\`\`bash
+./scripts/log-activity.sh INFO $AGENT_NAME start "Starting task description"
+./scripts/log-activity.sh INFO $AGENT_NAME decision "What decision and why"
+./scripts/log-activity.sh INFO $AGENT_NAME complete "Outcome description"
+./scripts/log-activity.sh WARN $AGENT_NAME warning "Warning message"
+./scripts/log-activity.sh ERROR $AGENT_NAME error "Error message"
+\`\`\`
+
+Replace $AGENT_NAME with your agent name (e.g., logic-architect, task-executor).
+```
+
 ## CRITICAL: Path Management
 
 **PLANNING_DIR must be an absolute path.** Sub-agents run in isolated contexts and cannot resolve relative paths correctly.
@@ -183,11 +261,10 @@ This `PROJECT_CONTEXT` MUST be included in every sub-agent spawn prompt (logic-a
 
 ## Ingestion: Storing the Spec
 
-First, check if the spec already exists:
+First, check if the spec already exists (directory was created during initialization):
 
 ```bash
-mkdir -p project-planning/inputs
-if [ -f project-planning/inputs/spec.md ]; then
+if [ -f "$PLANNING_DIR/inputs/spec.md" ]; then
     echo "Spec found, proceeding to planning..."
 fi
 ```
@@ -196,8 +273,8 @@ fi
 
 **If spec doesn't exist**, ask user for specification, then:
 
-- **User provides a file path** → `cp /path/to/spec project-planning/inputs/spec.md`
-- **User pastes content** → Write it to `project-planning/inputs/spec.md`
+- **User provides a file path** → `cp /path/to/spec "$PLANNING_DIR/inputs/spec.md"`
+- **User pastes content** → Write it to `$PLANNING_DIR/inputs/spec.md`
 
 **Important:** Store the spec exactly as provided - no transformation, summarization, or normalization.
 
@@ -205,7 +282,7 @@ fi
 
 ```bash
 # Initialize if no state exists
-if [ ! -f project-planning/state.json ]; then
+if [ ! -f "$PLANNING_DIR/state.json" ]; then
     python3 scripts/state.py init "$TARGET_DIR"
 fi
 
@@ -233,12 +310,17 @@ while phase not in ["ready", "executing", "complete"]:
     2. Spawn appropriate agent WITH FULL CONTEXT (see spawn templates below)
     3. Wait for agent to complete
     4. **VERIFY OUTPUT EXISTS** (critical - see below)
-    5. Validate output:
+       - DO NOT log spawn-complete until file verified
+       - DO NOT proceed to validation until file verified
+    5. If file missing: RE-SPAWN agent immediately (see recovery below)
+    6. Validate output:
        - For artifacts: state.py validate <artifact>
        - For task validation: state.py validate-tasks <verdict>
-    6. If valid: state.py advance
-    7. If invalid: Tell agent to fix, re-validate
+    7. If valid: state.py advance
+    8. If invalid: Tell agent to fix, re-validate
 ```
+
+**CRITICAL: Never log "spawn-complete: SUCCESS" until the output file is verified to exist!**
 
 ## CRITICAL: Output Verification Before Validation
 
@@ -284,6 +366,16 @@ fi
 
 ```
 Extract capabilities and behaviors from the specification.
+
+## Logging (MANDATORY)
+
+Log your activity using the logging script:
+
+```bash
+./scripts/log-activity.sh INFO logic-architect start "Extracting capabilities from spec"
+./scripts/log-activity.sh INFO logic-architect decision "What decision and why"
+./scripts/log-activity.sh INFO logic-architect complete "Outcome description"
+```
 
 ## Context
 
@@ -332,21 +424,36 @@ Read that file for the complete requirements. The spec has already been stored v
 2. **For existing projects:** Consider how new capabilities integrate with existing structure
 3. Extract capabilities using I.P.S.O. decomposition
 4. Apply phase filtering (Phase 1 only)
-5. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/artifacts`
-6. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/capability-map.json
-7. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
-8. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+5. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/capability-map.json
+6. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
+7. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
 
-IMPORTANT:
-- You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
-- Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
-- For existing projects, ensure capabilities don't duplicate what already exists in the codebase.
+IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
+1. You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
+2. Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
+3. After Write, you MUST verify: `ls -la {PLANNING_DIR}/artifacts/capability-map.json` - if file doesn't exist, Write again!
+4. You MUST run validation and confirm it passes.
+5. For existing projects, ensure capabilities don't duplicate what already exists in the codebase.
+
+**Note:** The orchestrator has already created all required directories. Do NOT create directories yourself. If you encounter "directory does not exist" errors, report this to the orchestrator.
+
+If you complete without the file existing at the absolute path, you have FAILED.
 ```
 
 ### Physical Phase: physical-architect
 
 ```
 Map behaviors to concrete file paths.
+
+## Logging (MANDATORY)
+
+Log your activity using the logging script:
+
+```bash
+./scripts/log-activity.sh INFO physical-architect start "Mapping behaviors to file paths"
+./scripts/log-activity.sh INFO physical-architect decision "What decision and why"
+./scripts/log-activity.sh INFO physical-architect complete "Outcome description"
+```
 
 ## Context
 
@@ -377,21 +484,36 @@ For new projects, state: "New project - establish sensible conventions"
    - Integrate with existing modules where appropriate
 3. For new projects: Establish clean, conventional structure
 4. Add cross-cutting concerns and infrastructure
-5. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/artifacts`
-6. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/physical-map.json
-7. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/physical-map.json`
-8. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map`
+5. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/physical-map.json
+6. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/physical-map.json`
+7. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map`
 
-IMPORTANT:
-- You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
-- Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
-- For existing projects, respect the established structure - don't fight it.
+IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
+1. You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
+2. Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
+3. After Write, you MUST verify: `ls -la {PLANNING_DIR}/artifacts/physical-map.json` - if file doesn't exist, Write again!
+4. You MUST run validation and confirm it passes.
+5. For existing projects, respect the established structure - don't fight it.
+
+**Note:** The orchestrator has already created all required directories. Do NOT create directories yourself. If you encounter "directory does not exist" errors, report this to the orchestrator.
+
+If you complete without the file existing at the absolute path, you have FAILED.
 ```
 
 ### Definition Phase: task-author
 
 ```
 Create individual task files from the physical map.
+
+## Logging (MANDATORY)
+
+Log your activity using the logging script:
+
+```bash
+./scripts/log-activity.sh INFO task-author start "Creating task files from physical map"
+./scripts/log-activity.sh INFO task-author decision "What decision and why"
+./scripts/log-activity.sh INFO task-author complete "Outcome description"
+```
 
 ## Context
 
@@ -420,15 +542,20 @@ Key information for task definitions:
    - Tests pass with existing test suite
    - Linting passes (ruff, eslint, etc.)
    - New code follows established patterns
-4. **CRITICAL: Create directory first**: `mkdir -p {PLANNING_DIR}/tasks`
-5. **CRITICAL: Use the Write tool** to save each task file to {PLANNING_DIR}/tasks/T001.json, etc.
-6. **Verify files exist**: `ls -la {PLANNING_DIR}/tasks/`
-7. Load tasks with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
+4. **CRITICAL: Use the Write tool** to save each task file to {PLANNING_DIR}/tasks/T001.json, etc.
+5. **Verify files exist**: `ls -la {PLANNING_DIR}/tasks/`
+6. Load tasks with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
 
-IMPORTANT:
-- You MUST use the Write tool to save each file. Simply outputting JSON to the conversation is NOT sufficient.
-- Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
-- For existing projects, tasks must include verification that new code integrates cleanly.
+IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
+1. You MUST use the Write tool to save each file. Simply outputting JSON to the conversation is NOT sufficient.
+2. Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
+3. After Write, you MUST verify: `ls {PLANNING_DIR}/tasks/*.json | wc -l` - if count is 0, Write again!
+4. You MUST run load-tasks and confirm it succeeds.
+5. For existing projects, tasks must include verification that new code integrates cleanly.
+
+**Note:** The orchestrator has already created all required directories. Do NOT create directories yourself. If you encounter "directory does not exist" errors, report this to the orchestrator.
+
+If you complete without task files existing at the absolute path, you have FAILED.
 ```
 
 ### Validation Phase Details
@@ -438,6 +565,16 @@ The `validation` phase runs **task-plan-verifier** to evaluate task definitions:
 ```bash
 # Spawn task-plan-verifier with context
 Verify task definitions for planning
+
+## Logging (MANDATORY)
+
+Log your activity using the logging script:
+
+```bash
+./scripts/log-activity.sh INFO task-plan-verifier start "Verifying task definitions"
+./scripts/log-activity.sh INFO task-plan-verifier decision "What decision and why"
+./scripts/log-activity.sh INFO task-plan-verifier complete "Outcome description"
+```
 
 PLANNING_DIR: {absolute path to project-planning}
 Spec: {PLANNING_DIR}/inputs/spec.md
@@ -473,6 +610,16 @@ If BLOCKED, the orchestrator:
 
 ```
 Assign phases to tasks and validate the dependency graph.
+
+## Logging (MANDATORY)
+
+Log your activity using the logging script:
+
+```bash
+./scripts/log-activity.sh INFO plan-auditor start "Assigning phases and validating DAG"
+./scripts/log-activity.sh INFO plan-auditor decision "What decision and why"
+./scripts/log-activity.sh INFO plan-auditor complete "Outcome description"
+```
 
 ## Context
 
@@ -592,6 +739,18 @@ Spawn task-executor with self-contained bundle:
 
 ```
 Execute task [TASK_ID]
+
+## Logging (MANDATORY)
+
+Log your activity using the logging script:
+
+```bash
+./scripts/log-activity.sh INFO task-executor start "Executing task [TASK_ID]"
+./scripts/log-activity.sh INFO task-executor decision "What decision and why"
+./scripts/log-activity.sh INFO task-executor tool "Write - creating src/auth/validator.py"
+./scripts/log-activity.sh INFO task-executor complete "Outcome description"
+./scripts/log-activity.sh ERROR task-executor error "Error message if any"
+```
 
 PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
 Bundle: {PLANNING_DIR}/bundles/[TASK_ID]-bundle.json

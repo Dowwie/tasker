@@ -22,28 +22,26 @@ You MUST write individual JSON files to `{PLANNING_DIR}/tasks/`:
 └── ...
 ```
 
-**CRITICAL:
-- You must use the Write tool to save each file. Do NOT just output JSON to the conversation.
-- Use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.**
+**CRITICAL - YOUR TASK IS NOT COMPLETE UNTIL YOU DO ALL OF THESE:
+1. You MUST use the Write tool to save each file. Do NOT just output JSON to the conversation.
+2. You MUST use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.
+3. You MUST verify files exist after writing by running: `ls -la {PLANNING_DIR}/tasks/` (should show T001.json, etc.)
+4. You MUST run load-tasks: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
+
+If no task files exist after Write, you have FAILED. Try again.**
 
 ### Required Steps (in order):
 
-1. **Create directory FIRST** (MANDATORY - do this before any Write):
-   ```bash
-   mkdir -p {PLANNING_DIR}/tasks
-   ```
-   **You MUST run this command before attempting to write any file. Replace {PLANNING_DIR} with the actual path from context.**
+1. **Write each task file** using the Write tool (e.g., `{PLANNING_DIR}/tasks/T001.json`)
 
-2. **Write each task file** using the Write tool (e.g., `{PLANNING_DIR}/tasks/T001.json`)
+   **Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
 
-3. **If Write fails with "directory does not exist"**: Run `mkdir -p {PLANNING_DIR}/tasks` again, then retry the Write.
-
-4. **After creating ALL tasks**, register them:
+2. **After creating ALL tasks**, register them:
    ```bash
    cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks
    ```
 
-5. **If load-tasks fails**: Read the error, fix the offending JSON files, run again
+3. **If load-tasks fails**: Read the error, fix the offending JSON files, run again
 
 Each file MUST validate against `schemas/task.schema.json`.
 
