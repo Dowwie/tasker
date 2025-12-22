@@ -1,12 +1,84 @@
+# Tasker
+
+## Overview
+
+Tasker is a multi-agent architecture built with Claude Code that facilitates planning and implementation through a simple UI: `/plan` and `/execute`. It features a TUI dashboard for monitoring progress (tmux required).
+
+The project began by taking a deep dive into task decomposition, developing a [protocol](docs/protocol.md) for it and then using it as the basis for agentic planning. The task decomposition protocol is at the heart of the planning stage of Tasker.
+
+Planning is the process of breaking down a large body of work, presented as a specification document, into logical, atomic units of work, and then figuring out how to build them in an optimal fashion—parallelizing to the extent possible.
+
+The protocol looks at work through three lenses: Logical (what needs to happen), Physical (where code lives), and Strategic (what order reduces risk). It builds the thinnest end-to-end slice first—the "steel thread"—to validate your architecture early, before you've invested in building out the full system. Every task has a clear, observable, testable "Done."
+
+---
+
+## Why Use Tasker?
+
+You can go a really long way with Claude Code using off-the-shelf capabilities for planning and implementation. I often do, using prompts like these:
+
+**Planning:**
+```
+review {spec} and @README.md. then, review the source code. we're just planning,
+converting specs to well-documented, self-contained tasks. These tasks will be
+worked on by sub-agents, who need sufficient context to do a good job. Figure out
+a concurrency strategy that you can apply across your task dependencies, where you
+may safely spawn asynchronous sub-agents to work on tasks. Save a Task DAG
+dependency graph along with the plan to plan.md
+```
+
+**Execution:**
+```
+I want you to read {specs} and {plan}. Use a concurrency strategy where you may
+safely spawn asynchronous sub-agents to work on tasks in waves. Then, for each
+task in the plan, spawn a sub-agent, concurrently when safe to do so, giving the
+sub-agent the task and instruction to implement a solution for the task, and also
+give it a full copy of {specs} for context about the project. Tell the sub-agent
+to review the specs and the source code for the project before starting.
+```
+
+**This simple pattern works well for small changes whereas Tasker excels for larger projects.**
+
+With the ad-hoc approach, you're trusting Claude's interpretation of your spec, managing concurrency manually, and if your session dies you start over. There's no verification beyond "hope it works," no observability into what's happening, and no traceability from code back to requirements.
+
+Tasker adds structure where it matters: protocol-driven decomposition with schema validation, persistent state you can resume, LLM-as-judge verification after each task, a TUI dashboard showing progress and costs, execution bundles that give each subagent exactly the context it needs, and the ability to retry failed tasks or skip blocked ones without starting over.
+
+You could use Tasker for small projects too—there's no good reason not to. The overhead is minimal (`/plan` then `/execute`), and you get observability and state tracking even for simple work.
+
+---
+
+## Prerequisites
+
+### Technical Requirements
+
+You need Claude Code CLI with subagent support (current versions have this), Python 3.11+ with `uv` for package management, and optionally tmux if you want the TUI dashboard in a split pane.
+
+### Your Preferences Matter
+
+Tasker intentionally excludes preferences specified by CLAUDE.md so it can serve as a generic-purpose framework. You bring your preferences and Tasker applies them in architecture, design, and implementation.
+
+Setting up a comprehensive source of preferences is heavy lift, but the quality of Tasker's output is proportional to the preferences effort you put in. Without preferences, Tasker still works—but Claude makes its own choices about style, patterns, and conventions. With good preferences, you get code that looks like *you* wrote it.
+
+Your `~/.claude/CLAUDE.md` (or project-level `.claude/CLAUDE.md`) should cover things like: language and framework preferences, code style and naming conventions, testing requirements, architecture patterns you prefer (composition over inheritance, Protocols vs ABCs), error handling standards, documentation expectations.
+
+This is a one-time investment that pays off across all your projects. If you already have a CLAUDE.md you're happy with, you're ready to go.
+
+---
+
+## Getting Started
+
+Have a specification document for your project ready. Tasker's workspace is the `project-planning` sub-directory. If you save your spec file there, Tasker will find it during planning onboarding, but you could also just share a path to the file if you choose.
+
+With the spec file ready, run `claude` from within the Tasker project root and invoke the `/plan` command. If you're using tmux, Tasker will split your screen and start a TUI dashboard.
+
+During planning, Tasker will ask you about the spec document and information about the target project—whether it's a new project or an existing one. Share the path to the project you want Tasker to build in. For new projects, Tasker establishes the directory structure. For existing projects, Tasker analyzes your codebase first to understand patterns, conventions, and integration points.
+
+Once planning completes, run `/execute` to begin implementation. Tasker works through the task DAG, spawning isolated subagents for each task, verifying their work, and updating state as it goes. You can watch progress in the TUI, pause with a STOP file, and resume later.
 <div align="center">
 <img src="/assets/logo.jpg" alt="Logo" width="100%" style="display: block; margin-top: 0; margin-bottom: 0; max-width: 100%;"/>
 </div>
 
-# Tasker: Multi-Agent Planning and Execution Engine
 
-Converts complex software specifications into executable tasks and implements them via isolated subagents.
-
-## Overview
+## Modes
 
 Tasker operates in two distinct modes:
 
