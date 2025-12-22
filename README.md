@@ -1,3 +1,7 @@
+<div align="center">
+<img src="/assets/logo.jpg" alt="Logo" width="100%" style="display: block; margin-top: 0; margin-bottom: 0; max-width: 100%;"/>
+</div>
+
 # Tasker
 
 ## Overview
@@ -73,9 +77,6 @@ With the spec file ready, run `claude` from within the Tasker project root and i
 During planning, Tasker will ask you about the spec document and information about the target project—whether it's a new project or an existing one. Share the path to the project you want Tasker to build in. For new projects, Tasker establishes the directory structure. For existing projects, Tasker analyzes your codebase first to understand patterns, conventions, and integration points.
 
 Once planning completes, run `/execute` to begin implementation. Tasker works through the task DAG, spawning isolated subagents for each task, verifying their work, and updating state as it goes. You can watch progress in the TUI, pause with a STOP file, and resume later.
-<div align="center">
-<img src="/assets/logo.jpg" alt="Logo" width="100%" style="display: block; margin-top: 0; margin-bottom: 0; max-width: 100%;"/>
-</div>
 
 
 ## Modes
