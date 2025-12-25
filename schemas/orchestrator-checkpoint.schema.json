@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OrchestratorCheckpoint",
+  "description": "Persisted orchestrator state for crash recovery and resume",
+  "type": "object",
+  "required": ["version", "batch_id", "spawned_at", "status", "tasks"],
+  "properties": {
+    "version": { "const": "1.0" },
+
+    "batch_id": {
+      "type": "string",
+      "description": "Unique identifier for this execution batch (UUID or timestamp-based)"
+    },
+
+    "spawned_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this batch was started"
+    },
+
+    "status": {
+      "enum": ["active", "completed", "interrupted"],
+      "description": "Current batch status"
+    },
+
+    "parallel_limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 3,
+      "description": "Max concurrent task-executors"
+    },
+
+    "tasks": {
+      "type": "object",
+      "description": "Tasks in this batch by status",
+      "properties": {
+        "spawned": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Task IDs that were spawned in this batch"
+        },
+        "pending": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tasks still awaiting results"
+        },
+        "completed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tasks that returned success"
+        },
+        "failed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tasks that returned failure"
+        }
+      }
+    },
+
+    "last_heartbeat": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time orchestrator updated this checkpoint"
+    },
+
+    "orphan_timeout_seconds": {
+      "type": "integer",
+      "default": 1800,
+      "description": "Seconds after which a pending task is considered orphaned (default 30 min)"
+    },
+
+    "recovery": {
+      "type": "object",
+      "description": "Recovery information if resuming from crash",
+      "properties": {
+        "recovered_at": { "type": "string", "format": "date-time" },
+        "orphaned_tasks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tasks that were orphaned and need retry"
+        },
+        "previous_batch_id": { "type": "string" }
+      }
+    }
+  }
+}

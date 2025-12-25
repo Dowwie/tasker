@@ -439,5 +439,92 @@ class TestGetAllTaskIds:
             assert result == ["T001"]
 
 
+class TestParseTargetDir:
+    """Tests for parse_target_dir function."""
+
+    def test_extracts_target_with_short_flag(self):
+        args = ["context", "--all", "-t", "/some/path"]
+        target, remaining = transform.parse_target_dir(args)
+        assert target == Path("/some/path").resolve()
+        assert remaining == ["context", "--all"]
+
+    def test_extracts_target_with_long_flag(self):
+        args = ["--target-dir", "/another/path", "status"]
+        target, remaining = transform.parse_target_dir(args)
+        assert target == Path("/another/path").resolve()
+        assert remaining == ["status"]
+
+    def test_returns_none_when_no_target(self):
+        args = ["context", "--all"]
+        target, remaining = transform.parse_target_dir(args)
+        assert target is None
+        assert remaining == ["context", "--all"]
+
+    def test_handles_target_at_end(self):
+        args = ["create", "T001", "file.json", "-t", "/path"]
+        target, remaining = transform.parse_target_dir(args)
+        assert target == Path("/path").resolve()
+        assert remaining == ["create", "T001", "file.json"]
+
+    def test_handles_empty_args(self):
+        target, remaining = transform.parse_target_dir([])
+        assert target is None
+        assert remaining == []
+
+
+class TestIsBeadsInitialized:
+    """Tests for is_beads_initialized function."""
+
+    def test_returns_true_when_beads_dir_exists(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            beads_dir = Path(tmpdir) / ".beads"
+            beads_dir.mkdir()
+            assert transform.is_beads_initialized(Path(tmpdir)) is True
+
+    def test_returns_false_when_no_beads_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            assert transform.is_beads_initialized(Path(tmpdir)) is False
+
+
+class TestGetTargetDir:
+    """Tests for get_target_dir function."""
+
+    def test_returns_target_dir_when_set(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir)
+            with patch.object(transform, "TARGET_DIR", target):
+                result = transform.get_target_dir()
+            assert result == target
+
+    def test_returns_project_root_when_target_not_set(self):
+        with patch.object(transform, "TARGET_DIR", None):
+            result = transform.get_target_dir()
+        assert result == transform.PROJECT_ROOT
+
+
+class TestPriorityToBdPriority:
+    """Tests for priority_to_bd_priority function."""
+
+    def test_critical_maps_to_0(self):
+        assert transform.priority_to_bd_priority("critical") == "0"
+
+    def test_high_maps_to_1(self):
+        assert transform.priority_to_bd_priority("high") == "1"
+
+    def test_medium_maps_to_2(self):
+        assert transform.priority_to_bd_priority("medium") == "2"
+
+    def test_low_maps_to_3(self):
+        assert transform.priority_to_bd_priority("low") == "3"
+
+    def test_case_insensitive(self):
+        assert transform.priority_to_bd_priority("CRITICAL") == "0"
+        assert transform.priority_to_bd_priority("High") == "1"
+
+    def test_unknown_defaults_to_2(self):
+        assert transform.priority_to_bd_priority("unknown") == "2"
+        assert transform.priority_to_bd_priority("") == "2"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

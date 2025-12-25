@@ -2140,6 +2140,234 @@ def main():
         print(msg)
         sys.exit(0 if success else 1)
 
+    # =========================================================================
+    # CHECKPOINT COMMANDS - Orchestrator crash recovery
+    # =========================================================================
+
+    elif cmd == "checkpoint":
+        if len(sys.argv) < 3:
+            print("Usage: state.py checkpoint <subcommand> [args]")
+            print("  create <task1> [task2 ...]  - Create checkpoint for batch")
+            print("  update <task_id> <status>   - Update task status (success|failed)")
+            print("  complete                    - Mark batch complete")
+            print("  status                      - Show current checkpoint")
+            print("  recover                     - Recover orphaned tasks")
+            print("  clear                       - Remove checkpoint file")
+            sys.exit(1)
+
+        subcmd = sys.argv[2]
+        checkpoint_path = PLANNING_DIR / "orchestrator-checkpoint.json"
+
+        if subcmd == "create":
+            if len(sys.argv) < 4:
+                print("Usage: state.py checkpoint create <task1> [task2 ...]")
+                sys.exit(1)
+
+            tasks = sys.argv[3:]
+            batch_id = f"batch-{now_iso().replace(':', '-').replace('.', '-')}"
+
+            checkpoint = {
+                "version": "1.0",
+                "batch_id": batch_id,
+                "spawned_at": now_iso(),
+                "status": "active",
+                "parallel_limit": 3,
+                "tasks": {
+                    "spawned": tasks,
+                    "pending": tasks.copy(),
+                    "completed": [],
+                    "failed": []
+                },
+                "last_heartbeat": now_iso(),
+                "orphan_timeout_seconds": 1800
+            }
+
+            with open(checkpoint_path, "w") as f:
+                json.dump(checkpoint, f, indent=2)
+
+            print(f"Checkpoint created: {batch_id}")
+            print(f"Tasks: {', '.join(tasks)}")
+            sys.exit(0)
+
+        elif subcmd == "update":
+            if len(sys.argv) < 5:
+                print("Usage: state.py checkpoint update <task_id> <status>")
+                print("  status: success | failed")
+                sys.exit(1)
+
+            task_id = sys.argv[3]
+            status = sys.argv[4]
+
+            if not checkpoint_path.exists():
+                print("No active checkpoint.")
+                sys.exit(1)
+
+            with open(checkpoint_path) as f:
+                checkpoint = json.load(f)
+
+            if task_id in checkpoint["tasks"]["pending"]:
+                checkpoint["tasks"]["pending"].remove(task_id)
+
+            if status == "success":
+                if task_id not in checkpoint["tasks"]["completed"]:
+                    checkpoint["tasks"]["completed"].append(task_id)
+            elif status == "failed":
+                if task_id not in checkpoint["tasks"]["failed"]:
+                    checkpoint["tasks"]["failed"].append(task_id)
+            else:
+                print(f"Invalid status: {status}")
+                sys.exit(1)
+
+            checkpoint["last_heartbeat"] = now_iso()
+
+            with open(checkpoint_path, "w") as f:
+                json.dump(checkpoint, f, indent=2)
+
+            remaining = len(checkpoint["tasks"]["pending"])
+            print(f"Updated {task_id}: {status} ({remaining} pending)")
+            sys.exit(0)
+
+        elif subcmd == "complete":
+            if not checkpoint_path.exists():
+                print("No active checkpoint.")
+                sys.exit(1)
+
+            with open(checkpoint_path) as f:
+                checkpoint = json.load(f)
+
+            checkpoint["status"] = "completed"
+            checkpoint["completed_at"] = now_iso()
+            checkpoint["last_heartbeat"] = now_iso()
+
+            with open(checkpoint_path, "w") as f:
+                json.dump(checkpoint, f, indent=2)
+
+            print(f"Batch {checkpoint['batch_id']} completed.")
+            print(f"  Completed: {len(checkpoint['tasks']['completed'])}")
+            print(f"  Failed: {len(checkpoint['tasks']['failed'])}")
+            sys.exit(0)
+
+        elif subcmd == "status":
+            if not checkpoint_path.exists():
+                print("No active checkpoint.")
+                sys.exit(0)
+
+            with open(checkpoint_path) as f:
+                checkpoint = json.load(f)
+
+            output_format = "text"
+            if "--format" in sys.argv and "json" in sys.argv:
+                output_format = "json"
+
+            if output_format == "json":
+                print(json.dumps(checkpoint, indent=2))
+            else:
+                print("Orchestrator Checkpoint")
+                print("=" * 40)
+                print(f"Batch ID:                  {checkpoint['batch_id']}")
+                print(f"Status:                    {checkpoint['status']}")
+                print(f"Spawned at:                {checkpoint['spawned_at']}")
+                print(f"Last heartbeat:            {checkpoint['last_heartbeat']}")
+                print()
+                print(f"Spawned tasks:             {len(checkpoint['tasks']['spawned'])}")
+                print(f"Pending:                   {len(checkpoint['tasks']['pending'])}")
+                if checkpoint['tasks']['pending']:
+                    print(f"  {', '.join(checkpoint['tasks']['pending'])}")
+                print(f"Completed:                 {len(checkpoint['tasks']['completed'])}")
+                print(f"Failed:                    {len(checkpoint['tasks']['failed'])}")
+            sys.exit(0)
+
+        elif subcmd == "recover":
+            state = load_state()
+            if not state:
+                print("No state file.")
+                sys.exit(1)
+
+            if not checkpoint_path.exists():
+                print("No checkpoint to recover from.")
+                sys.exit(0)
+
+            with open(checkpoint_path) as f:
+                checkpoint = json.load(f)
+
+            if checkpoint["status"] != "active":
+                print(f"Checkpoint status is '{checkpoint['status']}', not active.")
+                sys.exit(0)
+
+            # Find orphaned tasks: pending in checkpoint but have result files
+            orphaned = []
+            recovered = []
+            bundles_dir = PLANNING_DIR / "bundles"
+
+            for task_id in checkpoint["tasks"]["pending"]:
+                result_file = bundles_dir / f"{task_id}-result.json"
+                if result_file.exists():
+                    # Task completed but checkpoint wasn't updated
+                    with open(result_file) as f:
+                        result = json.load(f)
+                    status = result.get("status", "unknown")
+                    recovered.append((task_id, status))
+                else:
+                    # Task may be orphaned (executor died without writing result)
+                    task = state["tasks"].get(task_id, {})
+                    if task.get("status") == "running":
+                        orphaned.append(task_id)
+
+            # Update checkpoint with recovered tasks
+            for task_id, status in recovered:
+                if task_id in checkpoint["tasks"]["pending"]:
+                    checkpoint["tasks"]["pending"].remove(task_id)
+                if status == "success":
+                    checkpoint["tasks"]["completed"].append(task_id)
+                else:
+                    checkpoint["tasks"]["failed"].append(task_id)
+
+            # Record recovery info
+            if recovered or orphaned:
+                checkpoint["recovery"] = {
+                    "recovered_at": now_iso(),
+                    "recovered_tasks": [t for t, _ in recovered],
+                    "orphaned_tasks": orphaned,
+                    "previous_batch_id": checkpoint["batch_id"]
+                }
+                checkpoint["last_heartbeat"] = now_iso()
+
+                with open(checkpoint_path, "w") as f:
+                    json.dump(checkpoint, f, indent=2)
+
+            print("Checkpoint Recovery")
+            print("=" * 40)
+            if recovered:
+                print(f"Recovered from result files: {len(recovered)}")
+                for task_id, status in recovered:
+                    print(f"  {task_id}: {status}")
+            else:
+                print("No tasks recovered from result files.")
+
+            if orphaned:
+                print(f"\nOrphaned tasks (need retry): {len(orphaned)}")
+                for task_id in orphaned:
+                    print(f"  {task_id}")
+                print("\nTo reset orphaned tasks:")
+                print("  python3 scripts/state.py retry-task <task_id>")
+            else:
+                print("No orphaned tasks.")
+
+            print(f"\nPending: {len(checkpoint['tasks']['pending'])}")
+            sys.exit(0)
+
+        elif subcmd == "clear":
+            if checkpoint_path.exists():
+                checkpoint_path.unlink()
+                print("Checkpoint cleared.")
+            else:
+                print("No checkpoint to clear.")
+            sys.exit(0)
+
+        else:
+            print(f"Unknown checkpoint subcommand: {subcmd}")
+            sys.exit(1)
+
     else:
         print(f"Unknown command: {cmd}")
         print(__doc__)

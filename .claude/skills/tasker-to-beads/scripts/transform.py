@@ -6,16 +6,25 @@ Prepares task context for LLM enrichment and handles beads issue creation.
 This script does the mechanical work; the LLM does the comprehension work.
 
 Usage:
-    tasker_to_beads.py context <task_id>      Prepare context for single task
-    tasker_to_beads.py context --all          Prepare context for all tasks
-    tasker_to_beads.py create <task_id> <description_file>
+    transform.py context <task_id> [-t TARGET_DIR]
+                                              Prepare context for single task
+    transform.py context --all [-t TARGET_DIR]
+                                              Prepare context for all tasks
+    transform.py create <task_id> <description_file> [-t TARGET_DIR]
                                               Create beads issue from enriched description
-    tasker_to_beads.py batch-create <manifest_file>
+    transform.py batch-create <manifest_file> [-t TARGET_DIR]
                                               Create multiple issues from manifest
-    tasker_to_beads.py status                 Show transformation status
+    transform.py status [-t TARGET_DIR]       Show transformation status
+    transform.py init-target <target_dir>     Initialize beads in target directory
+
+Options:
+    -t, --target-dir DIR    Target directory for beads management (where issues
+                            will be created). If not specified, uses current
+                            project. Beads will be initialized if needed.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,6 +55,76 @@ TASKS_DIR = PLANNING_DIR / "tasks"
 ARTIFACTS_DIR = PLANNING_DIR / "artifacts"
 INPUTS_DIR = PLANNING_DIR / "inputs"
 BEADS_OUTPUT_DIR = PLANNING_DIR / "beads-export"
+
+# Target directory for beads operations (can be different from project root)
+TARGET_DIR: Path | None = None
+
+
+def parse_target_dir(args: list[str]) -> tuple[Path | None, list[str]]:
+    """Extract -t/--target-dir from args, return (target_path, remaining_args)."""
+    remaining = []
+    target = None
+    i = 0
+    while i < len(args):
+        if args[i] in ("-t", "--target-dir"):
+            if i + 1 < len(args):
+                target = Path(args[i + 1]).resolve()
+                i += 2
+                continue
+        remaining.append(args[i])
+        i += 1
+    return target, remaining
+
+
+def get_target_dir() -> Path:
+    """Get the target directory for beads operations."""
+    return TARGET_DIR if TARGET_DIR else PROJECT_ROOT
+
+
+def is_beads_initialized(directory: Path) -> bool:
+    """Check if beads is initialized in the given directory."""
+    return (directory / ".beads").is_dir()
+
+
+def init_beads_in_target(target_dir: Path, prefix: str = "TASK") -> tuple[bool, str]:
+    """Initialize beads in the target directory if not already done.
+
+    Runs two commands:
+    1. bd init <prefix> - creates .beads directory structure
+    2. bd onboard - sets up project configuration
+    """
+    if is_beads_initialized(target_dir):
+        return True, f"Beads already initialized in {target_dir}"
+
+    env = {**os.environ, "PWD": str(target_dir)}
+
+    # Step 1: Run bd init
+    init_cmd = ["bd", "init", prefix]
+    init_result = subprocess.run(
+        init_cmd,
+        capture_output=True,
+        text=True,
+        cwd=target_dir,
+        env=env
+    )
+
+    if init_result.returncode != 0:
+        return False, f"Failed to initialize beads: {init_result.stderr}"
+
+    # Step 2: Run bd onboard
+    onboard_cmd = ["bd", "onboard"]
+    onboard_result = subprocess.run(
+        onboard_cmd,
+        capture_output=True,
+        text=True,
+        cwd=target_dir,
+        env=env
+    )
+
+    if onboard_result.returncode != 0:
+        return False, f"Beads initialized but onboarding failed: {onboard_result.stderr}"
+
+    return True, f"Beads initialized and onboarded in {target_dir} with prefix '{prefix}'"
 
 
 def load_json(path: Path) -> dict | None:
@@ -265,6 +344,17 @@ def prepare_all_contexts() -> list[dict]:
     return contexts
 
 
+def priority_to_bd_priority(priority: str) -> str:
+    """Convert priority string to bd priority (0-4, 0=highest)."""
+    mapping = {
+        "critical": "0",
+        "high": "1",
+        "medium": "2",
+        "low": "3",
+    }
+    return mapping.get(priority.lower(), "2")
+
+
 def create_beads_issue(
     task_id: str,
     title: str,
@@ -273,39 +363,91 @@ def create_beads_issue(
     labels: list[str],
     dependencies: list[str],
 ) -> tuple[bool, str]:
-    """Create a beads issue using the beads CLI."""
-    # Create the issue
-    cmd = ["claude", "-p", f"/beads:create \"{title}\" task {priority}"]
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT)
+    """Create a beads issue using the bd CLI in the target directory.
+
+    Note: Dependencies are Tasker IDs (T001, T002) which must be mapped to
+    beads IDs after creation using link_dependencies().
+    """
+    target = get_target_dir()
+    env = {**os.environ, "PWD": str(target)}
+
+    # Ensure beads is initialized in target
+    if not is_beads_initialized(target):
+        success, msg = init_beads_in_target(target)
+        if not success:
+            return False, msg
+        print(f"  {msg}")
+
+    # Build the create command (without dependencies - added later via bd dep add)
+    cmd = [
+        "bd", "create", title,
+        "-t", "task",
+        "-p", priority_to_bd_priority(priority),
+        "--silent",  # Output only the issue ID
+    ]
+
+    # Add labels if present (include task_id as label for mapping)
+    all_labels = list(labels) + [f"tasker:{task_id}"]
+    cmd.extend(["-l", ",".join(all_labels)])
+
+    # Add description if present
+    if description:
+        cmd.extend(["-d", description])
+
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=target, env=env)
 
     if result.returncode != 0:
         return False, f"Failed to create issue: {result.stderr}"
 
-    # Extract issue ID from output (beads typically outputs the created issue ID)
-    output = result.stdout
-    issue_id_match = re.search(r"([A-Z]+-\d+)", output)
-    if not issue_id_match:
-        return False, f"Could not extract issue ID from output: {output}"
-
-    issue_id = issue_id_match.group(1)
-
-    # Add labels
-    for label in labels:
-        subprocess.run(
-            ["claude", "-p", f"/beads:label add {issue_id} {label}"],
-            capture_output=True,
-            cwd=PROJECT_ROOT,
-        )
-
-    # Add dependencies
-    for dep in dependencies:
-        subprocess.run(
-            ["claude", "-p", f"/beads:dep add {issue_id} {dep}"],
-            capture_output=True,
-            cwd=PROJECT_ROOT,
-        )
+    # With --silent, output is just the issue ID
+    issue_id = result.stdout.strip()
+    if not issue_id:
+        return False, f"No issue ID returned from bd create"
 
     return True, issue_id
+
+
+def link_dependencies(
+    task_id_to_beads_id: dict[str, str],
+    task_dependencies: dict[str, list[str]],
+) -> tuple[int, int]:
+    """Link dependencies between beads issues after all are created.
+
+    Args:
+        task_id_to_beads_id: Mapping of Tasker IDs to beads issue IDs
+        task_dependencies: Mapping of Tasker IDs to their dependency Tasker IDs
+
+    Returns:
+        Tuple of (successful links, failed links)
+    """
+    target = get_target_dir()
+    env = {**os.environ, "PWD": str(target)}
+    success_count = 0
+    fail_count = 0
+
+    for task_id, dep_task_ids in task_dependencies.items():
+        beads_id = task_id_to_beads_id.get(task_id)
+        if not beads_id:
+            continue
+
+        for dep_task_id in dep_task_ids:
+            dep_beads_id = task_id_to_beads_id.get(dep_task_id)
+            if not dep_beads_id:
+                print(f"  Warning: Dependency {dep_task_id} not found for {task_id}")
+                fail_count += 1
+                continue
+
+            # bd dep add <issue> <depends-on> --type blocks
+            cmd = ["bd", "dep", "add", beads_id, dep_beads_id, "-t", "blocks"]
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=target, env=env)
+
+            if result.returncode != 0:
+                print(f"  Failed to link {task_id} -> {dep_task_id}: {result.stderr}")
+                fail_count += 1
+            else:
+                success_count += 1
+
+    return success_count, fail_count
 
 
 def save_context_for_enrichment(task_id: str, context: dict) -> Path:
@@ -328,18 +470,26 @@ def print_context_summary(context: dict) -> None:
 
 
 def main() -> None:
+    global TARGET_DIR
+
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
 
-    cmd = sys.argv[1]
+    # Parse target directory from args
+    TARGET_DIR, args = parse_target_dir(sys.argv[1:])
+    if not args:
+        print(__doc__)
+        sys.exit(1)
+
+    cmd = args[0]
 
     if cmd == "context":
-        if len(sys.argv) < 3:
-            print("Usage: tasker_to_beads.py context <task_id> | --all")
+        if len(args) < 2:
+            print("Usage: transform.py context <task_id> | --all [-t TARGET_DIR]")
             sys.exit(1)
 
-        if sys.argv[2] == "--all":
+        if args[1] == "--all":
             contexts = prepare_all_contexts()
             print(f"Prepared context for {len(contexts)} tasks\n")
             for ctx in contexts:
@@ -347,8 +497,11 @@ def main() -> None:
                 save_context_for_enrichment(ctx["task_id"], ctx)
                 print()
             print(f"\nContext files saved to: {BEADS_OUTPUT_DIR}/")
+            if TARGET_DIR:
+                print(f"Target directory for beads: {TARGET_DIR}")
+                print(f"  Beads initialized: {is_beads_initialized(TARGET_DIR)}")
         else:
-            task_id = sys.argv[2]
+            task_id = args[1]
             context = prepare_task_context(task_id)
             if not context:
                 print(f"Task not found: {task_id}")
@@ -358,14 +511,16 @@ def main() -> None:
             print(f"\nFull context saved to: {output_path}")
 
             # Also output JSON to stdout for piping
-            if "--json" in sys.argv:
+            if "--json" in args:
                 print("\n---JSON---")
                 print(json.dumps(context, indent=2))
 
     elif cmd == "status":
         task_ids = get_all_task_ids()
         state = load_state()
+        target = get_target_dir()
 
+        print(f"Source Project: {PROJECT_ROOT}")
         print(f"Tasker Tasks: {len(task_ids)}")
         print(f"State phase: {state.get('phase', {}).get('current', 'unknown')}")
 
@@ -377,16 +532,48 @@ def main() -> None:
             print(f"  Context files: {len(exported)}")
             print(f"  Enriched files: {len(enriched)}")
 
-    elif cmd == "create":
-        if len(sys.argv) < 4:
-            print("Usage: tasker_to_beads.py create <task_id> <enriched_description_file>")
+        # Target directory status
+        print(f"\nTarget Directory: {target}")
+        if is_beads_initialized(target):
+            print("  Beads: initialized")
+            # Count issues in target
+            beads_dir = target / ".beads" / "issues"
+            if beads_dir.exists():
+                issue_count = len(list(beads_dir.glob("*.md")))
+                print(f"  Issues: {issue_count}")
+        else:
+            print("  Beads: not initialized")
+            print("  Run 'transform.py init-target <dir>' to initialize")
+
+    elif cmd == "init-target":
+        if len(args) < 2:
+            print("Usage: transform.py init-target <target_dir> [PREFIX]")
             sys.exit(1)
-        task_id = sys.argv[2]
-        desc_file = Path(sys.argv[3])
+
+        target = Path(args[1]).resolve()
+        prefix = args[2] if len(args) > 2 else "TASK"
+
+        if not target.exists():
+            print(f"Target directory does not exist: {target}")
+            sys.exit(1)
+
+        success, msg = init_beads_in_target(target, prefix)
+        print(msg)
+        sys.exit(0 if success else 1)
+
+    elif cmd == "create":
+        if len(args) < 3:
+            print("Usage: transform.py create <task_id> <enriched_file> [-t TARGET_DIR]")
+            sys.exit(1)
+        task_id = args[1]
+        desc_file = Path(args[2])
 
         if not desc_file.exists():
             print(f"Description file not found: {desc_file}")
             sys.exit(1)
+
+        target = get_target_dir()
+        print(f"Creating issue in: {target}")
 
         enriched = json.loads(desc_file.read_text())
 
@@ -406,36 +593,66 @@ def main() -> None:
             sys.exit(1)
 
     elif cmd == "batch-create":
-        if len(sys.argv) < 3:
-            print("Usage: tasker_to_beads.py batch-create <manifest_file>")
+        if len(args) < 2:
+            print("Usage: transform.py batch-create <manifest_file> [-t TARGET_DIR]")
             sys.exit(1)
 
-        manifest_path = Path(sys.argv[2])
+        manifest_path = Path(args[1])
         if not manifest_path.exists():
             print(f"Manifest not found: {manifest_path}")
             sys.exit(1)
 
+        target = get_target_dir()
+        print(f"Creating issues in: {target}")
+
         manifest = json.loads(manifest_path.read_text())
+
+        # Phase 1: Create all issues (without dependencies)
+        print("\n--- Phase 1: Creating issues ---")
+        task_id_to_beads_id: dict[str, str] = {}
+        task_dependencies: dict[str, list[str]] = {}
         created = 0
         failed = 0
 
         for entry in manifest.get("issues", []):
+            task_id = entry.get("task_id", "")
             success, result = create_beads_issue(
-                task_id=entry.get("task_id", ""),
+                task_id=task_id,
                 title=entry.get("title", ""),
                 description=entry.get("description", ""),
                 priority=entry.get("priority", "medium"),
                 labels=entry.get("labels", []),
-                dependencies=entry.get("dependencies", []),
+                dependencies=[],  # Dependencies added in phase 2
             )
             if success:
-                print(f"Created: {result}")
+                print(f"  Created: {task_id} -> {result}")
+                task_id_to_beads_id[task_id] = result
                 created += 1
+
+                # Get dependencies from Tasker task file (the DAG source of truth)
+                task = load_task(task_id)
+                if task:
+                    deps = task.get("dependencies", {}).get("tasks", [])
+                    if deps:
+                        task_dependencies[task_id] = deps
             else:
-                print(f"Failed {entry.get('task_id')}: {result}")
+                print(f"  Failed {task_id}: {result}")
                 failed += 1
 
-        print(f"\nCreated: {created}, Failed: {failed}")
+        print(f"\nPhase 1 complete: {created} created, {failed} failed")
+
+        # Phase 2: Link dependencies using the Tasker DAG
+        if task_dependencies:
+            print("\n--- Phase 2: Linking dependencies ---")
+            dep_success, dep_failed = link_dependencies(task_id_to_beads_id, task_dependencies)
+            print(f"\nPhase 2 complete: {dep_success} links created, {dep_failed} failed")
+        else:
+            print("\nNo dependencies to link.")
+
+        # Save the mapping for reference
+        mapping_file = BEADS_OUTPUT_DIR / "task-to-beads-mapping.json"
+        mapping_file.write_text(json.dumps(task_id_to_beads_id, indent=2))
+        print(f"\nMapping saved to: {mapping_file}")
 
     else:
         print(f"Unknown command: {cmd}")

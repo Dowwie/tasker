@@ -1,12 +1,14 @@
 ---
 name: task-executor
-description: Execute a single task in isolation. Uses state.py for all state transitions. Tracks files for rollback capability. Context-isolated - no memory of previous tasks.
+description: Execute a single task in isolation. Self-completing - calls state.py directly and writes result file. Returns minimal status to orchestrator. Context-isolated - no memory of previous tasks.
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 # Task Executor (v2)
 
 Execute ONE task from a self-contained bundle. Track all changes for potential rollback.
+
+**Self-Completion Protocol:** This executor updates state.py directly and writes detailed results to `bundles/{task_id}-result.json`. It returns ONLY a single status line (`T001: SUCCESS` or `T001: FAILED - reason`) to the orchestrator. This minimizes orchestrator context usage.
 
 ## Input
 
@@ -226,75 +228,110 @@ cd {PLANNING_DIR}/.. && python3 scripts/state.py record-verification T001 \
   --tests '{"coverage": "PASS", "assertions": "PASS", "edge_cases": "PARTIAL"}'
 ```
 
-### 7. Complete or Rollback
+### 7. Complete or Rollback (Self-Completion Protocol)
+
+**CRITICAL:** You are responsible for updating state directly. Do NOT return a full report to the orchestrator.
 
 **If all criteria pass:**
 ```bash
-# Complete with file tracking (include docs and README if modified)
+# 1. Update state directly
 cd {PLANNING_DIR}/.. && python3 scripts/state.py complete-task T001 \
   --created src/auth/validator.py src/auth/errors.py docs/T001-spec.md \
   --modified src/auth/__init__.py README.md
 
-# Commit changes to git
+# 2. Commit changes to git
 cd {PLANNING_DIR}/.. && python3 scripts/state.py commit-task T001
 
-# Clean up rollback files
+# 3. Write result file for observability (see step 8)
+
+# 4. Clean up rollback files
 rm -rf /tmp/rollback-T001
 ```
 
 **If criteria fail:**
 ```bash
-# Rollback created files
+# 1. Rollback created files
 for file in $CREATED_FILES; do
   rm -f "$TARGET_DIR/$file"
 done
 
-# Restore modified files
+# 2. Restore modified files
 for bak in /tmp/rollback-T001/*.bak; do
   original=$(basename "$bak" .bak)
   # Restore to original location
 done
 
-# Mark failed
-cd {PLANNING_DIR}/.. && python3 scripts/state.py fail-task T001 "Acceptance criteria failed: <details>"
+# 3. Update state directly
+cd {PLANNING_DIR}/.. && python3 scripts/state.py fail-task T001 \
+  "Acceptance criteria failed: <details>" \
+  --category test --retryable
+
+# 4. Write result file with error details (see step 8)
 ```
 
-### 8. Report
+### 8. Write Result File and Return Minimal Status
 
-Return structured report:
+**CRITICAL:** Write detailed results to file. Return ONLY a single status line.
 
-```markdown
-## Task Completion Report
+**Write result file:** `{PLANNING_DIR}/bundles/T001-result.json`
 
-**Task:** T001 - Implement credential validation
-**Status:** COMPLETE | FAILED
-**Bundle:** {PLANNING_DIR}/bundles/T001-bundle.json
-
-### Behaviors Implemented
-- [x] B001: validate_credentials (process)
-- [x] B002: CredentialError (output)
-
-### Files Created
-- src/auth/validator.py (domain layer)
-- docs/T001-spec.md (task spec)
-
-### Files Modified
-- README.md (added feature entry)
-
-### Verification Results (from task-verifier)
-| Criterion | Status |
-|-----------|--------|
-| Valid credentials return True | PASS |
-| Invalid email raises ValidationError | PASS |
-
-**Verifier Recommendation:** PROCEED
-
-### Notes
-Used Pydantic for validation per constraints.patterns.
-
-### Rollback Status
-Rollback files cleaned (success) | Rollback executed (failure)
+```json
+{
+  "version": "1.0",
+  "task_id": "T001",
+  "name": "Implement credential validation",
+  "status": "success",
+  "started_at": "2025-01-15T10:30:00Z",
+  "completed_at": "2025-01-15T10:35:00Z",
+  "files": {
+    "created": ["src/auth/validator.py", "docs/T001-spec.md"],
+    "modified": ["README.md"]
+  },
+  "verification": {
+    "verdict": "PASS",
+    "criteria": [
+      {"name": "Valid credentials return True", "status": "PASS", "evidence": "pytest passed"},
+      {"name": "Invalid email raises ValidationError", "status": "PASS", "evidence": "pytest passed"}
+    ]
+  },
+  "git": {
+    "committed": true,
+    "commit_sha": "abc123",
+    "commit_message": "T001: Implement credential validation"
+  },
+  "notes": "Used Pydantic for validation per constraints.patterns."
+}
 ```
+
+**For failures, include error field:**
+```json
+{
+  "status": "failed",
+  "error": {
+    "category": "test",
+    "message": "Acceptance criteria failed: test_valid_credentials expected True, got False",
+    "retryable": true
+  }
+}
+```
+
+**Return ONLY this line to orchestrator:**
+
+On success:
+```
+T001: SUCCESS
+```
+
+On failure:
+```
+T001: FAILED - Acceptance criteria failed: test_valid_credentials
+```
+
+**Why minimal return?**
+- Orchestrator context is precious - don't bloat it with reports
+- Details are persisted in result file for debugging
+- State is already updated via state.py calls
+- Orchestrator just needs to know: done, success/fail
 
 ## Isolation Guarantee
 

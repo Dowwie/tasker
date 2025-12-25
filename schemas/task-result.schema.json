@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskResult",
+  "description": "Execution result persisted by task-executor for observability and debugging",
+  "type": "object",
+  "required": ["version", "task_id", "status", "started_at", "completed_at"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "task_id": { "type": "string", "pattern": "^T[0-9]+$" },
+    "name": { "type": "string" },
+
+    "status": {
+      "enum": ["success", "failed"],
+      "description": "Final task status"
+    },
+
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "duration_seconds": { "type": "number" },
+
+    "files": {
+      "type": "object",
+      "properties": {
+        "created": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Absolute paths of files created"
+        },
+        "modified": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Absolute paths of files modified"
+        }
+      }
+    },
+
+    "verification": {
+      "type": "object",
+      "description": "Acceptance criteria verification results",
+      "properties": {
+        "verdict": { "enum": ["PASS", "FAIL", "PARTIAL"] },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "status": { "enum": ["PASS", "FAIL", "SKIP"] },
+              "evidence": { "type": "string" },
+              "command": { "type": "string" },
+              "exit_code": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+
+    "quality": {
+      "type": "object",
+      "description": "Code quality checks",
+      "properties": {
+        "types": { "enum": ["PASS", "FAIL", "SKIP"] },
+        "docs": { "enum": ["PASS", "FAIL", "SKIP"] },
+        "patterns": { "enum": ["PASS", "FAIL", "SKIP"] },
+        "lint": { "enum": ["PASS", "FAIL", "SKIP"] }
+      }
+    },
+
+    "error": {
+      "type": "object",
+      "description": "Error details if status is failed",
+      "properties": {
+        "category": {
+          "enum": ["dependency", "compilation", "test", "validation", "runtime", "unknown"]
+        },
+        "message": { "type": "string" },
+        "retryable": { "type": "boolean" },
+        "stack": { "type": "string" }
+      }
+    },
+
+    "git": {
+      "type": "object",
+      "description": "Git commit info if task was committed",
+      "properties": {
+        "committed": { "type": "boolean" },
+        "commit_sha": { "type": "string" },
+        "commit_message": { "type": "string" }
+      }
+    },
+
+    "notes": {
+      "type": "string",
+      "description": "Free-form notes from the executor about decisions or issues"
+    }
+  }
+}

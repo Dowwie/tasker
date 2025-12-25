@@ -687,18 +687,60 @@ python3 scripts/state.py status
 [ -d "$TARGET_DIR" ] || echo "Target directory not found"
 ```
 
-## Execute Loop
+## Recovery on Start (CRITICAL)
+
+**Before starting the execute loop**, always check for and recover from a previous crash:
 
 ```bash
+# Check for existing checkpoint from previous run
+python3 scripts/state.py checkpoint status
+
+# If checkpoint exists and is active, recover
+python3 scripts/state.py checkpoint recover
+
+# This will:
+# 1. Find tasks that completed (have result files) but weren't acknowledged
+# 2. Identify orphaned tasks (still "running" with no result file)
+# 3. Update checkpoint state accordingly
+```
+
+If orphaned tasks are found, ask user:
+```markdown
+Found 3 orphaned tasks from previous run:
+- T019, T011, T006
+
+Options:
+1. Retry orphaned tasks (reset to pending)
+2. Skip orphaned tasks (mark failed)
+3. Abort and investigate
+```
+
+To retry orphaned tasks:
+```bash
+python3 scripts/state.py retry-task T019
+python3 scripts/state.py retry-task T011
+python3 scripts/state.py retry-task T006
+python3 scripts/state.py checkpoint clear
+```
+
+## Execute Loop
+
+**CRITICAL CONSTRAINTS:**
+- **Max 3 parallel executors** - More causes orchestrator context exhaustion
+- **Task-executors are self-completing** - They call `state.py complete-task` directly
+- **Checkpoint before spawning** - Track batch for crash recovery
+- **Minimal returns** - Executors return only `T001: SUCCESS` or `T001: FAILED - reason`
+
+```bash
+PARALLEL_LIMIT=3
+
 while true; do
-    # 0. CHECK FOR HALT (CRITICAL - must check before each task)
+    # 0. CHECK FOR HALT
     python3 scripts/state.py check-halt
     if [ $? -ne 0 ]; then
-        echo "⚠️  Halt requested. Stopping execution gracefully."
+        echo "Halt requested. Stopping gracefully."
+        python3 scripts/state.py checkpoint complete
         python3 scripts/state.py confirm-halt
-        python3 scripts/state.py status
-        echo ""
-        echo "To resume: python3 scripts/state.py resume"
         break
     fi
 
@@ -706,10 +748,10 @@ while true; do
     READY=$(python3 scripts/state.py ready-tasks)
 
     if [ -z "$READY" ]; then
-        # Try to advance (might complete)
         python3 scripts/state.py advance
         if [ $? -eq 0 ]; then
             echo "All tasks complete!"
+            python3 scripts/state.py checkpoint clear
             break
         else
             echo "No ready tasks. Check for blockers."
@@ -718,44 +760,81 @@ while true; do
         fi
     fi
 
-    # 2. Select task (first ready, or user choice)
-    TASK_ID=$(echo "$READY" | head -1 | cut -d: -f1)
+    # 2. Select batch (up to PARALLEL_LIMIT tasks)
+    BATCH=$(echo "$READY" | head -$PARALLEL_LIMIT | cut -d: -f1)
+    BATCH_ARRAY=($BATCH)
+    echo "Batch: ${BATCH_ARRAY[@]}"
 
-    # 3. Generate execution bundle (BEFORE starting task)
-    python3 scripts/bundle.py generate $TASK_ID
+    # 3. Generate bundles for all tasks in batch
+    for TASK_ID in ${BATCH_ARRAY[@]}; do
+        python3 scripts/bundle.py generate $TASK_ID
+        python3 scripts/bundle.py validate-integrity $TASK_ID
+    done
 
-    # 4. Validate bundle integrity (dependencies + checksums)
-    python3 scripts/bundle.py validate-integrity $TASK_ID
-    if [ $? -eq 1 ]; then
-        echo "Bundle validation failed for $TASK_ID - missing dependencies"
-        continue  # Skip to next task
-    fi
-    # Exit code 2 = warnings (checksum mismatch) - proceed but notify user
+    # 4. CREATE CHECKPOINT before spawning (crash recovery)
+    python3 scripts/state.py checkpoint create ${BATCH_ARRAY[@]}
 
-    # 5. Mark started
-    python3 scripts/state.py start-task $TASK_ID
+    # 5. Mark all tasks as started
+    for TASK_ID in ${BATCH_ARRAY[@]}; do
+        python3 scripts/state.py start-task $TASK_ID
+    done
 
-    # 6. Spawn isolated task-executor subagent with bundle
-    # (See "Subagent Spawn" section below)
+    # 6. SPAWN EXECUTORS IN PARALLEL
+    # Use Task tool with multiple invocations in single message
+    # Each executor gets: PLANNING_DIR and Bundle path
+    # Each executor returns: "T001: SUCCESS" or "T001: FAILED - reason"
 
-    # 7. Handle result
-    if [ $SUCCESS ]; then
-        python3 scripts/state.py complete-task $TASK_ID
-    else
-        python3 scripts/state.py fail-task $TASK_ID "$ERROR"
-    fi
+    # 7. AS EACH EXECUTOR RETURNS, update checkpoint
+    # Parse the minimal return: "T001: SUCCESS" -> task_id=T001, status=success
+    for TASK_ID in ${BATCH_ARRAY[@]}; do
+        # Executor returned - check result file exists
+        if [ -f "$PLANNING_DIR/bundles/${TASK_ID}-result.json" ]; then
+            STATUS=$(python3 -c "import json; print(json.load(open('$PLANNING_DIR/bundles/${TASK_ID}-result.json'))['status'])")
+            python3 scripts/state.py checkpoint update $TASK_ID $STATUS
+            ./scripts/log-activity.sh INFO orchestrator task-result "$TASK_ID: $STATUS"
+        else
+            ./scripts/log-activity.sh WARN orchestrator task-result "$TASK_ID: no result file"
+        fi
+    done
 
-    # 8. Check for halt AFTER task completion
+    # 8. COMPLETE CHECKPOINT for this batch
+    python3 scripts/state.py checkpoint complete
+
+    # 9. Check for halt AFTER batch
     python3 scripts/state.py check-halt
     if [ $? -ne 0 ]; then
-        echo "⚠️  Halt requested after task $TASK_ID. Stopping gracefully."
+        echo "Halt requested after batch. Stopping gracefully."
         python3 scripts/state.py confirm-halt
         break
     fi
 
-    # 9. Ask to continue (unless --batch mode)
-    read -p "Continue? (y/n): " CONTINUE
+    # 10. Continue to next batch (or ask user in interactive mode)
+    # In batch mode: continue automatically
+    # In interactive mode: read -p "Continue? (y/n): " CONTINUE
 done
+```
+
+## Checkpoint Commands Reference
+
+```bash
+# Create checkpoint before spawning batch
+python3 scripts/state.py checkpoint create T001 T002 T003
+
+# Update after each executor returns
+python3 scripts/state.py checkpoint update T001 success
+python3 scripts/state.py checkpoint update T002 failed
+
+# Mark batch complete
+python3 scripts/state.py checkpoint complete
+
+# Check current checkpoint status
+python3 scripts/state.py checkpoint status
+
+# Recover from crash (finds orphans, updates from result files)
+python3 scripts/state.py checkpoint recover
+
+# Clear checkpoint (after successful completion or manual cleanup)
+python3 scripts/state.py checkpoint clear
 ```
 
 ## Graceful Halt and Resume
@@ -823,7 +902,7 @@ python3 scripts/state.py resume
 
 ## Subagent Spawn
 
-Spawn task-executor with self-contained bundle:
+Spawn task-executor with self-contained bundle. **Executors are self-completing** - they update state and write results directly, returning only a minimal status line to the orchestrator.
 
 ```
 Execute task [TASK_ID]
@@ -851,11 +930,57 @@ The bundle contains everything you need:
 - Constraints and patterns to follow
 - Dependencies (files from prior tasks)
 
-Instructions:
+## Self-Completion Protocol (CRITICAL)
+
+You are responsible for updating state and persisting results. Do NOT rely on the orchestrator.
+
+### On Success:
+1. Track all files you created/modified
+2. Call: `python3 scripts/state.py complete-task [TASK_ID] --created file1 file2 --modified file3`
+3. Write result file: `{PLANNING_DIR}/bundles/[TASK_ID]-result.json` (see schema below)
+4. Return ONLY this line: `[TASK_ID]: SUCCESS`
+
+### On Failure:
+1. Call: `python3 scripts/state.py fail-task [TASK_ID] "error message" --category <cat> --retryable`
+2. Write result file with error details
+3. Return ONLY this line: `[TASK_ID]: FAILED - <one-line reason>`
+
+### Result File Schema
+Write to `{PLANNING_DIR}/bundles/[TASK_ID]-result.json`:
+```json
+{
+  "version": "1.0",
+  "task_id": "[TASK_ID]",
+  "name": "Task name from bundle",
+  "status": "success|failed",
+  "started_at": "ISO timestamp",
+  "completed_at": "ISO timestamp",
+  "files": {
+    "created": ["path1", "path2"],
+    "modified": ["path3"]
+  },
+  "verification": {
+    "verdict": "PASS|FAIL",
+    "criteria": [
+      {"name": "criterion", "status": "PASS|FAIL", "evidence": "..."}
+    ]
+  },
+  "error": {
+    "category": "dependency|compilation|test|validation|runtime",
+    "message": "...",
+    "retryable": true
+  },
+  "notes": "Any decisions or observations"
+}
+```
+
+## Workflow Summary
 1. Read the bundle file - it has ALL context
 2. Implement behaviors in specified files
 3. Run acceptance criteria verification
-4. Report: files created, tests passed, any issues
+4. Call state.py to update task status
+5. Write detailed result to bundles/[TASK_ID]-result.json
+6. Return ONE LINE status to orchestrator
 
 IMPORTANT: Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
 ```
@@ -865,7 +990,9 @@ The subagent:
 - Gets full context budget
 - Reads ONE file (the bundle) for complete context
 - Tracks files for rollback
-- Returns structured completion report
+- **Calls state.py directly** to mark completion
+- **Writes result file** for observability
+- Returns **minimal status line** (not full report)
 
 ## Bundle Contents
 
@@ -925,6 +1052,14 @@ python3 scripts/state.py check-halt      # Check if halted (exit 1 = halted)
 python3 scripts/state.py confirm-halt    # Confirm halt completed
 python3 scripts/state.py halt-status     # Show halt status
 python3 scripts/state.py resume          # Clear halt, resume execution
+
+# Checkpoint (Crash Recovery)
+python3 scripts/state.py checkpoint create <t1> [t2 ...]  # Create batch checkpoint
+python3 scripts/state.py checkpoint update <id> <status>  # Update task (success|failed)
+python3 scripts/state.py checkpoint complete              # Mark batch done
+python3 scripts/state.py checkpoint status                # Show current checkpoint
+python3 scripts/state.py checkpoint recover               # Recover orphaned tasks
+python3 scripts/state.py checkpoint clear                 # Remove checkpoint
 
 # Bundles
 python3 scripts/bundle.py generate <id>   # Generate bundle for task

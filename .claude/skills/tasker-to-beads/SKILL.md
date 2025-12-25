@@ -5,6 +5,7 @@ tools:
   - bash
   - file_read
   - file_write
+  - ask_user
 ---
 
 # Tasker to Beads Transformer
@@ -20,21 +21,58 @@ Converts Tasker task definitions into enriched Beads issues that are **self-cont
 ## Prerequisites
 
 1. Tasker planning complete (`project-planning/state.json` exists, phase is "ready")
-2. Beads initialized in project (`/beads:init` has been run)
+2. A target directory for development (beads will be initialized there if needed)
+
+## Target Directory Concept
+
+The **source project** (where tasker planning lives) may be different from the **target project** (where development happens). For example:
+
+- **Source**: `~/projects/tasker/` - contains spec, planning artifacts, task definitions
+- **Target**: `~/projects/fathom/` - where the actual Elixir project will be built
+
+When invoked, this skill will:
+1. **Ask for the target directory** if not provided
+2. **Initialize beads** in the target directory if not already done
+3. **Create issues** in the target project's beads system
 
 ---
 
 ## Workflow
 
-### Step 1: Prepare Context
+### Step 0: Determine Target Directory
+
+**IMPORTANT:** Before proceeding, ask the user where development will happen:
+
+> "Where would you like to create the Beads issues? This should be the directory where the actual development will take place (e.g., the project repository being built)."
+
+Common scenarios:
+- **Same directory**: Use current project (e.g., adding features to existing codebase)
+- **New directory**: Create issues in a separate project (e.g., building a new project from a spec)
+
+### Step 1: Initialize Target (if needed)
 
 ```bash
-python3 .claude/skills/tasker-to-beads/scripts/transform.py context --all
+# Check status and see if target needs initialization
+.claude/skills/tasker-to-beads/bin/transform status -t /path/to/target
+
+# Initialize beads in target directory with custom prefix
+# This runs: bd init <PREFIX> && bd onboard
+.claude/skills/tasker-to-beads/bin/transform init-target /path/to/target FATHOM
+```
+
+The `init-target` command runs two steps:
+1. `bd init <PREFIX>` - Creates the `.beads` directory structure
+2. `bd onboard` - Sets up project configuration and initial state
+
+### Step 2: Prepare Context
+
+```bash
+.claude/skills/tasker-to-beads/bin/transform context --all -t /path/to/target
 ```
 
 This extracts structural data from task files and saves context bundles to `project-planning/beads-export/`.
 
-### Step 2: Enrich Each Task (LLM Work)
+### Step 3: Enrich Each Task (LLM Work)
 
 For each task, read the context file and generate an enriched issue description.
 
@@ -48,16 +86,16 @@ cat project-planning/beads-export/{TASK_ID}-context.json
 # Save to project-planning/beads-export/{TASK_ID}-enriched.json
 ```
 
-### Step 3: Create Beads Issues
+### Step 4: Create Beads Issues
 
-After enrichment, create issues:
+After enrichment, create issues in the target directory:
 ```bash
-python3 .claude/skills/tasker-to-beads/scripts/transform.py create {TASK_ID} project-planning/beads-export/{TASK_ID}-enriched.json
+.claude/skills/tasker-to-beads/bin/transform create {TASK_ID} project-planning/beads-export/{TASK_ID}-enriched.json -t /path/to/target
 ```
 
 Or batch create from manifest:
 ```bash
-python3 .claude/skills/tasker-to-beads/scripts/transform.py batch-create project-planning/beads-export/manifest.json
+.claude/skills/tasker-to-beads/bin/transform batch-create project-planning/beads-export/manifest.json -t /path/to/target
 ```
 
 ---
@@ -180,7 +218,7 @@ To transform a single task:
 
 ```bash
 # 1. Prepare context
-python3 .claude/skills/tasker-to-beads/scripts/transform.py context T001
+.claude/skills/tasker-to-beads/bin/transform context T001
 
 # 2. Read and understand
 cat project-planning/beads-export/T001-context.json
@@ -189,8 +227,8 @@ cat project-planning/beads-export/T001-context.json
 # ... apply the enrichment template ...
 # Save to project-planning/beads-export/T001-enriched.json
 
-# 4. Create the issue
-python3 .claude/skills/tasker-to-beads/scripts/transform.py create T001 project-planning/beads-export/T001-enriched.json
+# 4. Create the issue in target directory
+.claude/skills/tasker-to-beads/bin/transform create T001 project-planning/beads-export/T001-enriched.json -t /path/to/target
 ```
 
 ---
@@ -200,18 +238,21 @@ python3 .claude/skills/tasker-to-beads/scripts/transform.py create T001 project-
 To transform all tasks:
 
 ```bash
-# 1. Prepare all contexts
-python3 .claude/skills/tasker-to-beads/scripts/transform.py context --all
+# 1. Check status and determine target
+.claude/skills/tasker-to-beads/bin/transform status -t /path/to/target
 
-# 2. For each context file, generate enriched content
+# 2. Prepare all contexts
+.claude/skills/tasker-to-beads/bin/transform context --all
+
+# 3. For each context file, generate enriched content
 # This is the neural loop - process each T*-context.json
 
-# 3. Create manifest with all enriched issues
+# 4. Create manifest with all enriched issues
 # Save to project-planning/beads-export/manifest.json with structure:
 # { "issues": [ {...enriched issue 1...}, {...enriched issue 2...}, ... ] }
 
-# 4. Batch create
-python3 .claude/skills/tasker-to-beads/scripts/transform.py batch-create project-planning/beads-export/manifest.json
+# 5. Batch create in target directory
+.claude/skills/tasker-to-beads/bin/transform batch-create project-planning/beads-export/manifest.json -t /path/to/target
 ```
 
 ---
