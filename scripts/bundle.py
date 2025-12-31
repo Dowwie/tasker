@@ -39,6 +39,8 @@ def file_checksum(path: Path) -> str:
     """SHA256 checksum of file contents (truncated to 16 chars)."""
     if not path.exists():
         return ""
+    if path.is_dir():
+        return "dir:" + hashlib.sha256(str(path).encode()).hexdigest()[:12]
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 

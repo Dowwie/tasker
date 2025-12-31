@@ -284,6 +284,56 @@ pending ──▶ ready ──▶ running ──▶ complete
 skipped (manual override)
 ```
 
+### Task Ordering and Scheduling
+
+Tasker uses **dynamic scheduling** rather than a precomputed topological sort. Order is determined through two mechanisms:
+
+**1. Phase Assignment (Planning Time)**
+
+The `plan-auditor` agent assigns phases using heuristics:
+- **Phase 1:** Tasks with no dependencies (foundations)
+- **Phase 2:** Steel thread tasks (critical path)
+- **Phase 3+:** Remaining tasks grouped by domain affinity
+
+This is a human/agent judgment call, not an algorithm. The only validation is that all dependencies must be in earlier phases.
+
+**2. Ready-Task Computation (Execution Time)**
+
+At runtime, `get_ready_tasks()` dynamically determines what can execute:
+
+```python
+def get_ready_tasks(state):
+    ready = []
+    for task in state["tasks"].values():
+        if task["status"] != "pending":
+            continue
+        # Check ALL dependencies are complete or skipped
+        if all(dep_status in ["complete", "skipped"]
+               for dep in task["depends_on"]):
+            ready.append(task["id"])
+    return ready
+```
+
+This is a **pull-based scheduler**—rather than computing the full order upfront, it evaluates "what can run now?" each iteration.
+
+**How "A before B" is Determined**
+
+| Condition | Order | Mechanism |
+|-----------|-------|-----------|
+| B lists A in `dependencies.tasks` | A → B | Explicit dependency |
+| A has phase 1, B has phase 2 | A → B (usually) | Phase grouping |
+| Neither depends on other, same phase | A ∥ B | Parallel execution |
+
+The **only hard constraint** is explicit dependencies declared in task files. Phases are advisory groupings that align with dependency depth.
+
+**Why No Traditional Topological Sort?**
+
+- Tasks are written to individual files with dependencies declared upfront
+- Cycle detection uses DFS (in `validate.py`) but doesn't produce an ordering
+- Execution is driven by "what's ready?" not "what's the precomputed order?"
+
+This approach enables resumability—if execution stops mid-way, ready tasks are recomputed from current state rather than requiring the full sort to be rerun.
+
 ---
 
 ## Data Flow Detail
