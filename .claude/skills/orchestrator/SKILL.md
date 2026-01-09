@@ -25,6 +25,7 @@ The orchestrator ONLY:
 - Queries state via `scripts/state.py`
 - Dispatches agents based on mode/phase
 - Handles user interaction
+- **Ensures commits happen** via `scripts/commit-task.sh` (defense in depth)
 
 ---
 
@@ -786,6 +787,7 @@ while true; do
 
     # 7. AS EACH EXECUTOR RETURNS, update checkpoint
     # Parse the minimal return: "T001: SUCCESS" -> task_id=T001, status=success
+    # NOTE: Commits are handled automatically by PostToolUse hook (.claude/hooks/post-task-commit.sh)
     for TASK_ID in ${BATCH_ARRAY[@]}; do
         # Executor returned - check result file exists
         if [ -f "$PLANNING_DIR/bundles/${TASK_ID}-result.json" ]; then
@@ -813,6 +815,54 @@ while true; do
     # In interactive mode: read -p "Continue? (y/n): " CONTINUE
 done
 ```
+
+## Post-Execution Commit (Defense in Depth)
+
+Task file commits are handled **automatically** by a Claude Code hook, ensuring commits happen regardless of executor behavior.
+
+### Hook Configuration
+
+Configured in `.claude/settings.local.json`:
+```json
+"PostToolUse": [
+  {
+    "matcher": "Task",
+    "hooks": [
+      {
+        "type": "command",
+        "command": ".claude/hooks/post-task-commit.sh",
+        "timeout": 30
+      }
+    ]
+  }
+]
+```
+
+### How It Works
+
+1. **Hook** (`.claude/hooks/post-task-commit.sh`) - Triggered after every Task tool completion
+   - Parses task ID from output (e.g., "T001: SUCCESS")
+   - Reads `target_dir` from `state.json`
+   - Calls the commit script if task succeeded
+
+2. **Script** (`scripts/commit-task.sh`) - Does the actual commit work
+   - Reads `bundles/<task_id>-result.json` for file list
+   - Checks if files have uncommitted changes
+   - If uncommitted: stages and commits with message `<task_id>: <task_name>`
+   - If already committed: no-op (idempotent)
+   - Updates result file with commit SHA
+
+### Manual Usage
+
+```bash
+./scripts/commit-task.sh <task_id> <target_dir> <planning_dir>
+```
+
+**Why hook-based (not orchestrator-called):**
+- **Automatic** - No orchestrator code to forget/break
+- **Single point of control** - Hook config is the source of truth
+- **Resilient** - Works regardless of orchestrator implementation
+- **Idempotent** - Safe to run multiple times
 
 ## Checkpoint Commands Reference
 
