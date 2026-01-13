@@ -80,6 +80,85 @@
             "issues": { "type": "array", "items": { "type": "string" } },
             "validated_at": { "type": "string", "format": "date-time" }
           }
+        },
+        "validation_results": {
+          "type": "object",
+          "description": "Results from programmatic planning gates",
+          "properties": {
+            "spec_coverage": {
+              "type": "object",
+              "properties": {
+                "ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+                "passed": { "type": "boolean" },
+                "threshold": { "type": "number" },
+                "covered_requirements": { "type": "array", "items": { "type": "string" } },
+                "uncovered_requirements": { "type": "array", "items": { "type": "string" } },
+                "timestamp": { "type": "string", "format": "date-time" }
+              }
+            },
+            "phase_leakage": {
+              "type": "object",
+              "properties": {
+                "passed": { "type": "boolean" },
+                "violations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "task_id": { "type": "string" },
+                      "behavior": { "type": "string" },
+                      "evidence": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            },
+            "dependency_existence": {
+              "type": "object",
+              "properties": {
+                "passed": { "type": "boolean" },
+                "violations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "task_id": { "type": "string" },
+                      "missing_dependency": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            },
+            "acceptance_criteria": {
+              "type": "object",
+              "properties": {
+                "passed": { "type": "boolean" },
+                "violations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "task_id": { "type": "string" },
+                      "criterion_index": { "type": "integer" },
+                      "issue": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            },
+            "refactor_overrides": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "task_id": { "type": "string" },
+                  "supersedes": { "type": "array", "items": { "type": "string" } },
+                  "directive": { "type": "string" }
+                }
+              }
+            },
+            "validated_at": { "type": "string", "format": "date-time" }
+          }
         }
       }
     },

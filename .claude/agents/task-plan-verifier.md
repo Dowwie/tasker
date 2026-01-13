@@ -75,7 +75,31 @@ Build a mental model of:
 - Dependency graph
 - Constraint declarations
 
-### 3. Judge Each Task Against Rubric
+### 3. Run Programmatic Gates (Required)
+
+Before evaluating tasks manually, run the programmatic validation gates:
+
+```bash
+cd {PLANNING_DIR}/.. && python3 scripts/validate.py planning-gates --threshold 0.9
+```
+
+This checks:
+- **Spec Coverage**: At least 90% of requirements covered by tasks
+- **Phase Leakage**: No Phase 2+ content in Phase 1 tasks
+- **Dependency Existence**: All task dependencies reference existing tasks
+- **Acceptance Criteria Quality**: No vague terms, valid verification commands
+
+**If programmatic gates FAIL:**
+- The aggregate verdict is automatically **BLOCKED**
+- Document the blocking issues from the gate output
+- Skip to Step 6 (Save Report) with BLOCKED verdict
+- Include gate failures in the report
+
+**If programmatic gates PASS:**
+- Continue with manual rubric evaluation below
+- Note: Some checks overlap (Phase Compliance, AC Quality) - programmatic gates are authoritative
+
+### 4. Judge Each Task Against Rubric
 
 For each task, evaluate these dimensions:
 
@@ -212,7 +236,76 @@ cat {PLANNING_DIR}/artifacts/capability-map.json | jq '.phase_filtering.excluded
 4. ✅ Is the verification command **executable** (not manual, not vague)?
 5. ✅ Would the verification command **fail if the criterion isn't met**?
 
-### 4. Determine Verdict Per Task
+#### G. Refactor Compliance (Required if refactor tasks exist)
+
+| Score | Meaning |
+|-------|---------|
+| PASS | Refactor context is complete and explicit |
+| PARTIAL | Minor gaps in refactor documentation |
+| FAIL | Missing refactor context or implicit overrides |
+| N/A | No refactor tasks in this plan |
+
+**This section applies only to tasks with `task_type: "refactor"`.**
+
+**Evidence to check:**
+- [ ] `refactor_context.refactor_directive` clearly states the refactor goal
+- [ ] `refactor_context.original_spec_sections` lists all superseded spec sections
+- [ ] `refactor_context.design_changes` documents intentional deviations from original design
+- [ ] Acceptance criteria verify **refactor goals**, NOT original spec requirements
+- [ ] No other tasks depend on requirements that this refactor supersedes
+
+**If task has `task_type: "refactor"` but missing `refactor_context`:**
+- Score: FAIL
+- Evidence: "Refactor task missing refactor_context"
+- Action: Add complete refactor_context to task definition
+
+**If refactor overrides are implicit (not documented):**
+- Score: FAIL
+- Evidence: "Task modifies behavior X without documenting override"
+- Action: Add explicit override documentation in `refactor_context.design_changes`
+
+**Example of GOOD refactor task:**
+```json
+{
+  "id": "T015",
+  "name": "Refactor authentication to use composition",
+  "task_type": "refactor",
+  "context": {
+    "spec_ref": {
+      "refactor_ref": "Replace inheritance hierarchy with composition pattern",
+      "supersedes": ["Section 3.2 - AuthBase class hierarchy"]
+    }
+  },
+  "refactor_context": {
+    "original_spec_sections": ["Section 3.2"],
+    "refactor_directive": "Replace inheritance-based auth with composition for testability",
+    "design_changes": [
+      "Remove AuthBase abstract class",
+      "Introduce AuthStrategy protocol",
+      "Use dependency injection for auth providers"
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "AuthStrategy protocol defines authenticate() method",
+      "verification": "grep -q 'def authenticate' src/auth/protocol.py"
+    },
+    {
+      "criterion": "No classes inherit from AuthBase",
+      "verification": "! grep -rq 'class.*AuthBase' src/"
+    }
+  ]
+}
+```
+
+**Run refactor priority check:**
+```bash
+cd {PLANNING_DIR}/.. && python3 scripts/validate.py refactor-priority
+```
+
+This shows which original requirements are superseded by refactor tasks.
+
+### 5. Determine Verdict Per Task
 
 **PASS criteria:**
 - Spec Alignment: PASS
@@ -221,6 +314,7 @@ cat {PLANNING_DIR}/artifacts/capability-map.json | jq '.phase_filtering.excluded
 - Preference Compliance: PASS or N/A
 - Viability: PASS
 - Acceptance Criteria Quality: PASS
+- Refactor Compliance: PASS or N/A
 
 **CONDITIONAL PASS criteria:**
 - No FAIL scores
@@ -233,7 +327,7 @@ cat {PLANNING_DIR}/artifacts/capability-map.json | jq '.phase_filtering.excluded
 - Critical issues that block execution
 - Acceptance criteria are untestable or missing verification commands
 
-### 5. Aggregate Verdict
+### 6. Aggregate Verdict
 
 After evaluating all tasks:
 
@@ -243,7 +337,7 @@ After evaluating all tasks:
 | READY_WITH_NOTES | All tasks PASS or CONDITIONAL PASS, notes attached |
 | BLOCKED | One or more tasks FAIL |
 
-### 6. Save Report
+### 7. Save Report
 
 **Save the verification report to a file:**
 
@@ -265,7 +359,7 @@ EOF
 
 This file persists for review and debugging.
 
-### 7. Register Verdict
+### 8. Register Verdict
 
 **Register the verdict with state.py (run from parent of PLANNING_DIR):**
 
@@ -286,7 +380,7 @@ cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks BLOCKED "Critica
 
 This registration is required for the orchestrator to advance the phase.
 
-### 8. Report to Orchestrator
+### 9. Report to Orchestrator
 
 ```markdown
 ## Task Plan Verification Report

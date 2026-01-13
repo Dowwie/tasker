@@ -85,24 +85,111 @@ For each criterion, evaluate using this rubric:
 | Assertions | Are assertions meaningful? |
 | Edge cases | Are edge cases tested? |
 
-### 4. Determine Verdict
+### 4. Refactor Verification (Required for refactor tasks)
+
+**This section applies only to tasks with `task_type: "refactor"` in the bundle.**
+
+Check if this is a refactor task:
+```bash
+cat {PLANNING_DIR}/bundles/T001-bundle.json | jq '.task_type'
+```
+
+If `task_type == "refactor"`, evaluate these additional dimensions:
+
+#### Refactor-Specific Checks
+
+| Dimension | Check |
+|-----------|-------|
+| Directive Met | Does implementation achieve the refactor directive (not original spec)? |
+| Supersession Complete | Is superseded code/design actually replaced (not just added to)? |
+| Changes Implemented | Are documented `design_changes` actually present in code? |
+| No Regression | Is functionality maintained for non-changed behavior? |
+
+**Evidence to gather:**
+
+1. **Git diff showing removed/replaced code:**
+   ```bash
+   cd $TARGET_DIR && git diff HEAD~1 --stat
+   ```
+
+2. **Search for superseded patterns that should be eliminated:**
+   ```bash
+   # Example: If refactor removes inheritance
+   grep -r "class.*BaseClass" src/ && echo "FAIL: Old pattern still exists"
+   ```
+
+3. **Confirm new patterns are in place:**
+   ```bash
+   # Example: If refactor introduces Protocol
+   grep -r "Protocol" src/ && echo "PASS: New pattern exists"
+   ```
+
+4. **Test coverage on refactored paths:**
+   ```bash
+   pytest --cov=src/refactored_module --cov-report=term-missing
+   ```
+
+#### Refactor Verdict
+
+| Score | Meaning |
+|-------|---------|
+| PASS | Refactor directive achieved, superseded patterns removed |
+| PARTIAL | Refactor partially complete, some old patterns remain |
+| FAIL | Refactor directive not achieved or regression detected |
+
+**Example refactor evaluation:**
+
+```markdown
+#### Refactor Verification for T015 (task_type: refactor)
+
+**Refactor Directive:** "Replace inheritance hierarchy with composition"
+
+| Check | Score | Evidence |
+|-------|-------|----------|
+| Directive Met | PASS | BaseClass hierarchy removed, ComposedService introduced |
+| Supersession Complete | PASS | `grep -r 'class.*AuthBase' src/` returns empty |
+| Changes Implemented | PASS | `design_changes` lists "Remove BaseClass" - confirmed |
+| No Regression | PASS | All existing tests pass, functionality preserved |
+
+**Refactor Verdict:** PASS
+```
+
+**Include in structured JSON output:**
+```json
+{
+  "task_id": "T015",
+  "task_type": "refactor",
+  "verdict": "PASS",
+  "refactor": {
+    "directive_met": "PASS",
+    "supersession_complete": "PASS",
+    "changes_implemented": "PASS",
+    "no_regression": "PASS"
+  },
+  ...
+}
+```
+
+### 5. Determine Verdict
 
 **PASS criteria:**
 - ALL functional criteria: PASS
 - Code quality: No critical issues
 - Tests (if required): Passing
+- Refactor verification (if task_type == "refactor"): PASS
 
 **FAIL criteria:**
 - ANY functional criterion: FAIL
 - Critical code quality issue (no types, broken imports)
 - Required tests failing
+- Refactor verification: FAIL (directive not met or regression)
 
 **CONDITIONAL PASS:**
 - Minor issues that don't block functionality
 - Recommendations for improvement
 - Proceed with notes
 
-### 5. Report
+### 6. Report
 
 ```markdown
 ## Verification Report

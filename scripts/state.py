@@ -259,6 +259,39 @@ def can_advance_phase(state: dict) -> tuple[bool, str]:
     elif current == "definition":
         if not state["tasks"]:
             return False, "No tasks defined"
+
+        # Run automated planning gates before advancing to validation
+        from validate import run_planning_gates
+        results = run_planning_gates(PLANNING_DIR, spec_threshold=0.9)
+
+        # Store validation results in state for observability
+        state["artifacts"]["validation_results"] = {
+            "spec_coverage": {
+                "ratio": results["spec_coverage"]["report"]["coverage_ratio"],
+                "passed": results["spec_coverage"]["passed"],
+                "threshold": results["spec_coverage"]["report"]["threshold"],
+                "timestamp": now_iso(),
+            },
+            "phase_leakage": {
+                "passed": results["phase_leakage"]["passed"],
+                "violations": results["phase_leakage"]["violations"],
+            },
+            "dependency_existence": {
+                "passed": results["dependency_existence"]["passed"],
+                "violations": results["dependency_existence"]["violations"],
+            },
+            "acceptance_criteria": {
+                "passed": results["acceptance_criteria"]["passed"],
+                "violations": results["acceptance_criteria"]["violations"],
+            },
+            "refactor_overrides": results["refactor_priority"]["overrides"],
+            "validated_at": now_iso(),
+        }
+
+        if not results["passed"]:
+            issues = "; ".join(results["blocking_issues"])
+            return False, f"Planning gates failed: {issues}. Run 'python3 scripts/validate.py planning-gates' for details"
+
         return True, ""
 
     elif current == "validation":

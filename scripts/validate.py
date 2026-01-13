@@ -8,6 +8,7 @@ Provides comprehensive validation for the multi-agent workflow:
 - Rollback integrity validation
 - Steel thread path validation
 - Verification command pre-checks
+- Planning gates for spec adherence enforcement
 
 Usage:
     validate.py dag                      Check for dependency cycles
@@ -16,6 +17,14 @@ Usage:
     validate.py calibration              Compute verifier calibration metrics
     validate.py rollback <task_id>       Validate rollback integrity
     validate.py all                      Run all validations
+
+Planning Gates:
+    validate.py spec-coverage [--threshold 0.9]   Check spec requirement coverage
+    validate.py phase-leakage                     Detect Phase 2+ content in tasks
+    validate.py dependency-existence              Verify all task dependencies exist
+    validate.py acceptance-criteria               Check AC quality (no vague terms)
+    validate.py planning-gates [--threshold 0.9]  Run all planning validation gates
+    validate.py refactor-priority                 Show refactor override resolution
 """
 
 import hashlib
@@ -456,6 +465,418 @@ def validate_all_verification_commands(state: dict) -> tuple[bool, dict[str, lis
 
 
 # =============================================================================
+# PLANNING GATES - SPEC ADHERENCE ENFORCEMENT
+# =============================================================================
+
+VAGUE_TERMS = [
+    "works correctly",
+    "handles errors",
+    "is correct",
+    "functions properly",
+    "is good",
+    "is clean",
+    "is fast",
+    "performs well",
+    "is secure",
+]
+
+VALID_VERIFICATION_PREFIXES = (
+    "pytest",
+    "python",
+    "bash",
+    "grep",
+    "test",
+    "curl",
+    "npm",
+    "make",
+    "go",
+    "ruff",
+    "cargo",
+    "node",
+    "yarn",
+    "pnpm",
+    "dotnet",
+    "mvn",
+    "gradle",
+)
+
+
+def extract_requirements(spec_path: Path) -> dict[str, str]:
+    """Extract requirements from spec as {requirement_id: requirement_text}.
+
+    Parses the spec file looking for requirement patterns:
+    - Lines starting with REQ-XXX:
+    - Lines starting with R#.#:
+    - Numbered list items (1., 2., etc.)
+    - Bullet items starting with - or *
+
+    Returns:
+        Dict mapping requirement ID to requirement text
+    """
+    if not spec_path.exists():
+        return {}
+
+    requirements: dict[str, str] = {}
+    content = spec_path.read_text()
+    lines = content.split("\n")
+
+    req_counter = 0
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            continue
+
+        # Pattern: REQ-XXX: description
+        if line.startswith("REQ-"):
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                req_id = parts[0].strip()
+                requirements[req_id] = parts[1].strip()
+                continue
+
+        # Pattern: R#.#: description (e.g., R1.2: ...)
+        if line.startswith("R") and len(line) > 1 and line[1].isdigit():
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                req_id = parts[0].strip()
+                requirements[req_id] = parts[1].strip()
+                continue
+
+        # Pattern: numbered list (1. description)
+        if line and line[0].isdigit() and "." in line[:4]:
+            dot_pos = line.find(".")
+            if dot_pos > 0 and dot_pos < 4:
+                req_counter += 1
+                req_id = f"REQ-{req_counter:03d}"
+                requirements[req_id] = line[dot_pos + 1 :].strip()
+                continue
+
+        # Pattern: bullet items (- or * followed by space)
+        if line.startswith("- ") or line.startswith("* "):
+            req_counter += 1
+            req_id = f"REQ-{req_counter:03d}"
+            requirements[req_id] = line[2:].strip()
+
+    return requirements
+
+
+def validate_spec_coverage(
+    state_dir: Path, threshold: float = 0.9
+) -> tuple[bool, dict]:
+    """Block planning if spec coverage falls below threshold.
+
+    Returns:
+        (passed, report) where report contains:
+        - coverage_ratio: float
+        - covered_requirements: list
+        - uncovered_requirements: list
+        - refactor_overrides: list (requirements superseded by refactors)
+        - threshold: float
+    """
+    spec_path = state_dir / "inputs" / "spec.md"
+    tasks_dir = state_dir / "tasks"
+
+    requirements = extract_requirements(spec_path)
+    if not requirements:
+        return True, {
+            "coverage_ratio": 1.0,
+            "covered_requirements": [],
+            "uncovered_requirements": [],
+            "refactor_overrides": [],
+            "threshold": threshold,
+        }
+
+    covered: set[str] = set()
+    refactor_overrides: set[str] = set()
+
+    if tasks_dir.exists():
+        for task_file in tasks_dir.glob("T*.json"):
+            task = json.loads(task_file.read_text())
+            context = task.get("context", {})
+            spec_ref = context.get("spec_ref", {})
+
+            if isinstance(spec_ref, dict):
+                if "refactor_ref" in spec_ref:
+                    for superseded in spec_ref.get("supersedes", []):
+                        refactor_overrides.add(superseded)
+                elif "quote" in spec_ref:
+                    quote = spec_ref["quote"].lower()
+                    for req_id, req_text in requirements.items():
+                        if quote in req_text.lower() or req_text.lower() in quote:
+                            covered.add(req_id)
+
+            # Also check spec_requirements list
+            for req_id in context.get("spec_requirements", []):
+                if req_id in requirements:
+                    covered.add(req_id)
+
+    uncovered = set(requirements.keys()) - covered - refactor_overrides
+    total = len(requirements)
+    coverage_ratio = (len(covered) + len(refactor_overrides)) / total if total else 1.0
+
+    return coverage_ratio >= threshold, {
+        "coverage_ratio": coverage_ratio,
+        "covered_requirements": sorted(covered),
+        "uncovered_requirements": sorted(uncovered),
+        "refactor_overrides": sorted(refactor_overrides),
+        "threshold": threshold,
+    }
+
+
+def detect_phase_leakage(state_dir: Path) -> tuple[bool, list[dict]]:
+    """Verify no Phase 2+ content leaked into Phase 1 tasks.
+
+    Returns:
+        (passed, violations) where violations contain:
+        - task_id: str
+        - behavior: str
+        - evidence: str
+    """
+    cap_map_path = state_dir / "artifacts" / "capability-map.json"
+    if not cap_map_path.exists():
+        return True, []
+
+    cap_map = json.loads(cap_map_path.read_text())
+    tasks_dir = state_dir / "tasks"
+
+    excluded_phases = cap_map.get("phase_filtering", {}).get("excluded_phases", [])
+    excluded_content: set[str] = set()
+    for phase in excluded_phases:
+        summary = phase.get("summary", "").lower()
+        if summary:
+            excluded_content.add(summary)
+        heading = phase.get("heading", "").lower()
+        if heading:
+            excluded_content.add(heading)
+
+    if not excluded_content or not tasks_dir.exists():
+        return True, []
+
+    violations: list[dict] = []
+    for task_file in tasks_dir.glob("T*.json"):
+        task = json.loads(task_file.read_text())
+
+        # Skip refactor tasks - they may intentionally touch excluded content
+        if task.get("task_type") == "refactor":
+            continue
+
+        task_id = task.get("id", task_file.stem)
+
+        for behavior in task.get("behaviors", []):
+            behavior_lower = behavior.lower()
+            for excluded in excluded_content:
+                if excluded in behavior_lower or behavior_lower in excluded:
+                    violations.append(
+                        {
+                            "task_id": task_id,
+                            "behavior": behavior,
+                            "evidence": f"Matches excluded content: {excluded}",
+                        }
+                    )
+
+    return len(violations) == 0, violations
+
+
+def validate_dependency_existence(state_dir: Path) -> tuple[bool, list[dict]]:
+    """Verify all declared dependencies reference existing tasks.
+
+    Returns:
+        (all_exist, violations) where violations contain:
+        - task_id: str
+        - missing_dependency: str
+    """
+    tasks_dir = state_dir / "tasks"
+    if not tasks_dir.exists():
+        return True, []
+
+    task_files = list(tasks_dir.glob("T*.json"))
+
+    # Build set of existing task IDs
+    task_ids: set[str] = set()
+    for task_file in task_files:
+        task = json.loads(task_file.read_text())
+        task_ids.add(task.get("id", task_file.stem))
+
+    violations: list[dict] = []
+    for task_file in task_files:
+        task = json.loads(task_file.read_text())
+        task_id = task.get("id", task_file.stem)
+        deps = task.get("dependencies", {}).get("tasks", [])
+
+        for dep in deps:
+            if dep not in task_ids:
+                violations.append(
+                    {
+                        "task_id": task_id,
+                        "missing_dependency": dep,
+                    }
+                )
+
+    return len(violations) == 0, violations
+
+
+def validate_acceptance_criteria_quality(state_dir: Path) -> tuple[bool, list[dict]]:
+    """Validate acceptance criteria are specific and measurable.
+
+    Returns:
+        (all_valid, violations) where violations contain:
+        - task_id: str
+        - criterion_index: int
+        - issue: str
+    """
+    tasks_dir = state_dir / "tasks"
+    if not tasks_dir.exists():
+        return True, []
+
+    violations: list[dict] = []
+
+    for task_file in tasks_dir.glob("T*.json"):
+        task = json.loads(task_file.read_text())
+        task_id = task.get("id", task_file.stem)
+
+        for idx, criterion in enumerate(task.get("acceptance_criteria", [])):
+            criterion_text = criterion.get("criterion", "").lower()
+            verification = criterion.get("verification", "")
+
+            # Check for vague terms
+            for vague in VAGUE_TERMS:
+                if vague in criterion_text:
+                    violations.append(
+                        {
+                            "task_id": task_id,
+                            "criterion_index": idx,
+                            "issue": f"Vague term '{vague}' in criterion",
+                        }
+                    )
+
+            # Check verification command starts with known tool
+            if verification and not any(
+                verification.startswith(p) for p in VALID_VERIFICATION_PREFIXES
+            ):
+                violations.append(
+                    {
+                        "task_id": task_id,
+                        "criterion_index": idx,
+                        "issue": "Verification command doesn't start with recognized tool",
+                    }
+                )
+
+    return len(violations) == 0, violations
+
+
+def resolve_refactor_priority(state_dir: Path) -> dict:
+    """Build authoritative requirement map with refactor overrides applied.
+
+    Returns:
+        {
+            "effective_requirements": dict,  # After refactor overrides
+            "original_requirements": dict,   # From spec.md
+            "overrides": [                   # Refactor override log
+                {"task_id": str, "supersedes": list, "directive": str}
+            ]
+        }
+    """
+    spec_path = state_dir / "inputs" / "spec.md"
+    tasks_dir = state_dir / "tasks"
+
+    original_reqs = extract_requirements(spec_path)
+    effective_reqs = original_reqs.copy()
+    overrides: list[dict] = []
+
+    if tasks_dir.exists():
+        for task_file in tasks_dir.glob("T*.json"):
+            task = json.loads(task_file.read_text())
+
+            if task.get("task_type") == "refactor":
+                refactor_ctx = task.get("refactor_context", {})
+                superseded = refactor_ctx.get("original_spec_sections", [])
+                directive = refactor_ctx.get("refactor_directive", "")
+
+                # Remove superseded requirements from effective set
+                for section in superseded:
+                    effective_reqs.pop(section, None)
+
+                # Add refactor directive as new requirement
+                if directive:
+                    effective_reqs[f"REFACTOR-{task['id']}"] = directive
+
+                overrides.append(
+                    {
+                        "task_id": task["id"],
+                        "supersedes": superseded,
+                        "directive": directive,
+                    }
+                )
+
+    return {
+        "effective_requirements": effective_reqs,
+        "original_requirements": original_reqs,
+        "overrides": overrides,
+    }
+
+
+def run_planning_gates(state_dir: Path, spec_threshold: float = 0.9) -> dict:
+    """Run all planning validation gates.
+
+    Returns:
+        {
+            "passed": bool,
+            "spec_coverage": {"passed": bool, "report": dict},
+            "phase_leakage": {"passed": bool, "violations": list},
+            "dependency_existence": {"passed": bool, "violations": list},
+            "acceptance_criteria": {"passed": bool, "violations": list},
+            "refactor_priority": dict,
+            "blocking_issues": list[str]
+        }
+    """
+    results: dict = {
+        "passed": True,
+        "blocking_issues": [],
+    }
+
+    # Spec coverage gate
+    passed, report = validate_spec_coverage(state_dir, spec_threshold)
+    results["spec_coverage"] = {"passed": passed, "report": report}
+    if not passed:
+        results["passed"] = False
+        results["blocking_issues"].append(
+            f"Spec coverage {report['coverage_ratio']:.1%} below threshold {spec_threshold:.1%}"
+        )
+
+    # Phase leakage gate
+    passed, violations = detect_phase_leakage(state_dir)
+    results["phase_leakage"] = {"passed": passed, "violations": violations}
+    if not passed:
+        results["passed"] = False
+        results["blocking_issues"].append(
+            f"Phase leakage detected: {len(violations)} violation(s)"
+        )
+
+    # Dependency existence gate
+    passed, violations = validate_dependency_existence(state_dir)
+    results["dependency_existence"] = {"passed": passed, "violations": violations}
+    if not passed:
+        results["passed"] = False
+        results["blocking_issues"].append(
+            f"Missing dependencies: {len(violations)} reference(s) to non-existent tasks"
+        )
+
+    # Acceptance criteria quality gate
+    passed, violations = validate_acceptance_criteria_quality(state_dir)
+    results["acceptance_criteria"] = {"passed": passed, "violations": violations}
+    if not passed:
+        results["passed"] = False
+        results["blocking_issues"].append(
+            f"Acceptance criteria quality issues: {len(violations)} problem(s)"
+        )
+
+    # Refactor priority resolution (informational, doesn't block)
+    results["refactor_priority"] = resolve_refactor_priority(state_dir)
+
+    return results
+
+
+# =============================================================================
 # COMPREHENSIVE VALIDATION
 # =============================================================================
 
@@ -616,6 +1037,101 @@ def main() -> None:
         results = run_all_validations(state)
         print_validation_report(results)
         sys.exit(0 if results["overall_valid"] else 1)
+
+    elif cmd == "spec-coverage":
+        threshold = 0.9
+        if len(sys.argv) > 2 and sys.argv[2] == "--threshold":
+            threshold = float(sys.argv[3])
+        valid, report = validate_spec_coverage(PLANNING_DIR, threshold)
+        print("Spec Coverage Report")
+        print("=" * 40)
+        print(f"Coverage: {report['coverage_ratio']:.1%}")
+        print(f"Threshold: {report['threshold']:.1%}")
+        print(f"Covered: {len(report['covered_requirements'])}")
+        print(f"Uncovered: {len(report['uncovered_requirements'])}")
+        print(f"Refactor overrides: {len(report['refactor_overrides'])}")
+        if report["uncovered_requirements"]:
+            print("\nUncovered requirements:")
+            for req in report["uncovered_requirements"]:
+                print(f"  - {req}")
+        sys.exit(0 if valid else 1)
+
+    elif cmd == "phase-leakage":
+        valid, violations = detect_phase_leakage(PLANNING_DIR)
+        if valid:
+            print("No phase leakage detected")
+        else:
+            print("Phase leakage violations:")
+            for v in violations:
+                print(f"  {v['task_id']}: {v['behavior']}")
+                print(f"    Evidence: {v['evidence']}")
+        sys.exit(0 if valid else 1)
+
+    elif cmd == "dependency-existence":
+        valid, violations = validate_dependency_existence(PLANNING_DIR)
+        if valid:
+            print("All dependencies exist")
+        else:
+            print("Missing dependency violations:")
+            for v in violations:
+                print(f"  {v['task_id']}: depends on non-existent {v['missing_dependency']}")
+        sys.exit(0 if valid else 1)
+
+    elif cmd == "acceptance-criteria":
+        valid, violations = validate_acceptance_criteria_quality(PLANNING_DIR)
+        if valid:
+            print("All acceptance criteria meet quality standards")
+        else:
+            print("Acceptance criteria quality issues:")
+            for v in violations:
+                print(f"  {v['task_id']} criterion {v['criterion_index']}: {v['issue']}")
+        sys.exit(0 if valid else 1)
+
+    elif cmd == "planning-gates":
+        threshold = 0.9
+        if len(sys.argv) > 2 and sys.argv[2] == "--threshold":
+            threshold = float(sys.argv[3])
+        results = run_planning_gates(PLANNING_DIR, threshold)
+        print("Planning Gates Report")
+        print("=" * 40)
+        print()
+        print(f"Spec Coverage: {'PASS' if results['spec_coverage']['passed'] else 'FAIL'}")
+        print(f"  Coverage: {results['spec_coverage']['report']['coverage_ratio']:.1%}")
+        print()
+        print(f"Phase Leakage: {'PASS' if results['phase_leakage']['passed'] else 'FAIL'}")
+        if results['phase_leakage']['violations']:
+            print(f"  Violations: {len(results['phase_leakage']['violations'])}")
+        print()
+        print(f"Dependency Existence: {'PASS' if results['dependency_existence']['passed'] else 'FAIL'}")
+        if results['dependency_existence']['violations']:
+            print(f"  Missing: {len(results['dependency_existence']['violations'])}")
+        print()
+        print(f"Acceptance Criteria: {'PASS' if results['acceptance_criteria']['passed'] else 'FAIL'}")
+        if results['acceptance_criteria']['violations']:
+            print(f"  Issues: {len(results['acceptance_criteria']['violations'])}")
+        print()
+        print("-" * 40)
+        if results["passed"]:
+            print("All planning gates PASSED")
+        else:
+            print("Planning gates BLOCKED:")
+            for issue in results["blocking_issues"]:
+                print(f"  - {issue}")
+        sys.exit(0 if results["passed"] else 1)
+
+    elif cmd == "refactor-priority":
+        priority = resolve_refactor_priority(PLANNING_DIR)
+        print("Refactor Priority Resolution")
+        print("=" * 40)
+        print(f"Original requirements: {len(priority['original_requirements'])}")
+        print(f"Effective requirements: {len(priority['effective_requirements'])}")
+        print(f"Refactor overrides: {len(priority['overrides'])}")
+        if priority["overrides"]:
+            print("\nOverrides:")
+            for o in priority["overrides"]:
+                print(f"  {o['task_id']}: supersedes {o['supersedes']}")
+                if o["directive"]:
+                    print(f"    Directive: {o['directive'][:60]}...")
 
     else:
         print(f"Unknown command: {cmd}")

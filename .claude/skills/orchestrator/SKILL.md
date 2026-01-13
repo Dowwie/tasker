@@ -561,7 +561,30 @@ If you complete without task files existing at the absolute path, you have FAILE
 
 ### Validation Phase Details
 
-The `validation` phase runs **task-plan-verifier** to evaluate task definitions.
+**Automated Planning Gates (Pre-Check)**
+
+Before advancing from `definition` to `validation` phase, the system automatically runs programmatic validation gates:
+
+```bash
+# This happens automatically when calling: python3 scripts/state.py advance
+# The following gates are checked:
+# - Spec coverage ≥ 90% (tasks cover requirements)
+# - No phase leakage (Phase 2+ content not in Phase 1 tasks)
+# - All task dependencies reference existing tasks
+# - Acceptance criteria quality (no vague terms like "works correctly")
+```
+
+If any gate fails, phase advancement is blocked:
+```
+Planning gates failed: Spec coverage 75.0% below threshold 90.0%; Acceptance criteria quality issues: 3 problem(s)
+Run 'python3 scripts/validate.py planning-gates' for details
+```
+
+Results are stored in `state.json → artifacts.validation_results` for observability.
+
+**LLM-as-Judge Verification**
+
+After programmatic gates pass, the `validation` phase runs **task-plan-verifier** to evaluate task definitions.
 
 **Spawn prompt for task-plan-verifier:**
 
@@ -766,11 +789,35 @@ while true; do
     BATCH_ARRAY=($BATCH)
     echo "Batch: ${BATCH_ARRAY[@]}"
 
-    # 3. Generate bundles for all tasks in batch
+    # 3. Generate and validate bundles for all tasks in batch
+    VALID_TASKS=()
     for TASK_ID in ${BATCH_ARRAY[@]}; do
         python3 scripts/bundle.py generate $TASK_ID
         python3 scripts/bundle.py validate-integrity $TASK_ID
+        INTEGRITY_CODE=$?
+
+        if [ $INTEGRITY_CODE -eq 0 ]; then
+            # Bundle valid - add to execution batch
+            VALID_TASKS+=($TASK_ID)
+        elif [ $INTEGRITY_CODE -eq 2 ]; then
+            # WARNING: Artifacts changed since bundle creation - regenerate
+            ./scripts/log-activity.sh WARN orchestrator validation "$TASK_ID: Bundle drift detected, regenerating"
+            python3 scripts/bundle.py generate $TASK_ID
+            VALID_TASKS+=($TASK_ID)
+        else
+            # CRITICAL: Missing dependencies or validation failure
+            ./scripts/log-activity.sh ERROR orchestrator validation "$TASK_ID: Bundle integrity FAILED"
+            python3 scripts/state.py fail-task $TASK_ID "Bundle integrity validation failed" --category dependency
+            # Task will be skipped from this batch
+        fi
     done
+
+    # Update batch to only include valid tasks
+    if [ ${#VALID_TASKS[@]} -eq 0 ]; then
+        ./scripts/log-activity.sh ERROR orchestrator batch "No valid tasks in batch - all failed integrity check"
+        continue  # Skip to next batch
+    fi
+    BATCH_ARRAY=(${VALID_TASKS[@]})
 
     # 4. CREATE CHECKPOINT before spawning (crash recovery)
     python3 scripts/state.py checkpoint create ${BATCH_ARRAY[@]}
