@@ -39,6 +39,20 @@ Extract:
 
 ### 2. Gather Evidence
 
+#### Mandatory Deliverables Check
+
+**CRITICAL:** First verify the spec file exists. This is a hard requirement.
+
+```bash
+# Check spec file exists (MANDATORY - fail task if missing)
+TASK_ID="T001"  # From bundle
+test -f "$TARGET_DIR/docs/${TASK_ID}-spec.md" && echo "SPEC EXISTS" || echo "SPEC MISSING - FAIL"
+```
+
+**If spec file is missing, verdict is FAIL.** The executor must create `docs/{task_id}-spec.md` for every task.
+
+#### Implementation Files
+
 For each file in `bundle.files`:
 
 ```bash
@@ -177,12 +191,14 @@ If `task_type == "refactor"`, evaluate these additional dimensions:
 - Code quality: No critical issues
 - Tests (if required): Passing
 - Refactor verification (if task_type == "refactor"): PASS
+- Spec file exists: `docs/{task_id}-spec.md`
 
 **FAIL criteria:**
 - ANY functional criterion: FAIL
 - Critical code quality issue (no types, broken imports)
 - Required tests failing
 - Refactor verification: FAIL (directive not met or regression)
+- **Spec file missing** - `docs/{task_id}-spec.md` does not exist
 
 **CONDITIONAL PASS:**
 - Minor issues that don't block functionality
@@ -196,6 +212,10 @@ If `task_type == "refactor"`, evaluate these additional dimensions:
 
 **Task:** T001 - Implement credential validation
 **Verdict:** PASS | FAIL | CONDITIONAL PASS
+
+### Mandatory Deliverables
+
+- [x] docs/T001-spec.md (exists)
 
 ### Evidence Gathered
 
@@ -292,6 +312,9 @@ At the very end of your report, include a JSON block for programmatic parsing:
   "task_id": "T001",
   "verdict": "PASS",
   "recommendation": "PROCEED",
+  "deliverables": {
+    "spec_file": "PASS"
+  },
   "criteria": [
     {"name": "Valid credentials return True", "score": "PASS", "evidence": "Function exists, test passes"},
     {"name": "Invalid email raises ValidationError", "score": "PASS", "evidence": "Error raised with message"}
@@ -311,6 +334,8 @@ At the very end of your report, include a JSON block for programmatic parsing:
 ```
 
 **Score values:** `PASS`, `PARTIAL`, or `FAIL`
+
+**deliverables.spec_file:** FAIL if `docs/{task_id}-spec.md` is missing (causes overall FAIL verdict)
 
 This JSON block enables the executor to persist verification results via:
 ```bash

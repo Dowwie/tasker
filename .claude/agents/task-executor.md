@@ -127,9 +127,11 @@ After implementation, create documentation artifacts:
 mkdir -p "$TARGET_DIR/docs"
 ```
 
-#### Task Spec (Required)
+#### Task Spec (MANDATORY)
 
-Create `docs/{task_id}-spec.md` documenting what was built:
+**CRITICAL:** You MUST create `docs/{task_id}-spec.md` for EVERY task. This is non-negotiable.
+
+Create the spec file documenting what was built:
 
 ```markdown
 # T001: Implement credential validation
@@ -233,8 +235,11 @@ cd {PLANNING_DIR}/.. && python3 scripts/state.py record-verification T001 \
 **CRITICAL:** You are responsible for updating state directly. Do NOT return a full report to the orchestrator.
 
 **If all criteria pass:**
+
+**STOP - Before completing, verify you created `docs/{task_id}-spec.md`. If not, create it now.**
+
 ```bash
-# 1. Update state directly
+# 1. Update state directly (spec file MUST be in --created list)
 cd {PLANNING_DIR}/.. && python3 scripts/state.py complete-task T001 \
   --created src/auth/validator.py src/auth/errors.py docs/T001-spec.md \
   --modified src/auth/__init__.py README.md
@@ -362,6 +367,11 @@ All code must:
 - [ ] Have docstrings
 - [ ] Pass linting
 - [ ] Pass acceptance criteria (verified by `task-verifier` subagent)
+
+**MANDATORY deliverables (task is NOT complete without these):**
+- [ ] `docs/{task_id}-spec.md` - Task specification document
+- [ ] Result file written to `{PLANNING_DIR}/bundles/{task_id}-result.json`
+- [ ] State updated via `state.py complete-task` or `state.py fail-task`
 
 ## Subagent Spawning
 

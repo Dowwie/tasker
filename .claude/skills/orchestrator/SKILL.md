@@ -711,6 +711,20 @@ python3 scripts/state.py status
 [ -d "$TARGET_DIR" ] || echo "Target directory not found"
 ```
 
+## Git Repository Initialization (MANDATORY)
+
+**Before any implementation begins**, check if the target repository has git initialized. If not, initialize it:
+
+```
+Bash: ./scripts/ensure-git.sh "$TARGET_DIR"
+```
+
+**Why this is required:**
+- Enables automatic commit hooks to track changes per task
+- Supports rollback capability if tasks fail
+- Provides audit trail of all implementation changes
+- Required for the post-task-commit hook to function
+
 ## Recovery on Start (CRITICAL)
 
 **Before starting the execute loop**, always check for and recover from a previous crash:
