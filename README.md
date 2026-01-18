@@ -4,973 +4,226 @@
 
 # Tasker
 
-## Overview
+**Tasker turns specifications into executable control systems for AI software agents.**
 
-Tasker is a multi-agent architecture built with Claude Code that facilitates planning and implementation through a simple UI: `/plan` and `/execute`. It features a TUI dashboard for monitoring progress (tmux required).
+Instead of “prompting and hoping,” you define **exact behavior, constraints, and failure modes** once — and agents execute reliably, repeatedly, and audibly.
 
-The project began by taking a deep dive into task decomposition, developing a [protocol](docs/protocol.md) for it and then using it as the basis for agentic planning. The task decomposition protocol is at the heart of the planning stage of Tasker.
+This is **Spec-Driven Development (SDD)** done correctly.
 
-Planning is the process of breaking down a large body of work, presented as a specification document, into logical, atomic units of work, and then figuring out how to build them in an optimal fashion—parallelizing to the extent possible.
-
-The protocol looks at work through three lenses: Logical (what needs to happen), Physical (where code lives), and Strategic (what order reduces risk). It builds the thinnest end-to-end slice first—the "steel thread"—to validate your architecture early, before you've invested in building out the full system. Every task has a clear, observable, testable "Done."
+Your job shifts from *writing code* to **compiling intent into logic**.
 
 ---
 
-## Why Use Tasker?
+## What Problem Tasker Solves
 
-You can go a really long way with Claude Code using off-the-shelf capabilities for planning and implementation. I often do, using prompts like these:
+Modern AI agents fail for predictable reasons:
 
-**Planning:**
-```
-review {spec} and @README.md. then, review the source code. we're just planning,
-converting specs to well-documented, self-contained tasks. These tasks will be
-worked on by sub-agents, who need sufficient context to do a good job. Figure out
-a concurrency strategy that you can apply across your task dependencies, where you
-may safely spawn asynchronous sub-agents to work on tasks. Save a Task DAG
-dependency graph along with the plan to plan.md
-```
+* Specs are vague, oversized, or contradictory
+* Requirements leak mid-implementation
+* Behavior lives in people’s heads, not documents
+* “Common sense” breaks under automation
 
-**Execution:**
-```
-I want you to read {specs} and {plan}. Use a concurrency strategy where you may
-safely spawn asynchronous sub-agents to work on tasks in waves. Then, for each
-task in the plan, spawn a sub-agent, concurrently when safe to do so, giving the
-sub-agent the task and instruction to implement a solution for the task, and also
-give it a full copy of {specs} for context about the project. Tell the sub-agent
-to review the specs and the source code for the project before starting.
-```
+**Tasker eliminates these failure modes by treating specs as first-class, executable artifacts.**
 
-**This simple pattern works well for small changes whereas Tasker excels for larger projects.**
-
-With the ad-hoc approach, you're trusting Claude's interpretation of your spec, managing concurrency manually, and if your session dies you start over. There's no verification beyond "hope it works," no observability into what's happening, and no traceability from code back to requirements.
-
-Tasker adds structure where it matters: protocol-driven decomposition with schema validation, persistent state you can resume, LLM-as-judge verification after each task, a TUI dashboard showing progress and costs, execution bundles that give each subagent exactly the context it needs, and the ability to retry failed tasks or skip blocked ones without starting over.
-
-You could use Tasker for small projects too—there's no good reason not to. The overhead is minimal (`/plan` then `/execute`), and you get observability and state tracking even for simple work.
+If it’s not explicit, it doesn’t exist.
+If it can’t be verified, it doesn’t ship.
 
 ---
 
-## Prerequisites
+## The Core Idea
 
-### Technical Requirements
+> **A specification is not documentation.
+> It is the source code for agent behavior.**
 
-You need Claude Code CLI with subagent support (current versions have this), Python 3.11+ with `uv` for package management, and optionally tmux if you want the TUI dashboard in a split pane.
+Tasker provides a strict protocol that converts messy human intent into:
 
-### Your Preferences Matter
+* Deterministic workflows
+* Explicit state machines
+* Enforced invariants
+* Machine-verifiable acceptance criteria
 
-Tasker intentionally excludes preferences specified by CLAUDE.md so it can serve as a generic-purpose framework. You bring your preferences and Tasker applies them in architecture, design, and implementation.
-
-Setting up a comprehensive source of preferences is heavy lift, but the quality of Tasker's output is proportional to the preferences effort you put in. Without preferences, Tasker still works—but Claude makes its own choices about style, patterns, and conventions. With good preferences, you get code that looks like *you* wrote it.
-
-Your `~/.claude/CLAUDE.md` (or project-level `.claude/CLAUDE.md`) should cover things like: language and framework preferences, code style and naming conventions, testing requirements, architecture patterns you prefer (composition over inheritance, Protocols vs ABCs), error handling standards, documentation expectations.
-
-This is a one-time investment that pays off across all your projects. If you already have a CLAUDE.md you're happy with, you're ready to go.
+By the time implementation starts, **the system already exists — on paper**.
 
 ---
 
-## Getting Started
+## The SDD Architecture (3-Tier Spec System)
 
-Have a specification document for your project ready. Tasker's workspace is the `project-planning` sub-directory. If you save your spec file there, Tasker will find it during planning onboarding, but you could also just share a path to the file if you choose.
+Tasker replaces monolithic docs with a **stable, composable spec hierarchy**.
 
-With the spec file ready, run `claude` from within the Tasker project root and invoke the `/plan` command. If you're using tmux, Tasker will split your screen and start a TUI dashboard.
+### 1. North Star (Global Context)
 
-During planning, Tasker will ask you about the spec document and information about the target project—whether it's a new project or an existing one. Share the path to the project you want Tasker to build in. For new projects, Tasker establishes the directory structure. For existing projects, Tasker analyzes your codebase first to understand patterns, conventions, and integration points.
+The immutable foundation:
 
-Once planning completes, run `/execute` to begin implementation. Tasker works through the task DAG, spawning isolated subagents for each task, verifying their work, and updating state as it goes. You can watch progress in the TUI, pause with a STOP file, and resume later.
+* Tech stack + versions
+* Global business rules
+* Non-negotiables (“never do X”)
 
+This changes rarely and prevents drift.
 
-## Modes
+### 2. Blueprints (System Architecture)
 
-Tasker operates in two distinct modes:
+The structural truth:
 
-1. **Planning Mode** (`/plan`) - Transforms a specification into a directed acyclic graph (DAG) of implementable tasks
-2. **Execution Mode** (`/execute`) - Implements tasks via context-isolated subagents with verification
+* Data models (SQL / ERDs)
+* API contracts (OpenAPI)
+* **Behavior models (finite state machines)**
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           PLANNING MODE (/plan)                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│   spec.md ──▶ Logic Architect ──▶ Physical Architect ──▶ Task Author        │
-│                     │                    │                   │               │
-│                     ▼                    ▼                   ▼               │
-│             capability-map.json   physical-map.json    tasks/T001.json      │
-│                                                        tasks/T002.json      │
-│                                                              │               │
-│                                          ┌───────────────────┘               │
-│                                          ▼                                   │
-│                              Task-Plan-Verifier ──▶ Plan Auditor            │
-│                                                          │                   │
-│                                                          ▼                   │
-│                                                   state.json (ready)        │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+New features must fit this skeleton.
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          EXECUTION MODE (/execute)                           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│   For each ready task:                                                       │
-│                                                                              │
-│   state.json ──▶ Bundle Generator ──▶ Task Executor (isolated subagent)     │
-│                                              │                               │
-│                                              ▼                               │
-│                                       Implementation                         │
-│                                              │                               │
-│                                              ▼                               │
-│                                      Task Verifier ──▶ state.json (updated) │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+### 3. Action Specs (Task Units)
 
-## Quick Start
+The unit of execution:
 
-### 1. Install Dependencies
+* One feature, one intent
+* Clear inputs / outputs
+* Explicit definition of done
 
-```bash
-uv sync
-```
-
-### 2. Run Planning
-
-```bash
-/plan
-```
-
-The planner will ask you for:
-1. **Specification** - Paste directly or provide a file path. Any format works (PRDs, bullet lists, meeting notes, etc.)
-2. **Target Directory** - Where the code will be written
-3. **Tech Stack** (optional) - Any constraints like "Python with FastAPI"
-
-This triggers the planning pipeline:
-1. Logic Architect extracts capabilities from spec
-2. Physical Architect maps capabilities to files
-3. Task Author creates task definitions
-4. Task-Plan-Verifier validates task quality
-5. Plan Auditor assigns execution phases and validates DAG
-
-### 3. Execute
-
-```bash
-/execute             # Begin implementation
-/execute T005        # Execute a specific task
-/execute --batch     # Execute all ready tasks without prompts
-```
-
-Note: Task validation runs automatically during `/plan` (Phase 4). You don't need to run `/verify-plan` manually unless you've edited task files after planning.
-
-### 4. Monitor Progress
-
-```bash
-/tui                 # Launch interactive TUI dashboard
-/status              # CLI status summary
-```
-
-### Command Reference
-
-| Command | Type | Purpose |
-|---------|------|---------|
-| `/plan` | Production | Decompose spec → task DAG (runs phases 0-5 automatically) |
-| `/execute` | Production | Implement tasks via isolated subagents |
-| `/status` | Production | View current workflow state |
-| `/tui` | Production | Interactive TUI dashboard |
-| `/verify-plan` | Manual | Re-run task validation after editing task files |
-| `/evaluate` | Manual | Generate performance report after execution |
-
-**Production commands** are the main workflow. **Manual commands** are for debugging, re-running steps, or post-execution analysis.
+Agents work only at this level.
 
 ---
 
-## Architecture
+## The Requirements Compiler Workflow
 
-### Directory Structure
+Tasker enforces a **mandatory, ordered pipeline**.
+Skipping steps is not allowed.
 
-```
-tasker/
-├── .claude/
-│   ├── agents/                    # Subagent definitions
-│   │   ├── logic-architect.md     # Phase 1: Spec → capabilities
-│   │   ├── physical-architect.md  # Phase 2: Capabilities → files
-│   │   ├── task-author.md         # Phase 3: Files → tasks
-│   │   ├── task-plan-verifier.md  # Phase 4: Pre-execution validation
-│   │   ├── plan-auditor.md        # Phase 4: DAG validation & sequencing
-│   │   ├── task-executor.md       # Execution: Implement tasks
-│   │   └── task-verifier.md       # Execution: Verify implementations
-│   ├── commands/                  # Slash commands
-│   │   ├── plan.md                # /plan - Enter planning mode (production)
-│   │   ├── execute.md             # /execute - Enter execution mode (production)
-│   │   ├── status.md              # /status - Show dashboard (production)
-│   │   ├── tui.md                 # /tui - Launch TUI (production)
-│   │   ├── verify-plan.md         # /verify-plan - Re-run validation (manual/debug)
-│   │   └── evaluate.md            # /evaluate - Generate report (manual/debug)
-│   ├── hooks/                     # Event hooks
-│   │   ├── launch-tui.sh          # Auto-launch TUI in tmux
-│   │   ├── close-tui.sh           # Close TUI on completion
-│   │   ├── detect-workflow.sh     # Detect /plan or /execute
-│   │   └── subagent_stop.py       # Log token usage
-│   └── skills/
-│       └── orchestrator/
-│           └── SKILL.md           # Main orchestrator skill
-├── schemas/                       # JSON validation schemas
-│   ├── capability-map.schema.json
-│   ├── physical-map.schema.json
-│   ├── task.schema.json
-│   ├── execution-bundle.schema.json
-│   └── state.schema.json
-├── scripts/                       # Python utilities
-│   ├── state.py                   # State management (single source of truth)
-│   ├── bundle.py                  # Execution bundle generation
-│   ├── validate.py                # DAG, steel thread, verification validation
-│   ├── status.py                  # TUI launcher
-│   ├── dashboard.py               # CLI dashboard
-│   └── tui/                       # Textual TUI components
-│       ├── app.py
-│       ├── providers.py
-│       ├── state_provider.py
-│       └── views/
-│           ├── dashboard.py
-│           ├── task_detail.py
-│           └── widgets.py
-├── templates/                     # Example files (for reference only)
-│   ├── example-spec.md            # Example specification format
-│   ├── constraints.md.example     # Example constraints
-│   ├── task.json.example          # Example task structure
-│   └── README.md
-└── project-planning/              # Generated during workflow (gitignored)
-    ├── inputs/
-    │   └── spec.md                # Your specification (stored verbatim)
-    ├── artifacts/
-    │   ├── capability-map.json    # Phase 1 output
-    │   └── physical-map.json      # Phase 2 output
-    ├── tasks/                     # Individual task definitions
-    │   ├── T001.json
-    │   ├── T002.json
-    │   └── ...
-    ├── bundles/                   # Execution bundles
-    └── state.json                 # Workflow state
-```
+### Phase 1 — Scope
 
-### State Machine
+Define the box before filling it.
 
-The workflow progresses through these phases:
+* Goal
+* Non-goals
+* What “done” objectively means
 
-```
-ingestion → logical → physical → definition → validation → sequencing → ready → executing → complete
-```
-
-**Phase Progression:**
-
-| Phase | Name | Output | Agent |
-|-------|------|--------|-------|
-| 0 | Ingestion | spec.md saved | Orchestrator |
-| 1 | Logical | capability-map.json | logic-architect |
-| 2 | Physical | physical-map.json | physical-architect |
-| 3 | Definition | tasks/T*.json | task-author |
-| 4 | Validation | Verification results | task-plan-verifier |
-| 5 | Sequencing | Phase assignments, DAG | plan-auditor |
-| 6 | Ready | Planning complete | Orchestrator |
-| 7 | Executing | Implementation | task-executor + task-verifier |
-| 8 | Complete | All tasks done | Orchestrator |
-
-### Task Status Transitions
-
-```
-pending ──▶ ready ──▶ running ──▶ complete
-                         │
-                         ├──▶ failed
-                         │
-                         └──▶ blocked
-
-skipped (manual override)
-```
-
-### Task Ordering and Scheduling
-
-Tasker uses **dynamic scheduling** rather than a precomputed topological sort. Order is determined through two mechanisms:
-
-**1. Phase Assignment (Planning Time)**
-
-The `plan-auditor` agent assigns phases using heuristics:
-- **Phase 1:** Tasks with no dependencies (foundations)
-- **Phase 2:** Steel thread tasks (critical path)
-- **Phase 3+:** Remaining tasks grouped by domain affinity
-
-This is a human/agent judgment call, not an algorithm. The only validation is that all dependencies must be in earlier phases.
-
-**2. Ready-Task Computation (Execution Time)**
-
-At runtime, `get_ready_tasks()` dynamically determines what can execute:
-
-```python
-def get_ready_tasks(state):
-    ready = []
-    for task in state["tasks"].values():
-        if task["status"] != "pending":
-            continue
-        # Check ALL dependencies are complete or skipped
-        if all(dep_status in ["complete", "skipped"]
-               for dep in task["depends_on"]):
-            ready.append(task["id"])
-    return ready
-```
-
-This is a **pull-based scheduler**—rather than computing the full order upfront, it evaluates "what can run now?" each iteration.
-
-**How "A before B" is Determined**
-
-| Condition | Order | Mechanism |
-|-----------|-------|-----------|
-| B lists A in `dependencies.tasks` | A → B | Explicit dependency |
-| A has phase 1, B has phase 2 | A → B (usually) | Phase grouping |
-| Neither depends on other, same phase | A ∥ B | Parallel execution |
-
-The **only hard constraint** is explicit dependencies declared in task files. Phases are advisory groupings that align with dependency depth.
-
-**Why No Traditional Topological Sort?**
-
-- Tasks are written to individual files with dependencies declared upfront
-- Cycle detection uses DFS (in `validate.py`) but doesn't produce an ordering
-- Execution is driven by "what's ready?" not "what's the precomputed order?"
-
-This approach enables resumability—if execution stops mid-way, ready tasks are recomputed from current state rather than requiring the full sort to be rerun.
+If it’s not scoped, it’s ignored.
 
 ---
 
-## Data Flow Detail
+### Phase 2 — Clarify (Adversarial Extraction)
 
-### Phase 1: Logical Architecture (logic-architect)
+No brainstorming. No vibes.
 
-**Input:** `project-planning/inputs/spec.md`
-**Output:** `project-planning/artifacts/capability-map.json`
+The agent **interrogates you** with pressure-test questions:
 
-The Logic Architect extracts the logical structure from your specification:
+* Edge cases
+* State transitions
+* Failure scenarios
+* Constraints and limits
 
-- **Domains** - Major functional areas (e.g., Authentication, Storage)
-- **Capabilities** - Features within domains (e.g., User Login, Token Refresh)
-- **Behaviors** - Atomic operations with types (Input/Process/State/Output)
-- **Flows** - End-to-end user journeys that traverse behaviors
-
-```json
-{
-  "version": "1.0",
-  "spec_checksum": "abc123...",
-  "domains": [{
-    "id": "D1",
-    "name": "Authentication",
-    "description": "User identity and access management",
-    "capabilities": [{
-      "id": "C1",
-      "name": "User Login",
-      "spec_ref": {
-        "quote": "Users must be able to log in with email and password",
-        "location": "paragraph 3"
-      },
-      "behaviors": [
-        {"id": "B1", "name": "validate_credentials", "type": "process", "description": "Verify email and password"},
-        {"id": "B2", "name": "generate_token", "type": "output", "description": "Create JWT access token"}
-      ]
-    }]
-  }],
-  "flows": [{
-    "id": "F1",
-    "name": "Login Flow",
-    "is_steel_thread": true,
-    "steps": [
-      {"order": 1, "behavior_id": "B1", "description": "Validate user credentials"},
-      {"order": 2, "behavior_id": "B2", "description": "Generate and return token"}
-    ]
-  }],
-  "coverage": {
-    "total_requirements": 15,
-    "covered_requirements": 15,
-    "gaps": []
-  }
-}
-```
-
-**Behavior Types (I.P.S.O. Taxonomy):**
-
-| Type | Description | Example |
-|------|-------------|---------|
-| **Input** | Data entering the system | `ReceiveLoginRequest` |
-| **Process** | Computation/transformation | `ValidateCredentials`, `HashPassword` |
-| **State** | Data persistence/mutation | `StoreSession`, `UpdateLastLogin` |
-| **Output** | Data leaving the system | `ReturnAuthToken`, `SendWelcomeEmail` |
-
-### Phase 2: Physical Architecture (physical-architect)
-
-**Input:** `capability-map.json`, `constraints.md`
-**Output:** `project-planning/artifacts/physical-map.json`
-
-Maps behaviors to concrete file paths based on:
-- Target directory structure
-- Language/framework conventions (from constraints)
-- Architectural layers (api, domain, data, infra, test)
-
-```json
-{
-  "version": "1.0",
-  "target_dir": "/path/to/project",
-  "capability_map_checksum": "abc123...",
-  "file_mapping": [{
-    "behavior_id": "B1",
-    "behavior_name": "validate_credentials",
-    "files": [
-      {"path": "src/auth/validator.py", "action": "create", "layer": "domain", "purpose": "Credential validation logic"}
-    ],
-    "tests": [
-      {"path": "tests/auth/test_validator.py", "action": "create"}
-    ]
-  }],
-  "cross_cutting": [{
-    "concern": "logging",
-    "files": [{"path": "src/utils/logging.py", "action": "create", "purpose": "Structured logging setup"}]
-  }],
-  "infrastructure": [
-    {"path": "pyproject.toml", "action": "create", "purpose": "Project configuration"}
-  ],
-  "summary": {
-    "total_behaviors": 12,
-    "total_files": 24,
-    "files_to_create": 22,
-    "files_to_modify": 2
-  }
-}
-```
-
-**Architectural Layers:**
-
-| Layer | Purpose | Example Files |
-|-------|---------|---------------|
-| api | HTTP/API handlers | `src/api/routes.py` |
-| domain | Business logic | `src/auth/validator.py` |
-| data | Data access/models | `src/models/user.py` |
-| infra | Infrastructure | `src/config/settings.py` |
-| test | Tests | `tests/auth/test_validator.py` |
-
-### Phase 3: Task Definition (task-author)
-
-**Input:** `capability-map.json`, `physical-map.json`
-**Output:** `project-planning/tasks/T001.json`, `T002.json`, ...
-
-Creates individual task files. Each task groups 2-5 related behaviors into a cohesive unit of work:
-
-```json
-{
-  "id": "T001",
-  "name": "Implement credential validation",
-  "phase": 1,
-  "context": {
-    "domain": "Authentication",
-    "capability": "User Login",
-    "spec_ref": {
-      "quote": "Users must be able to log in with email and password",
-      "location": "paragraph 3"
-    },
-    "steel_thread": true
-  },
-  "behaviors": ["B1", "B2"],
-  "files": [
-    {"path": "src/auth/validator.py", "action": "create", "purpose": "Credential validation logic"},
-    {"path": "tests/auth/test_validator.py", "action": "create", "purpose": "Unit tests"}
-  ],
-  "dependencies": {
-    "tasks": [],
-    "external": ["pydantic>=2.0"]
-  },
-  "acceptance_criteria": [
-    {"criterion": "Valid credentials return True", "verification": "pytest tests/auth/test_validator.py::test_valid -v"},
-    {"criterion": "Invalid email raises ValidationError", "verification": "pytest tests/auth/test_validator.py::test_invalid_email -v"},
-    {"criterion": "Code passes linting", "verification": "ruff check src/auth/validator.py"},
-    {"criterion": "Code passes type checking", "verification": "ty check src/auth"}
-  ],
-  "estimate_hours": 3
-}
-```
-
-### Phase 4: Validation (task-plan-verifier, plan-auditor)
-
-**Input:** All artifacts + task files
-**Output:** Updated `state.json` with validation results
-
-**Task-Plan-Verifier** (LLM-as-judge) evaluates each task:
-
-| Dimension | What's Checked |
-|-----------|----------------|
-| Spec Alignment | Does task trace to spec requirements? |
-| Strategy Alignment | Does task fit the decomposition strategy? |
-| Preference Compliance | Does task follow user's `~/.claude/CLAUDE.md` standards? |
-| Viability | Is task properly scoped with clear acceptance criteria? |
-
-**Verdicts:** `READY`, `READY_WITH_NOTES`, `BLOCKED`
-
-**Plan-Auditor** then:
-- Validates DAG has no cycles
-- Checks steel thread forms contiguous early path
-- Validates all verification commands are syntactically valid
-- Assigns execution **phases** based on dependencies:
-  - Phase 1: Tasks with no dependencies
-  - Phase 2: Tasks depending only on Phase 1
-  - And so on...
+This continues until every category is explicitly closed.
 
 ---
 
-## State Management
+### Phase 3 — Synthesis
 
-`state.json` is the **single source of truth** for all workflow state:
+Structure, no invention.
 
-```json
-{
-  "version": "2.0",
-  "phase": {
-    "current": "executing",
-    "completed": ["ingestion", "logical", "physical", "definition", "validation", "sequencing", "ready"]
-  },
-  "target_dir": "/path/to/project",
-  "created_at": "2024-01-15T10:00:00Z",
-  "updated_at": "2024-01-15T14:30:00Z",
-  "artifacts": {
-    "capability_map": {"path": "artifacts/capability-map.json", "checksum": "abc123...", "valid": true},
-    "physical_map": {"path": "artifacts/physical-map.json", "checksum": "def456...", "valid": true},
-    "task_validation": {"verdict": "READY", "valid": true, "summary": "All tasks aligned"}
-  },
-  "tasks": {
-    "T001": {
-      "id": "T001",
-      "name": "Implement credential validation",
-      "status": "complete",
-      "phase": 1,
-      "depends_on": [],
-      "blocks": ["T002", "T003"],
-      "started_at": "2024-01-15T11:00:00Z",
-      "completed_at": "2024-01-15T11:15:00Z",
-      "duration_seconds": 900,
-      "attempts": 1,
-      "files_created": ["src/auth/validator.py", "tests/auth/test_validator.py"],
-      "files_modified": [],
-      "verification": {
-        "verdict": "PASS",
-        "recommendation": "PROCEED",
-        "criteria": [
-          {"name": "Valid credentials return True", "score": "PASS", "evidence": "Test passed"}
-        ],
-        "quality": {"types": "PASS", "docs": "PASS", "patterns": "PASS", "errors": "PASS"},
-        "tests": {"coverage": "PASS", "assertions": "PASS", "edge_cases": "PARTIAL"}
-      }
-    }
-  },
-  "execution": {
-    "current_phase": 2,
-    "active_tasks": ["T003"],
-    "completed_count": 2,
-    "failed_count": 0,
-    "total_tokens": 45000,
-    "total_cost_usd": 0.45
-  },
-  "events": [
-    {"timestamp": "2024-01-15T11:00:00Z", "type": "task_started", "task_id": "T001"},
-    {"timestamp": "2024-01-15T11:15:00Z", "type": "task_completed", "task_id": "T001"}
-  ]
-}
-```
+* Numbered workflows (including failures)
+* Invariants (rules that must *always* hold)
+* Typed interfaces
+* **Mandatory Steel-Thread FSM**
+
+Every transition must reference a rule.
+Every rule must be traceable to source text.
 
 ---
 
-## Execution Bundles
+### Phase 4 — Architecture Sketch
 
-Before task execution, `bundle.py` generates a **self-contained bundle** with everything the executor needs:
+Only now do we talk components.
 
-```json
-{
-  "version": "1.2",
-  "bundle_created_at": "2024-01-15T11:00:00Z",
-  "task_id": "T001",
-  "name": "Implement credential validation",
-  "phase": 1,
-  "target_dir": "/path/to/project",
-  "context": {
-    "domain": "Authentication",
-    "capability": "User Login",
-    "capability_id": "C1",
-    "spec_ref": {
-      "quote": "Users must be able to log in with email and password",
-      "location": "paragraph 3"
-    },
-    "steel_thread": true
-  },
-  "behaviors": [
-    {"id": "B1", "name": "validate_credentials", "type": "process", "description": "Verify email and password"}
-  ],
-  "files": [
-    {"path": "src/auth/validator.py", "action": "create", "layer": "domain", "purpose": "Credential validation", "behaviors": ["B1"]}
-  ],
-  "dependencies": {
-    "tasks": [],
-    "files": [],
-    "external": ["pydantic>=2.0"]
-  },
-  "acceptance_criteria": [
-    {"criterion": "Valid credentials return True", "verification": "pytest tests/auth/test_validator.py -v"}
-  ],
-  "constraints": {
-    "language": "Python",
-    "framework": "FastAPI",
-    "testing": "pytest",
-    "patterns": ["Use Protocol for interfaces", "Use dataclass for data structures"],
-    "raw": "Full constraints.md content..."
-  },
-  "checksums": {
-    "artifacts": {
-      "capability_map": "abc123...",
-      "physical_map": "def456...",
-      "constraints": "ghi789...",
-      "task_definition": "jkl012..."
-    },
-    "dependency_files": {}
-  }
-}
-```
+* Map behavior → responsibility
+* Define ownership and failure handling
+* Keep it minimal
 
-**Bundle Benefits:**
-- **Context isolation** - Executor sees only what it needs
-- **Integrity validation** - Checksums detect artifact drift
-- **Reproducibility** - All inputs captured
-- **Self-documentation** - Bundle explains what to build and why
+Architecture follows behavior — never the reverse.
 
 ---
 
-## Task Verification
+### Phase 5 — Decisions (ADRs)
 
-### Execution-Time Verification (task-verifier)
+Hard choices are recorded once.
 
-After each task completes, an **LLM-as-judge verifier** evaluates the implementation:
+* Tradeoffs
+* Rationale
+* Why this path was chosen
 
-**Evidence Gathering:**
-1. Read implementation files
-2. Run verification commands
-3. Capture all output
-
-**Multi-Dimensional Judgment:**
-
-| Dimension | What's Judged |
-|-----------|---------------|
-| Functional Correctness | Does it meet each acceptance criterion? |
-| Code Quality | Types, docs, patterns, error handling |
-| Test Quality | Coverage, assertions, edge cases |
-
-**Verdicts & Recommendations:**
-
-| Verdict | Recommendation | Meaning |
-|---------|----------------|---------|
-| PASS | PROCEED | All criteria met, quality acceptable |
-| CONDITIONAL | PROCEED | Works, minor issues, proceed with notes |
-| FAIL | BLOCK | Criteria not met or critical issues |
-
-**When BLOCK is recommended:**
-- Dependent tasks are automatically blocked
-- Task cannot be marked complete until issues resolved
-- Verifier provides specific feedback on what failed and how to fix
-
-### Verifier Calibration
-
-Tasker tracks verifier accuracy over time:
-
-- **False positives** - PROCEED verdict but task later failed
-- **False negatives** - BLOCK verdict but task would have worked
-
-**Calibration Score** = (correct verdicts) / (total verdicts)
-
-The dashboard displays calibration metrics to help tune verification thresholds.
+Specs describe *what is*.
+ADRs explain *why*.
 
 ---
 
-## Key Concepts
+### Phase 6 — Quality Gates
 
-### Steel Thread
+Before any code exists, the spec must pass.
 
-A "steel thread" is the minimal end-to-end path through the system. Tasks marked `steel_thread: true` are prioritized in early phases to validate architecture before building out the full system.
+* No open questions
+* No contradictions
+* No vague language
 
-The plan-auditor validates that:
-- Steel thread tasks exist
-- They form a contiguous path
-- They're assigned to early phases
+Tasker automatically flags:
 
-### Behaviors vs Tasks
+* Ambiguity
+* Conflicts
+* Missing behavioral rules
 
-| Aspect | Behavior | Task |
-|--------|----------|------|
-| Abstraction | Logical (what to do) | Physical (where/how) |
-| Granularity | Single atomic operation | Group of 2-5 related behaviors |
-| Typical count | 20-50 per project | 5-15 per project |
-| Created in | Phase 1 (capability-map.json) | Phase 3 (tasks/*.json) |
-| Contains | Name, type, description | Behaviors, files, criteria, dependencies |
-
-**Behaviors/Task Metric:**
-- **< 2 behaviors/task**: Tasks too granular, excessive overhead
-- **2-5 behaviors/task**: Sweet spot—cohesive, verifiable units
-- **> 5 behaviors/task**: Tasks too large, higher failure risk
+If it fails, implementation is blocked.
 
 ---
 
-## Monitoring
+### Phase 7 — Export
 
-### TUI Dashboard
+The spec becomes permanent system input:
 
-The Textual-based TUI (`/tui` or `python3 scripts/status.py`) provides real-time monitoring:
+* Human-readable spec packet
+* Machine-readable capability map
+* Canonical FSM + diagrams
 
-**Panels:**
-- **Phase Indicator** - Current workflow phase with icon
-- **Health Checks** - DAG validation, steel thread, verification commands
-- **Progress** - Task completion by phase with progress bars
-- **Calibration** - Verifier accuracy metrics
-- **Cost** - Token usage and estimated cost (total + per-task average)
-- **Current Task** - Currently running task with elapsed time
-- **Task List** - All tasks sorted by phase with status icons
-- **Recent Activity** - Latest completions/failures
-
-**Keybindings:**
-- `q` - Quit
-- `r` - Refresh
-- `a` - Toggle auto-refresh (5s interval)
-- `d` - Toggle dark/light mode
-- `escape` / `b` - Back (from detail view)
-
-### CLI Dashboard
-
-```bash
-python3 scripts/dashboard.py                # Full dashboard with boxes
-python3 scripts/dashboard.py --compact      # Single-line summary
-python3 scripts/dashboard.py --json         # JSON output
-python3 scripts/dashboard.py --no-color     # Without ANSI colors
-```
+This is what agents execute against.
 
 ---
 
-## Scripts Reference
+## What Makes a Spec “Agent-Ready”
 
-### state.py - State Management
+A good spec explains intent.
+A **Tasker spec enforces it**.
 
-```bash
-# Initialization
-python3 scripts/state.py init /path/to/project      # Initialize workflow
+| Principle             | Why It Matters              |
+| --------------------- | --------------------------- |
+| Single interpretation | No branching guesswork      |
+| Explicit constraints  | Prevents silent violations  |
+| Verifiable outcomes   | Enables automation          |
+| Typed interfaces      | Eliminates mismatch errors  |
+| Full traceability     | Every behavior is justified |
 
-# Phase progression
-python3 scripts/state.py advance-phase logical      # Move to next phase
-python3 scripts/state.py show                       # Display current state
-
-# Task management
-python3 scripts/state.py task-start T001            # Mark task running
-python3 scripts/state.py task-complete T001         # Mark task complete
-python3 scripts/state.py task-fail T001 "error"     # Mark task failed
-python3 scripts/state.py retry-task T001            # Reset failed task
-python3 scripts/state.py skip-task T001 "reason"    # Skip blocked task
-python3 scripts/state.py ready                      # List ready tasks
-
-# Validation
-python3 scripts/state.py validate capability_map    # Validate artifact
-python3 scripts/state.py validate-tasks READY "OK"  # Record task validation
-
-# Token tracking
-python3 scripts/state.py log-tokens T001 1000 500 0.02  # Log usage
-
-# Metrics
-python3 scripts/state.py metrics                    # Execution metrics
-python3 scripts/state.py planning-metrics           # Planning quality
-python3 scripts/state.py calibration-score          # Verifier accuracy
-```
-
-### bundle.py - Execution Bundles
-
-```bash
-python3 scripts/bundle.py generate T001        # Generate single bundle
-python3 scripts/bundle.py generate-ready       # Generate for all ready tasks
-python3 scripts/bundle.py validate T001        # Validate against schema
-python3 scripts/bundle.py validate-integrity T001  # Check checksums + deps
-python3 scripts/bundle.py list                 # List existing bundles
-python3 scripts/bundle.py clean                # Remove all bundles
-```
-
-### validate.py - Comprehensive Validation
-
-```bash
-python3 scripts/validate.py dag                    # Check for cycles
-python3 scripts/validate.py steel-thread           # Validate steel thread
-python3 scripts/validate.py verification-commands  # Check command syntax
-python3 scripts/validate.py calibration            # Show verifier metrics
-python3 scripts/validate.py all                    # Run all validations
-```
+If a human can “interpret” it, an agent will misinterpret it.
 
 ---
 
-## Hooks
+## The Shift Tasker Enables
 
-Tasker integrates with Claude Code hooks for automation:
+| Old Model      | Tasker Model            |
+| -------------- | ----------------------- |
+| Prompt → hope  | Specify → verify        |
+| One giant doc  | Composable spec library |
+| Implicit logic | Explicit state machines |
+| Code as truth  | Spec as truth           |
+| Debugging code | Auditing decisions      |
 
-| Hook | Trigger | Action |
-|------|---------|--------|
-| `detect-workflow.sh` | User prompt | Detect `/plan` or `/execute`, launch TUI |
-| `launch-tui.sh` | Planning/execution start | Open tmux split (30% height) with TUI |
-| `close-tui.sh` | Workflow complete | Close TUI pane |
-| `subagent_stop.py` | Subagent completes | Parse transcript, log token usage to state |
-
-**Note:** Tmux hooks only work when running Claude Code inside a tmux session.
-
----
-
-## Agent Responsibilities
-
-### Planning Agents
-
-| Agent | Input | Output | Purpose |
-|-------|-------|--------|---------|
-| logic-architect | spec.md | capability-map.json | Extract logical structure (domains, capabilities, behaviors) |
-| physical-architect | capability-map.json, constraints.md | physical-map.json | Map behaviors to file paths |
-| task-author | Both maps | tasks/T*.json | Create individual task definitions |
-| task-plan-verifier | Tasks + spec | Validation report | LLM-as-judge pre-execution check |
-| plan-auditor | Tasks | Updated state.json | Assign phases, validate DAG |
-
-### Execution Agents
-
-| Agent | Input | Output | Purpose |
-|-------|-------|--------|---------|
-| task-executor | Execution bundle | Implementation code | Write code in isolated context |
-| task-verifier | Implementation | Verification result | LLM-as-judge post-execution check |
+**You become a decision maker and logic auditor.
+The agent becomes a compiler and executor.**
 
 ---
 
-## Templates
+## The End State
 
-The `templates/` directory contains example files for reference. **You don't need to copy or follow these templates** - the planner accepts any specification format.
+By the time implementation starts:
 
-| Template | Purpose |
-|----------|---------|
-| `example-spec.md` | Shows one possible spec format (not required) |
-| `constraints.md.example` | Example tech stack constraints |
-| `task.json.example` | Shows task structure (generated automatically) |
+* The behavior is already defined
+* The edge cases are already handled
+* The failure modes are already known
+* The success criteria are already testable
 
-### Specification Input
+**Code becomes a mechanical translation, not a creative act.**
 
-Your spec can be in **any format**:
-- Freeform requirements or PRDs
-- Bullet lists or numbered lists
-- Design docs or meeting notes
-- Existing README files
-
-The planner stores your spec verbatim and extracts requirements from whatever format you provide. Each extracted capability includes a `spec_ref` that quotes the original text for traceability.
-
-### Tech Stack Constraints (Optional)
-
-You can provide constraints conversationally when running `/plan`, or create a `constraints.md` file with:
-- Language & runtime preferences
-- Framework choices
-- Testing requirements
-- Architecture patterns to follow or avoid
-
-### Development Phases in Specs
-
-Tasker supports **phased development** by allowing you to mark sections of your spec for later phases. This is useful when your spec contains features you want to defer.
-
-**How it works:**
-- **Phase 1 (implicit)** - Any content NOT under a phase heading is Phase 1
-- **Phase 2+ (explicit)** - Content under "Phase 2", "Phase 3", etc. headings is excluded
-
-**Example spec with phases:**
-
-```markdown
-# My Application Spec
-
-## User Authentication
-- Users can log in with email/password
-- Users can reset their password
-- Sessions expire after 24 hours
-
-## Data Management
-- Users can create, read, update, delete items
-- Items have a title, description, and status
-
-## Phase 2: Advanced Features
-- OAuth integration with Google/GitHub
-- Single Sign-On (SSO) for enterprise
-- Admin dashboard with analytics
-
-## Phase 3: Scale & Performance
-- Redis caching layer
-- Read replicas for database
-- CDN integration
-```
-
-When you run `/plan`, Tasker will:
-1. **Extract** only Phase 1 content (Authentication + Data Management)
-2. **Document** excluded phases in `capability-map.json`
-3. **Verify** no Phase 2+ content leaks into tasks
-
-**Phase markers recognized:**
-- `## Phase 2`
-- `## Phase 2: Title`
-- `### Phase 3 - Description`
-- `# Phase 2 Requirements`
-- `**Phase 2:**`
-
-**Verification:**
-The task-plan-verifier checks that no tasks reference Phase 2+ content. If leakage is detected, planning is BLOCKED until the offending tasks are removed.
-
-**Output:**
-The `capability-map.json` includes a `phase_filtering` section:
-
-```json
-{
-  "phase_filtering": {
-    "active_phase": 1,
-    "excluded_phases": [
-      {
-        "phase": 2,
-        "heading": "## Phase 2: Advanced Features",
-        "location": "line 15",
-        "summary": "OAuth, SSO, admin dashboard"
-      }
-    ],
-    "total_excluded_requirements": 5
-  }
-}
-```
-
----
-
-## Development
-
-```bash
-make install    # Setup project with uv
-make lint       # Run ruff check
-make test       # Run pytest
-make clean      # Remove artifacts
-```
-
----
-
-## Design Principles
-
-1. **Single Source of Truth** - `state.json` owns all workflow state
-2. **Context Isolation** - Each executor sees only its bundle
-3. **Fail Fast** - Validation happens before execution
-4. **Observability** - TUI + hooks provide real-time visibility
-5. **Reproducibility** - Checksums detect artifact drift
-6. **Steel Thread First** - Validate architecture early
-7. **LLM-as-Judge** - Structured verification with calibration tracking
-8. **Schema Validation** - All artifacts validated against JSON schemas
-9. **FSM Canonical Contract** - FSM JSON is canonical; Mermaid is generated. `/plan` and `/execute` must fail if required transitions and invariants lack coverage evidence.
-
----
-
-## Limitations
-
-- Requires Claude Code with subagent support
-- TUI requires `textual` package (`uv add textual`)
-- Tmux hooks only work in tmux sessions
-- Currently single-threaded execution (no parallel tasks within a phase)
-- Token tracking requires `subagent_stop.py` hook
-
----
-
-## License
-
-MIT
+That’s Tasker.
