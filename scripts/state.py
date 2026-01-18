@@ -219,7 +219,7 @@ def init_state(target_dir: str) -> dict:
 
 
 def get_phase_order() -> list[str]:
-    return ["ingestion", "logical", "physical", "definition", "validation", "sequencing", "ready", "executing", "complete"]
+    return ["ingestion", "spec_review", "logical", "physical", "definition", "validation", "sequencing", "ready", "executing", "complete"]
 
 
 def get_next_phase(current: str) -> str | None:
@@ -243,7 +243,36 @@ def can_advance_phase(state: dict) -> tuple[bool, str]:
         if not spec_path.exists():
             return False, "spec.md not found in project-planning/inputs/"
         return True, ""
-    
+
+    elif current == "spec_review":
+        review_path = PLANNING_DIR / "artifacts" / "spec-review.json"
+        if not review_path.exists():
+            return False, "spec-review.json not found - run spec-review.py analyze first"
+
+        # Check if critical weaknesses are resolved
+        review = json.loads(review_path.read_text())
+        critical_count = review.get("summary", {}).get("by_severity", {}).get("critical", 0)
+
+        if critical_count > 0:
+            # Check for resolutions
+            resolutions_path = PLANNING_DIR / "artifacts" / "spec-resolutions.json"
+            if not resolutions_path.exists():
+                return False, f"{critical_count} critical weaknesses require resolution"
+
+            resolutions = json.loads(resolutions_path.read_text())
+            resolved_ids = {r["weakness_id"] for r in resolutions.get("resolutions", [])}
+
+            # Count unresolved critical weaknesses
+            unresolved = sum(
+                1 for w in review.get("weaknesses", [])
+                if w.get("severity") == "critical" and w.get("id") not in resolved_ids
+            )
+
+            if unresolved > 0:
+                return False, f"{unresolved} critical weaknesses remain unresolved"
+
+        return True, ""
+
     elif current == "logical":
         artifact = state["artifacts"].get("capability_map", {})
         if not artifact.get("valid"):

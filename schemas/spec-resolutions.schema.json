@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SpecResolutions",
+  "description": "User resolutions for spec weaknesses",
+  "type": "object",
+  "required": ["version", "resolutions"],
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "resolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["weakness_id", "resolution", "resolved_at"],
+        "properties": {
+          "weakness_id": {
+            "type": "string",
+            "pattern": "^W[0-9]+-[0-9]+$",
+            "description": "ID of the resolved weakness"
+          },
+          "resolution": {
+            "enum": ["mandatory", "optional", "defer", "clarified", "not_applicable"],
+            "description": "Resolution type"
+          },
+          "user_response": {
+            "type": "string",
+            "description": "User's selected option or custom response"
+          },
+          "behavioral_reframe": {
+            "type": "string",
+            "description": "Behavioral requirement derived from non-behavioral spec element"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Additional context or clarification"
+          },
+          "resolved_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO timestamp of resolution"
+          }
+        }
+      }
+    }
+  }
+}

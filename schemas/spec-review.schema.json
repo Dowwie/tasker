@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SpecReview",
+  "description": "Pre-planning spec weakness analysis results",
+  "type": "object",
+  "required": ["version", "spec_checksum", "analyzed_at", "weaknesses", "status", "summary"],
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "spec_checksum": {
+      "type": "string",
+      "description": "SHA256 checksum (truncated) of spec content"
+    },
+    "analyzed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp of analysis"
+    },
+    "weaknesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "severity", "location", "description"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^W[0-9]+-[0-9]+$",
+            "description": "Weakness ID (e.g., W1-001)"
+          },
+          "category": {
+            "enum": ["non_behavioral", "implicit", "cross_cutting", "missing_ac", "fragmented", "contradiction"],
+            "description": "Weakness category"
+          },
+          "severity": {
+            "enum": ["critical", "warning", "info"],
+            "description": "Severity level"
+          },
+          "location": {
+            "type": "string",
+            "description": "Location in spec (e.g., 'line 150')"
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of the weakness"
+          },
+          "spec_quote": {
+            "type": "string",
+            "description": "Relevant quote from the spec"
+          },
+          "suggested_resolution": {
+            "type": "string",
+            "description": "Suggested way to resolve the weakness"
+          },
+          "behavioral_reframe": {
+            "type": "string",
+            "description": "Suggested behavioral reframing of non-behavioral requirement"
+          }
+        }
+      }
+    },
+    "status": {
+      "enum": ["pending", "in_review", "resolved"],
+      "description": "Review status"
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "by_severity", "by_category", "blocking"],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of weaknesses"
+        },
+        "by_severity": {
+          "type": "object",
+          "properties": {
+            "critical": { "type": "integer", "minimum": 0 },
+            "warning": { "type": "integer", "minimum": 0 },
+            "info": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "by_category": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "blocking": {
+          "type": "boolean",
+          "description": "True if critical weaknesses exist"
+        }
+      }
+    }
+  }
+}

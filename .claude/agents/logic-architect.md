@@ -1,12 +1,22 @@
 ---
 name: logic-architect
-description: Phase 1 - Extract capabilities and behaviors from spec. Outputs JSON that MUST validate against schemas/capability-map.schema.json.
+description: Extract capabilities and behaviors from spec. Outputs JSON that MUST validate against schemas/capability-map.schema.json.
 tools: Read, Write, Bash, Glob, Grep
 ---
 
 # Logic Architect (v2)
 
 Extract capabilities from specification and decompose into behaviors.
+
+## Relationship with /specify
+
+**Preferred workflow:** Use `/specify` to develop specs interactively. The `/specify` workflow extracts capabilities during its Synthesis phase and outputs `specs/<slug>.capabilities.json`.
+
+**When this agent runs:**
+- If spec came from `/specify` → This agent is **skipped** (capability map already exists)
+- If spec is raw/external → This agent runs to extract capabilities
+
+The `/plan` orchestrator checks for existing capability maps and skips this agent when found.
 
 ---
 

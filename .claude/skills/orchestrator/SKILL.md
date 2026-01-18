@@ -14,6 +14,25 @@ A **thin coordination layer** with two distinct modes:
 - **Plan Mode** (`/plan`) - Decompose spec into task DAG
 - **Execute Mode** (`/execute`) - Run tasks via isolated subagents
 
+## Workflow Integration
+
+The full workflow from requirements to implementation:
+
+```
+/specify → /plan → /execute
+```
+
+| Skill | Purpose | Input | Output |
+|-------|---------|-------|--------|
+| `/specify` | Design vision & capabilities | User requirements | `{TARGET}/docs/specs/<slug>.md` + `.capabilities.json` + ADRs |
+| `/plan` | DAG construction (files → tasks) | Spec + capability map | Task DAG in `project-planning/tasks/` |
+| `/execute` | Implementation | Task DAG | Working code |
+
+**Entry points:**
+- **From scratch** → Run `/specify` first to develop spec and extract capabilities
+- **Existing spec** → Run `/plan {TARGET}/docs/specs/<slug>.md` directly (may need capability extraction)
+- **From /specify** → Run `/plan {TARGET}/docs/specs/<slug>.md` (skips to physical mapping)
+
 ## Philosophy
 
 The orchestrator does NOT:
@@ -122,7 +141,7 @@ This `PLANNING_DIR` value (e.g., `/Users/foo/tasker/project-planning`) MUST be p
 
 # Plan Mode
 
-Triggered by `/plan`. Runs phases 0-5.
+Triggered by `/plan`. Runs phases 0-6 (spec review through ready).
 
 ## MANDATORY: Proactive Discovery Phase
 
@@ -130,9 +149,16 @@ Triggered by `/plan`. Runs phases 0-5.
 
 ### Step 1: Search for Existing Specifications
 ```bash
-# Search project-planning directory for spec files
+# Search for spec files in target project's docs/specs/ (from /specify workflow)
+# and in project-planning for raw specs
+echo "=== Specs from /specify workflow ==="
+find . -path "*/docs/specs/*.md" -not -path "*project-planning*" 2>/dev/null | head -10
+
+echo "=== Specs in project-planning ==="
 find project-planning -name "*.md" -o -name "*.txt" 2>/dev/null | head -10
 ```
+
+**Note:** If user hasn't developed a spec yet, suggest running `/specify` first to create a high-quality spec packet interactively.
 
 ### Step 2: Gather Initial Inputs
 
@@ -279,6 +305,37 @@ fi
 
 **Important:** Store the spec exactly as provided - no transformation, summarization, or normalization.
 
+## Skip Phases for /specify-Generated Specs
+
+If the spec came from `/specify` workflow, it has already been reviewed AND capabilities have been extracted. Check for artifacts:
+
+```bash
+# Derive capability map path from spec path
+# e.g., /path/to/project/docs/specs/my-feature.md → /path/to/project/docs/specs/my-feature.capabilities.json
+SPEC_DIR=$(dirname "$SPEC_PATH")
+SPEC_SLUG=$(basename "$SPEC_PATH" .md)
+CAPABILITY_MAP="${SPEC_DIR}/${SPEC_SLUG}.capabilities.json"
+
+# Check for /specify artifacts (spec review may be in tasker's .claude/)
+SPEC_REVIEW=".claude/spec-review.json"
+
+if [ -f "$CAPABILITY_MAP" ]; then
+    echo "Capability map found from /specify workflow: $CAPABILITY_MAP"
+    echo "Copying artifacts and skipping to physical phase..."
+
+    # Copy artifacts to planning directory
+    cp "$CAPABILITY_MAP" "$PLANNING_DIR/artifacts/capability-map.json"
+    [ -f "$SPEC_REVIEW" ] && cp "$SPEC_REVIEW" "$PLANNING_DIR/artifacts/spec-review.json"
+
+    # Skip spec_review AND logical phases - advance directly to physical
+    python3 scripts/state.py set-phase physical
+fi
+```
+
+**Skip phases when `/specify` artifacts exist:**
+- `spec_review` - Skipped (already done by `/specify` Phase 7)
+- `logical` - Skipped (capability map already exists from `/specify` Phase 3)
+
 ## Plan Phase Dispatch
 
 ```bash
@@ -291,17 +348,22 @@ fi
 python3 scripts/state.py status
 ```
 
-| Phase | Agent | Output | Validation |
-|-------|-------|--------|------------|
-| `ingestion` | (none) | `inputs/spec.md` (verbatim) | File exists |
-| `logical` | **logic-architect** | `artifacts/capability-map.json` | `state.py validate capability_map` |
-| `physical` | **physical-architect** | `artifacts/physical-map.json` | `state.py validate physical_map` |
-| `definition` | **task-author** | `tasks/*.json` | `state.py load-tasks` |
-| `validation` | **task-plan-verifier** | Validation report | `state.py validate-tasks <verdict>` |
-| `sequencing` | **plan-auditor** | Updated task phases | DAG is valid |
-| `ready` | (done) | Planning complete | — |
+| Phase | Agent | Output | Validation | Skip if |
+|-------|-------|--------|------------|---------|
+| `ingestion` | (none) | `inputs/spec.md` (verbatim) | File exists | — |
+| `spec_review` | **spec-reviewer** | `artifacts/spec-review.json` | All critical resolved | `/specify` artifacts exist |
+| `logical` | **logic-architect** | `artifacts/capability-map.json` | `validate capability_map` | `/specify` artifacts exist |
+| `physical` | **physical-architect** | `artifacts/physical-map.json` | `validate physical_map` | — |
+| `definition` | **task-author** | `tasks/*.json` | `load-tasks` | — |
+| `validation` | **task-plan-verifier** | Validation report | `validate-tasks <verdict>` | — |
+| `sequencing` | **plan-auditor** | Updated task phases | DAG is valid | — |
+| `ready` | (done) | Planning complete | — | — |
 
-**Note on ingestion:** The spec is stored exactly as provided. Tech stack constraints (if any) are passed to physical-architect via state metadata, not a separate constraints file.
+**Entry points based on artifacts:**
+- **No artifacts** → Start at `ingestion` (raw spec provided)
+- **Has `.capabilities.json`** → Start at `physical` (came from `/specify`)
+
+**Note:** When starting at `physical`, the capability-map.json is copied from `{TARGET}/docs/specs/<slug>.capabilities.json` to `artifacts/capability-map.json`.
 
 ## Plan Loop
 
@@ -363,6 +425,59 @@ fi
 
 **MANDATORY:** For existing projects, you MUST include the full PROJECT_CONTEXT from the discovery phase. Sub-agents have no visibility into the target codebase - they rely entirely on the context you provide.
 
+### Spec Review Phase: spec-reviewer
+
+**Spawn prompt for spec-reviewer:**
+
+```
+Analyze the specification for weaknesses before capability extraction.
+
+## Logging (MANDATORY)
+
+Log your activity using the logging script:
+
+./scripts/log-activity.sh INFO spec-reviewer start "Analyzing spec for weaknesses"
+./scripts/log-activity.sh INFO spec-reviewer decision "What decision and why"
+./scripts/log-activity.sh INFO spec-reviewer complete "Outcome description"
+
+## Context
+
+PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+
+## Your Task
+
+1. Run weakness detection:
+   python3 scripts/spec-review.py analyze {PLANNING_DIR}/inputs/spec.md
+
+2. Save results to {PLANNING_DIR}/artifacts/spec-review.json
+
+3. For CRITICAL weaknesses (W1: Non-behavioral, W6: Contradictions):
+   - Use AskUserQuestion tool to engage user for resolution
+   - Record resolutions to {PLANNING_DIR}/artifacts/spec-resolutions.json
+
+4. Check status:
+   python3 scripts/spec-review.py status {PLANNING_DIR}
+
+CRITICAL WEAKNESS CATEGORIES:
+- W1: Non-behavioral (DDL/schema not stated as behavior) - Ask: "Should DDL be DB-level or app-layer?"
+- W6: Contradictions (conflicting statements) - Ask: "Which statement is authoritative?"
+
+WARNING CATEGORIES (proceed with notes):
+- W2: Implicit requirements
+- W3: Cross-cutting concerns
+- W5: Fragmented requirements
+
+INFO CATEGORIES (log only):
+- W4: Missing acceptance criteria
+
+IMPORTANT:
+- You MUST resolve all CRITICAL weaknesses before signaling completion
+- Use AskUserQuestion for each critical weakness requiring user input
+- Save resolutions in spec-resolutions.json for the logic-architect to consume
+
+**Note:** The orchestrator has already created all required directories. Do NOT create directories yourself.
+```
+
 ### Logical Phase: logic-architect
 
 **Spawn prompt for logic-architect:**
@@ -422,12 +537,16 @@ Read that file for the complete requirements. The spec has already been stored v
 ## Your Task
 
 1. Read {PLANNING_DIR}/inputs/spec.md
-2. **For existing projects:** Consider how new capabilities integrate with existing structure
-3. Extract capabilities using I.P.S.O. decomposition
-4. Apply phase filtering (Phase 1 only)
-5. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/capability-map.json
-6. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
-7. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+2. Read {PLANNING_DIR}/artifacts/spec-resolutions.json if it exists
+   - Resolutions marked "mandatory" MUST become explicit behaviors
+   - Non-behavioral requirements (W1) should be tagged for explicit tasks
+   - Cross-cutting concerns (W3) should be flagged for dedicated capabilities
+3. **For existing projects:** Consider how new capabilities integrate with existing structure
+4. Extract capabilities using I.P.S.O. decomposition
+5. Apply phase filtering (Phase 1 only)
+6. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/capability-map.json
+7. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
+8. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
 
 IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 1. You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
@@ -688,11 +807,37 @@ When phase reaches "ready":
 Run `/execute` to begin implementation.
 ```
 
+### Archive Planning Artifacts (Automatic)
+
+After planning completes, archive the artifacts for post-hoc analysis:
+
+```bash
+# Archive planning artifacts
+python3 scripts/archive.py planning {project_name}
+```
+
+This creates:
+```
+archive/{project_name}/planning/{timestamp}/
+├── inputs/         # spec.md (verbatim)
+├── artifacts/      # capability-map.json, physical-map.json, spec-review.json
+├── tasks/          # T001.json, T002.json, ...
+├── reports/        # task-validation-report.md
+├── state.json      # State snapshot
+└── archive-manifest.json
+```
+
+The archive preserves full context for:
+- Gap analysis after implementation
+- Debugging spec coverage issues
+- Auditing planning decisions
+- Restoring planning state if needed
+
 ---
 
 # Execute Mode
 
-Triggered by `/execute`. Runs phase 6.
+Triggered by `/execute`. Runs task execution phase, followed by optional compliance check.
 
 ## Execute Inputs
 
@@ -1134,6 +1279,103 @@ python3 scripts/bundle.py generate-ready      # All ready tasks
 | `/execute T005` | Execute specific task only |
 | `/execute --batch` | All ready tasks, no prompts |
 | `/execute --parallel 3` | Up to 3 tasks simultaneously |
+
+## Post-Execution Compliance Check (Optional)
+
+After all tasks complete successfully, run the compliance check to verify the implementation matches the spec:
+
+```bash
+python3 scripts/compliance-check.py all \
+    --spec $PLANNING_DIR/inputs/spec.md \
+    --target $TARGET_DIR
+```
+
+This checks four categories:
+- **V1: Schema Compliance** - DDL elements exist (tables, constraints, indexes)
+- **V2: Config Compliance** - Env vars wired to Pydantic fields
+- **V3: API Compliance** - Endpoints exist with correct methods
+- **V4: Observability** - OTel spans and metrics registered
+
+### Compliance Results
+
+The check outputs a JSON summary and detailed report:
+```json
+{
+  "summary": {
+    "total_gaps": 5,
+    "by_severity": {"critical": 1, "warning": 2, "info": 2},
+    "compliant": false
+  }
+}
+```
+
+### Handling Gaps
+
+If compliance check finds critical gaps:
+
+1. **Display gaps to user** with suggested fixes
+2. **Ask user how to proceed**:
+   - Fix gaps (create new tasks or manual fixes)
+   - Accept gaps (document as known limitations)
+   - Investigate (may be false positives)
+
+3. **For fixable gaps**, create ad-hoc tasks:
+   ```bash
+   # Example: Missing database constraint
+   python3 scripts/state.py create-task \
+       --name "Add hook_run_unique constraint" \
+       --type constraint \
+       --files "alembic/versions/xxx_add_constraint.py"
+   ```
+
+4. **Save compliance report** for documentation:
+   ```bash
+   # Report is saved to:
+   $PLANNING_DIR/reports/compliance-report.json
+   ```
+
+## Archive Execution Artifacts (After Completion)
+
+After execution completes (all tasks done or halted), archive execution artifacts:
+
+```bash
+# Archive execution artifacts
+python3 scripts/archive.py execution {project_name}
+```
+
+This creates:
+```
+archive/{project_name}/execution/{timestamp}/
+├── bundles/        # Task bundles and result files
+├── logs/           # Activity logs
+├── state.json      # State snapshot
+└── archive-manifest.json
+```
+
+The archive preserves:
+- Task execution results and timing
+- Bundle contents (full context for each task)
+- Logs for debugging
+- State for resumption analysis
+
+### Archive Commands Reference
+
+```bash
+# Archive planning artifacts
+python3 scripts/archive.py planning {project_name}
+
+# Archive execution artifacts
+python3 scripts/archive.py execution {project_name}
+
+# List all archives
+python3 scripts/archive.py list
+
+# List archives for specific project
+python3 scripts/archive.py list --project {project_name}
+
+# Restore planning state from archive
+python3 scripts/archive.py restore {archive_id} --project {project_name}
+```
 
 ---
 
