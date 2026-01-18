@@ -29,9 +29,97 @@ Planning Gates:
 
 import hashlib
 import json
+import os
+import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+
+# =============================================================================
+# SHIM LAYER - Forward to Go binary if available
+# =============================================================================
+
+GO_SUPPORTED_COMMANDS = {"dag", "steel-thread", "gates"}
+
+
+def _find_go_binary() -> str | None:
+    """Find the tasker Go binary."""
+    if env_binary := os.environ.get("TASKER_BINARY"):
+        if Path(env_binary).exists():
+            return env_binary
+
+    script_dir = Path(__file__).resolve().parent
+    possible_paths = [
+        script_dir.parent / "go" / "bin" / "tasker",
+        script_dir.parent / "bin" / "tasker",
+    ]
+    for p in possible_paths:
+        if p.exists():
+            return str(p)
+
+    import shutil
+    if path := shutil.which("tasker"):
+        return path
+
+    return None
+
+
+def _translate_args_to_go(args: list[str]) -> list[str]:
+    """Translate Python script args to Go subcommand format."""
+    if not args:
+        return ["validate"]
+
+    cmd = args[0]
+    rest = args[1:]
+
+    translations = {
+        "dag": ["validate", "dag"],
+        "steel-thread": ["validate", "steel-thread"],
+        "gates": ["validate", "gates"],
+    }
+
+    if cmd in translations:
+        go_args = translations[cmd].copy()
+        go_args.extend(rest)
+        return go_args
+
+    return ["validate"] + args
+
+
+def _try_shim_to_go() -> bool:
+    """Try to forward to Go binary. Returns True if forwarded, False if fallback needed."""
+    if os.environ.get("USE_PYTHON_IMPL") == "1":
+        return False
+
+    if len(sys.argv) < 2:
+        return False
+
+    cmd = sys.argv[1]
+    if cmd not in GO_SUPPORTED_COMMANDS:
+        return False
+
+    binary = _find_go_binary()
+    if not binary:
+        return False
+
+    go_args = _translate_args_to_go(sys.argv[1:])
+
+    try:
+        result = subprocess.run(
+            [binary] + go_args,
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+        sys.exit(result.returncode)
+    except Exception:
+        return False
+
+
+# =============================================================================
+# PYTHON IMPLEMENTATION
+# =============================================================================
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
@@ -977,6 +1065,9 @@ def print_validation_report(results: dict) -> None:
 
 
 def main() -> None:
+    # Try to forward supported commands to Go binary
+    _try_shim_to_go()
+
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)

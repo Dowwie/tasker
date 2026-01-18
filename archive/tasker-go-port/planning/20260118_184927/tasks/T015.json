@@ -1,0 +1,43 @@
+{
+  "id": "T015",
+  "name": "Spec session management",
+  "phase": 3,
+  "context": {
+    "domain": "Spec Tools",
+    "capability": "Session Management",
+    "spec_ref": {
+      "quote": "spec-session.py - Manage spec session state",
+      "location": "spec-session.py analysis"
+    },
+    "steel_thread": false
+  },
+  "behaviors": ["B48"],
+  "files": [
+    {
+      "path": "go/internal/spec/session.go",
+      "action": "create",
+      "purpose": "ManageSession for spec session state tracking"
+    },
+    {
+      "path": "go/internal/spec/session_test.go",
+      "action": "create",
+      "purpose": "Unit tests for session management"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T013"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "ManageSession creates and persists session state",
+      "verification": "go test ./go/internal/spec/... -run TestManageSession -v"
+    },
+    {
+      "criterion": "Session state tracks discovery rounds and clarifications",
+      "verification": "go test ./go/internal/spec/... -run TestSessionTracking -v"
+    }
+  ],
+  "constraints": [],
+  "estimate_hours": 2
+}

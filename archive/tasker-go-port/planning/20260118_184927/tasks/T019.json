@@ -1,0 +1,53 @@
+{
+  "id": "T019",
+  "name": "Git and directory utilities",
+  "phase": 1,
+  "context": {
+    "domain": "Utilities",
+    "capability": "Git Utilities",
+    "spec_ref": {
+      "quote": "ensure-git.sh - Verify git repository exists",
+      "location": "Round 12: ensure-git.sh"
+    },
+    "steel_thread": false
+  },
+  "behaviors": ["B60", "B61"],
+  "files": [
+    {
+      "path": "go/internal/util/git.go",
+      "action": "create",
+      "purpose": "EnsureGitRepo for git repository verification"
+    },
+    {
+      "path": "go/internal/util/git_test.go",
+      "action": "create",
+      "purpose": "Unit tests for git utilities"
+    },
+    {
+      "path": "go/internal/util/dirs.go",
+      "action": "create",
+      "purpose": "InitDirectories for planning directory initialization"
+    },
+    {
+      "path": "go/internal/util/dirs_test.go",
+      "action": "create",
+      "purpose": "Unit tests for directory utilities"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T001"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "EnsureGitRepo verifies git repository exists and is valid",
+      "verification": "go test ./go/internal/util/... -run TestEnsureGitRepo -v"
+    },
+    {
+      "criterion": "InitDirectories creates planning directory structure",
+      "verification": "go test ./go/internal/util/... -run TestInitDirectories -v"
+    }
+  ],
+  "constraints": [],
+  "estimate_hours": 2
+}

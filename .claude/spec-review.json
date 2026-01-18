@@ -1,0 +1,388 @@
+{
+  "version": "1.0",
+  "spec_checksum": "cc41f9a7d9e95016",
+  "analyzed_at": "2026-01-18T18:23:16.650333+00:00",
+  "status": "pending",
+  "summary": {
+    "total": 6,
+    "by_severity": {
+      "critical": 4,
+      "warning": 1,
+      "info": 1
+    },
+    "by_category": {
+      "implicit": 1,
+      "cross_cutting": 1,
+      "checklist_gap": 4
+    },
+    "blocking": true,
+    "checklist": {
+      "total": 37,
+      "complete": 25,
+      "partial": 0,
+      "missing": 11,
+      "na": 1,
+      "critical_missing": 4
+    },
+    "checklist_items": [
+      {
+        "id": "C1.1",
+        "category": "structure",
+        "question": "Problem statement or purpose defined?",
+        "status": "complete",
+        "evidence": "Found purpose/overview section",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C1.2",
+        "category": "structure",
+        "question": "Functional requirements explicitly listed?",
+        "status": "complete",
+        "evidence": "Found 11 requirement indicators",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C1.3",
+        "category": "structure",
+        "question": "Non-functional requirements stated?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C1.4",
+        "category": "structure",
+        "question": "Scope clearly bounded?",
+        "status": "complete",
+        "evidence": "Found scope definition",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C2.1",
+        "category": "data_model",
+        "question": "Entities/tables defined with purpose?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C2.2",
+        "category": "data_model",
+        "question": "Fields defined with types?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C2.3",
+        "category": "data_model",
+        "question": "Required vs optional fields distinguished?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C2.4",
+        "category": "data_model",
+        "question": "Constraints stated (UNIQUE, CHECK, FK)?",
+        "status": "complete",
+        "evidence": "Found constraints: CHECK",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C2.5",
+        "category": "data_model",
+        "question": "Indexes specified for query patterns?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C2.6",
+        "category": "data_model",
+        "question": "Default values documented?",
+        "status": "complete",
+        "evidence": "Found default value specifications",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C3.1",
+        "category": "api",
+        "question": "Endpoints listed with HTTP methods?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C3.2",
+        "category": "api",
+        "question": "Request schemas defined?",
+        "status": "complete",
+        "evidence": "Found request schema references",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C3.3",
+        "category": "api",
+        "question": "Response schemas defined?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C3.4",
+        "category": "api",
+        "question": "Error responses defined?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C3.5",
+        "category": "api",
+        "question": "Authentication requirements per endpoint?",
+        "status": "complete",
+        "evidence": "Found authentication references",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C4.1",
+        "category": "behavior",
+        "question": "Features described as observable behavior?",
+        "status": "complete",
+        "evidence": "Found 16 behavioral indicators",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C4.2",
+        "category": "behavior",
+        "question": "State transitions defined?",
+        "status": "complete",
+        "evidence": "Found state/transition references",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C4.3",
+        "category": "behavior",
+        "question": "Business rules stated?",
+        "status": "complete",
+        "evidence": "Found business rule indicators",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C4.4",
+        "category": "behavior",
+        "question": "Edge cases addressed?",
+        "status": "complete",
+        "evidence": "Found edge case handling",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C5.1",
+        "category": "errors",
+        "question": "Error conditions enumerated?",
+        "status": "complete",
+        "evidence": "Found error condition descriptions",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C5.2",
+        "category": "errors",
+        "question": "Error messages/codes defined?",
+        "status": "complete",
+        "evidence": "Found error codes/messages",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C5.3",
+        "category": "errors",
+        "question": "Retry behaviors specified?",
+        "status": "complete",
+        "evidence": "Found retry behavior",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C6.1",
+        "category": "config",
+        "question": "Environment variables listed?",
+        "status": "complete",
+        "evidence": "Found environment variable references",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C6.2",
+        "category": "config",
+        "question": "Types for config values specified?",
+        "status": "complete",
+        "evidence": "Found typed config values",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C6.3",
+        "category": "config",
+        "question": "Defaults documented?",
+        "status": "complete",
+        "evidence": "Found default value specifications",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C7.1",
+        "category": "security",
+        "question": "Authentication mechanism specified?",
+        "status": "complete",
+        "evidence": "Found authentication mechanism",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C7.2",
+        "category": "security",
+        "question": "Authorization rules defined?",
+        "status": "complete",
+        "evidence": "Found authorization rules",
+        "severity_if_missing": "critical"
+      },
+      {
+        "id": "C7.3",
+        "category": "security",
+        "question": "Sensitive data handling stated?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C8.1",
+        "category": "observability",
+        "question": "Logging requirements defined?",
+        "status": "complete",
+        "evidence": "Found logging requirements",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C8.2",
+        "category": "observability",
+        "question": "Metrics specified?",
+        "status": "complete",
+        "evidence": "Found metrics requirements",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C8.3",
+        "category": "observability",
+        "question": "Health check endpoints specified?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C9.1",
+        "category": "performance",
+        "question": "Response time SLAs defined?",
+        "status": "complete",
+        "evidence": "Found performance SLAs",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C9.2",
+        "category": "performance",
+        "question": "Timeout values defined?",
+        "status": "complete",
+        "evidence": "Found timeout specifications",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C10.1",
+        "category": "integration",
+        "question": "External dependencies listed?",
+        "status": "complete",
+        "evidence": "Found external dependency references",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C10.2",
+        "category": "integration",
+        "question": "External API contracts documented?",
+        "status": "na",
+        "evidence": "No external API contracts needed",
+        "severity_if_missing": "warning"
+      },
+      {
+        "id": "C11.1",
+        "category": "lifecycle",
+        "question": "Startup sequence defined?",
+        "status": "complete",
+        "evidence": "Found startup sequence",
+        "severity_if_missing": "info"
+      },
+      {
+        "id": "C11.2",
+        "category": "lifecycle",
+        "question": "Graceful shutdown specified?",
+        "status": "missing",
+        "evidence": "",
+        "severity_if_missing": "info"
+      }
+    ]
+  },
+  "weaknesses": [
+    {
+      "id": "W2-001",
+      "category": "implicit",
+      "severity": "info",
+      "location": "line 270",
+      "description": "Default value 'log level' for 'TASKER_LOG_LEVEL' - confirm this is intentional",
+      "spec_quote": "TASKER_LOG_LEVEL` - Override default log level",
+      "suggested_resolution": "Verify default value is correct and document rationale",
+      "behavioral_reframe": ""
+    },
+    {
+      "id": "W3-001",
+      "category": "cross_cutting",
+      "severity": "warning",
+      "location": "line 269",
+      "description": "Configuration table - ensure each var is wired to a component",
+      "spec_quote": "Environment Variables - `TASKER_LOG_LEVEL` - Override default log level - (No other configuration - CLI args only)  ---  ## Architecture sketch  ``` tasker/ \u251c\u2500\u2500 go/                          # Go sourc",
+      "suggested_resolution": "Create dedicated configuration task or mark vars for bundling",
+      "behavioral_reframe": ""
+    },
+    {
+      "id": "CK-C2.1",
+      "category": "checklist_gap",
+      "severity": "critical",
+      "location": "spec-wide",
+      "description": "Checklist gap: Entities/tables defined with purpose?",
+      "spec_quote": "",
+      "suggested_resolution": "Address checklist item C2.1: Entities/tables defined with purpose?",
+      "behavioral_reframe": ""
+    },
+    {
+      "id": "CK-C2.2",
+      "category": "checklist_gap",
+      "severity": "critical",
+      "location": "spec-wide",
+      "description": "Checklist gap: Fields defined with types?",
+      "spec_quote": "",
+      "suggested_resolution": "Address checklist item C2.2: Fields defined with types?",
+      "behavioral_reframe": ""
+    },
+    {
+      "id": "CK-C3.1",
+      "category": "checklist_gap",
+      "severity": "critical",
+      "location": "spec-wide",
+      "description": "Checklist gap: Endpoints listed with HTTP methods?",
+      "spec_quote": "",
+      "suggested_resolution": "Address checklist item C3.1: Endpoints listed with HTTP methods?",
+      "behavioral_reframe": ""
+    },
+    {
+      "id": "CK-C3.3",
+      "category": "checklist_gap",
+      "severity": "critical",
+      "location": "spec-wide",
+      "description": "Checklist gap: Response schemas defined?",
+      "spec_quote": "",
+      "suggested_resolution": "Address checklist item C3.3: Response schemas defined?",
+      "behavioral_reframe": ""
+    }
+  ]
+}

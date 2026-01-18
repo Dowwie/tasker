@@ -1,0 +1,1392 @@
+{
+  "version": "1.0",
+  "target_dir": "/Users/dgordon/my_projects/tasker/go",
+  "capability_map_checksum": "tasker-go-port-draft-pending",
+
+  "phase_filtering": {
+    "active_phase": 1,
+    "source": "capability-map.json",
+    "behaviors_mapped": 74,
+    "note": "All behaviors included per capability-map phase_filtering (no phases excluded)"
+  },
+
+  "file_mapping": [
+    {
+      "behavior_id": "B1",
+      "behavior_name": "LoadState",
+      "files": [
+        {
+          "path": "go/internal/state/state.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "State file operations including load with file locking"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/state_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B2",
+      "behavior_name": "SaveState",
+      "files": [
+        {
+          "path": "go/internal/state/state.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "State file operations including save with file locking"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/state_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B3",
+      "behavior_name": "ValidateState",
+      "files": [
+        {
+          "path": "go/internal/state/state.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "State validation against schema"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/state_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B4",
+      "behavior_name": "RecoverState",
+      "files": [
+        {
+          "path": "go/internal/state/recovery.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Auto-recovery from corrupted state"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/recovery_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B5",
+      "behavior_name": "InitDecomposition",
+      "files": [
+        {
+          "path": "go/internal/state/task.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Task lifecycle operations"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/task_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B6",
+      "behavior_name": "LoadTasks",
+      "files": [
+        {
+          "path": "go/internal/state/task.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Load task files from directory"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/task_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B7",
+      "behavior_name": "GetReadyTasks",
+      "files": [
+        {
+          "path": "go/internal/state/task.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Compute tasks ready for execution"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/task_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B8",
+      "behavior_name": "StartTask",
+      "files": [
+        {
+          "path": "go/internal/state/task.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Mark task as running"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/task_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B9",
+      "behavior_name": "CompleteTask",
+      "files": [
+        {
+          "path": "go/internal/state/task.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Mark task as complete"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/task_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B10",
+      "behavior_name": "FailTask",
+      "files": [
+        {
+          "path": "go/internal/state/task.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Mark task as failed with classification"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/task_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B11",
+      "behavior_name": "RetryTask",
+      "files": [
+        {
+          "path": "go/internal/state/task.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Reset failed task to pending"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/task_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B12",
+      "behavior_name": "SkipTask",
+      "files": [
+        {
+          "path": "go/internal/state/task.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Skip task without blocking dependents"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/task_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B13",
+      "behavior_name": "GetStatus",
+      "files": [
+        {
+          "path": "go/internal/state/phase.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Phase management operations"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/phase_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B14",
+      "behavior_name": "AdvancePhase",
+      "files": [
+        {
+          "path": "go/internal/state/phase.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Attempt to advance to next phase"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/phase_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B15",
+      "behavior_name": "ValidateArtifact",
+      "files": [
+        {
+          "path": "go/internal/state/phase.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Validate artifact against schema"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/phase_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B16",
+      "behavior_name": "RequestHalt",
+      "files": [
+        {
+          "path": "go/internal/state/halt.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Halt control operations"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/halt_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B17",
+      "behavior_name": "CheckHalt",
+      "files": [
+        {
+          "path": "go/internal/state/halt.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Check if halt requested"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/halt_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B18",
+      "behavior_name": "ResumeExecution",
+      "files": [
+        {
+          "path": "go/internal/state/halt.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Clear halt flag"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/halt_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B19",
+      "behavior_name": "GetHaltStatus",
+      "files": [
+        {
+          "path": "go/internal/state/halt.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Show halt status"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/halt_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B20",
+      "behavior_name": "LogTokens",
+      "files": [
+        {
+          "path": "go/internal/state/metrics.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Metrics and logging operations"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/metrics_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B21",
+      "behavior_name": "GetMetrics",
+      "files": [
+        {
+          "path": "go/internal/state/metrics.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Compute performance metrics"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/metrics_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B22",
+      "behavior_name": "GetPlanningMetrics",
+      "files": [
+        {
+          "path": "go/internal/state/metrics.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Compute planning quality metrics"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/metrics_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B23",
+      "behavior_name": "GetFailureMetrics",
+      "files": [
+        {
+          "path": "go/internal/state/metrics.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Show failure breakdown"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/state/metrics_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B24",
+      "behavior_name": "DetectCycles",
+      "files": [
+        {
+          "path": "go/internal/validate/dag.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "DAG validation operations"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/dag_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B25",
+      "behavior_name": "ValidateSteelThread",
+      "files": [
+        {
+          "path": "go/internal/validate/dag.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Validate steel thread path"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/dag_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B26",
+      "behavior_name": "CheckDependencyExistence",
+      "files": [
+        {
+          "path": "go/internal/validate/dag.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Verify all dependencies exist"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/dag_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B27",
+      "behavior_name": "CheckSpecCoverage",
+      "files": [
+        {
+          "path": "go/internal/validate/gates.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Planning gate validations"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/gates_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B28",
+      "behavior_name": "DetectPhaseLeakage",
+      "files": [
+        {
+          "path": "go/internal/validate/gates.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Detect Phase 2+ content in tasks"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/gates_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B29",
+      "behavior_name": "ValidateAcceptanceCriteria",
+      "files": [
+        {
+          "path": "go/internal/validate/gates.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Check AC quality"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/gates_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B30",
+      "behavior_name": "RunAllGates",
+      "files": [
+        {
+          "path": "go/internal/validate/gates.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Run all planning validation gates"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/gates_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B31",
+      "behavior_name": "RecordVerification",
+      "files": [
+        {
+          "path": "go/internal/validate/verification.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Verification recording operations"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/verification_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B32",
+      "behavior_name": "ValidateRollback",
+      "files": [
+        {
+          "path": "go/internal/validate/verification.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Validate rollback integrity"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/verification_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B33",
+      "behavior_name": "RecordCalibration",
+      "files": [
+        {
+          "path": "go/internal/validate/verification.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Record verifier calibration"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/verification_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B34",
+      "behavior_name": "GetCalibrationScore",
+      "files": [
+        {
+          "path": "go/internal/validate/verification.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Show calibration metrics"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/validate/verification_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B35",
+      "behavior_name": "CompileFromSpec",
+      "files": [
+        {
+          "path": "go/internal/fsm/compiler.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "FSM compilation from various sources"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/compiler_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B36",
+      "behavior_name": "CompileFromCapabilityMap",
+      "files": [
+        {
+          "path": "go/internal/fsm/compiler.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Compile FSM from capability map"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/compiler_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B37",
+      "behavior_name": "WriteStates",
+      "files": [
+        {
+          "path": "go/internal/fsm/compiler.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Write states.json output"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/compiler_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B38",
+      "behavior_name": "WriteTransitions",
+      "files": [
+        {
+          "path": "go/internal/fsm/compiler.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Write transitions.json output"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/compiler_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B39",
+      "behavior_name": "GenerateMermaid",
+      "files": [
+        {
+          "path": "go/internal/fsm/mermaid.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "FSM visualization as Mermaid diagrams"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/mermaid_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B40",
+      "behavior_name": "GenerateNotes",
+      "files": [
+        {
+          "path": "go/internal/fsm/mermaid.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Generate FSM notes"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/mermaid_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B41",
+      "behavior_name": "ValidateInvariants",
+      "files": [
+        {
+          "path": "go/internal/fsm/validate.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "FSM validation operations"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/validate_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B42",
+      "behavior_name": "CheckCompleteness",
+      "files": [
+        {
+          "path": "go/internal/fsm/validate.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Check for dead ends"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/validate_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B43",
+      "behavior_name": "ComputeCoverage",
+      "files": [
+        {
+          "path": "go/internal/fsm/validate.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Compute transition coverage"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/validate_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B44",
+      "behavior_name": "CheckTaskCoverage",
+      "files": [
+        {
+          "path": "go/internal/fsm/validate.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Check task FSM coverage"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/fsm/validate_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B45",
+      "behavior_name": "AnalyzeSpec",
+      "files": [
+        {
+          "path": "go/internal/spec/review.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Spec review and analysis"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/spec/review_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B46",
+      "behavior_name": "GetReviewStatus",
+      "files": [
+        {
+          "path": "go/internal/spec/review.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Show review status"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/spec/review_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B47",
+      "behavior_name": "GenerateSpec",
+      "files": [
+        {
+          "path": "go/internal/spec/generate.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Spec generation from inputs"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/spec/generate_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B48",
+      "behavior_name": "ManageSession",
+      "files": [
+        {
+          "path": "go/internal/spec/session.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Spec session state management"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/spec/session_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B49",
+      "behavior_name": "GenerateBundle",
+      "files": [
+        {
+          "path": "go/internal/bundle/bundle.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Bundle generation and operations"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/bundle/bundle_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B50",
+      "behavior_name": "GenerateReadyBundles",
+      "files": [
+        {
+          "path": "go/internal/bundle/bundle.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Generate bundles for ready tasks"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/bundle/bundle_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B51",
+      "behavior_name": "ValidateBundle",
+      "files": [
+        {
+          "path": "go/internal/bundle/bundle.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Validate bundle against schema"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/bundle/bundle_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B52",
+      "behavior_name": "ValidateIntegrity",
+      "files": [
+        {
+          "path": "go/internal/bundle/bundle.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Validate bundle integrity"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/bundle/bundle_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B53",
+      "behavior_name": "ListBundles",
+      "files": [
+        {
+          "path": "go/internal/bundle/bundle.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "List existing bundles"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/bundle/bundle_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B54",
+      "behavior_name": "CleanBundles",
+      "files": [
+        {
+          "path": "go/internal/bundle/bundle.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Remove all bundles"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/bundle/bundle_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B55",
+      "behavior_name": "ArchivePlanning",
+      "files": [
+        {
+          "path": "go/internal/util/archive.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Archive planning artifacts"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/util/archive_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B56",
+      "behavior_name": "ShowDashboard",
+      "files": [
+        {
+          "path": "go/internal/util/display.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Display utilities for dashboard and status"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/util/display_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B57",
+      "behavior_name": "ShowStatus",
+      "files": [
+        {
+          "path": "go/internal/util/display.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Show status"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/util/display_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B58",
+      "behavior_name": "RunEvaluation",
+      "files": [
+        {
+          "path": "go/internal/util/evaluate.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Run evaluation"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/util/evaluate_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B59",
+      "behavior_name": "CheckCompliance",
+      "files": [
+        {
+          "path": "go/internal/util/compliance.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Run compliance checks"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/util/compliance_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B60",
+      "behavior_name": "EnsureGitRepo",
+      "files": [
+        {
+          "path": "go/internal/util/git.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Git repository utilities"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/util/git_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B61",
+      "behavior_name": "InitDirectories",
+      "files": [
+        {
+          "path": "go/internal/util/dirs.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Initialize planning directories"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/util/dirs_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B62",
+      "behavior_name": "LogActivity",
+      "files": [
+        {
+          "path": "go/internal/logging/activity.go",
+          "action": "create",
+          "layer": "infra",
+          "purpose": "Activity logging to file"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/logging/activity_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B63",
+      "behavior_name": "RenderDashboard",
+      "files": [
+        {
+          "path": "go/internal/tui/dashboard.go",
+          "action": "create",
+          "layer": "api",
+          "purpose": "TUI dashboard view"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/tui/dashboard_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B64",
+      "behavior_name": "RenderTaskDetail",
+      "files": [
+        {
+          "path": "go/internal/tui/task_detail.go",
+          "action": "create",
+          "layer": "api",
+          "purpose": "TUI task detail view"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/tui/task_detail_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B65",
+      "behavior_name": "HandleKeyboard",
+      "files": [
+        {
+          "path": "go/internal/tui/app.go",
+          "action": "create",
+          "layer": "api",
+          "purpose": "TUI application and keyboard handling"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/tui/app_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B66",
+      "behavior_name": "FetchState",
+      "files": [
+        {
+          "path": "go/internal/tui/app.go",
+          "action": "create",
+          "layer": "api",
+          "purpose": "Fetch state for TUI display"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/tui/app_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B67",
+      "behavior_name": "BuildBinary",
+      "files": [
+        {
+          "path": "Makefile",
+          "action": "create",
+          "layer": "infra",
+          "purpose": "Build commands and targets"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "behavior_id": "B68",
+      "behavior_name": "CrossCompile",
+      "files": [
+        {
+          "path": "Makefile",
+          "action": "create",
+          "layer": "infra",
+          "purpose": "Cross-compilation targets"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "behavior_id": "B69",
+      "behavior_name": "RunTests",
+      "files": [
+        {
+          "path": "Makefile",
+          "action": "create",
+          "layer": "infra",
+          "purpose": "Test execution targets"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "behavior_id": "B70",
+      "behavior_name": "CreateRelease",
+      "files": [
+        {
+          "path": ".github/workflows/release.yml",
+          "action": "create",
+          "layer": "infra",
+          "purpose": "GitHub release workflow"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "behavior_id": "B71",
+      "behavior_name": "UpdateHomebrew",
+      "files": [
+        {
+          "path": ".github/workflows/release.yml",
+          "action": "create",
+          "layer": "infra",
+          "purpose": "Homebrew formula update"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "behavior_id": "B72",
+      "behavior_name": "TranslateArgs",
+      "files": [
+        {
+          "path": "go/internal/shim/shim.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Shim argument translation logic"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/shim/shim_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B73",
+      "behavior_name": "ExecBinary",
+      "files": [
+        {
+          "path": "go/internal/shim/shim.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Execute Go binary with translated args"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/shim/shim_test.go",
+          "action": "create"
+        }
+      ]
+    },
+    {
+      "behavior_id": "B74",
+      "behavior_name": "HandleError",
+      "files": [
+        {
+          "path": "go/internal/shim/shim.go",
+          "action": "create",
+          "layer": "domain",
+          "purpose": "Report errors if binary not found"
+        }
+      ],
+      "tests": [
+        {
+          "path": "go/internal/shim/shim_test.go",
+          "action": "create"
+        }
+      ]
+    }
+  ],
+
+  "cross_cutting": [
+    {
+      "concern": "logging",
+      "files": [
+        {"path": "go/internal/logging/logger.go", "action": "create", "purpose": "Structured logger setup with log levels"}
+      ]
+    },
+    {
+      "concern": "file_locking",
+      "files": [
+        {"path": "go/internal/state/lock.go", "action": "create", "purpose": "File locking for state file operations"}
+      ]
+    },
+    {
+      "concern": "schema_validation",
+      "files": [
+        {"path": "go/internal/schema/validator.go", "action": "create", "purpose": "JSON schema validation using santhosh-tekuri/jsonschema"}
+      ]
+    },
+    {
+      "concern": "error_handling",
+      "files": [
+        {"path": "go/internal/errors/errors.go", "action": "create", "purpose": "Centralized error types and handling"}
+      ]
+    },
+    {
+      "concern": "configuration",
+      "files": [
+        {"path": "go/internal/config/config.go", "action": "create", "purpose": "Configuration management"}
+      ]
+    }
+  ],
+
+  "infrastructure": [
+    {"path": "go/go.mod", "action": "create", "purpose": "Go module definition"},
+    {"path": "go/go.sum", "action": "create", "purpose": "Go dependency checksums"},
+    {"path": "go/cmd/tasker/main.go", "action": "create", "purpose": "Entry point with cobra root command"},
+    {"path": "go/internal/command/root.go", "action": "create", "purpose": "Cobra root command definition"},
+    {"path": "go/internal/command/state/state.go", "action": "create", "purpose": "State subcommands (init, status, task start/complete/fail/retry/skip, halt, resume)"},
+    {"path": "go/internal/command/validate/validate.go", "action": "create", "purpose": "Validate subcommands (dag, gates, steel-thread)"},
+    {"path": "go/internal/command/fsm/fsm.go", "action": "create", "purpose": "FSM subcommands (compile, mermaid, validate)"},
+    {"path": "go/internal/command/spec/spec.go", "action": "create", "purpose": "Spec subcommands (review, generate, session)"},
+    {"path": "go/internal/command/bundle/bundle.go", "action": "create", "purpose": "Bundle subcommands (generate, list, clean, validate)"},
+    {"path": "go/internal/command/tui/tui.go", "action": "create", "purpose": "TUI subcommand to launch interactive mode"},
+    {"path": "Makefile", "action": "create", "purpose": "Build commands for compile, test, cross-compile"},
+    {"path": ".github/workflows/ci.yml", "action": "create", "purpose": "CI pipeline for tests and linting"},
+    {"path": ".github/workflows/release.yml", "action": "create", "purpose": "Release pipeline for GitHub releases and Homebrew"},
+    {"path": "scripts/state.py", "action": "modify", "purpose": "Shim script to forward to tasker state"},
+    {"path": "scripts/validate.py", "action": "modify", "purpose": "Shim script to forward to tasker validate"},
+    {"path": "scripts/fsm-compiler.py", "action": "modify", "purpose": "Shim script to forward to tasker fsm compile"},
+    {"path": "scripts/fsm-mermaid.py", "action": "modify", "purpose": "Shim script to forward to tasker fsm mermaid"},
+    {"path": "scripts/fsm-validate.py", "action": "modify", "purpose": "Shim script to forward to tasker fsm validate"},
+    {"path": "scripts/bundle.py", "action": "modify", "purpose": "Shim script to forward to tasker bundle"},
+    {"path": "scripts/spec-review.py", "action": "modify", "purpose": "Shim script to forward to tasker spec review"},
+    {"path": "scripts/spec-generate.py", "action": "modify", "purpose": "Shim script to forward to tasker spec generate"},
+    {"path": "scripts/spec-session.py", "action": "modify", "purpose": "Shim script to forward to tasker spec session"},
+    {"path": "scripts/archive.py", "action": "modify", "purpose": "Shim script to forward to tasker archive"},
+    {"path": "scripts/dashboard.py", "action": "modify", "purpose": "Shim script to forward to tasker dashboard"},
+    {"path": "scripts/status.py", "action": "modify", "purpose": "Shim script to forward to tasker status"},
+    {"path": "scripts/evaluate.py", "action": "modify", "purpose": "Shim script to forward to tasker evaluate"},
+    {"path": "scripts/compliance-check.py", "action": "modify", "purpose": "Shim script to forward to tasker compliance"}
+  ],
+
+  "summary": {
+    "total_behaviors": 74,
+    "total_files": 67,
+    "files_to_create": 53,
+    "files_to_modify": 14
+  }
+}

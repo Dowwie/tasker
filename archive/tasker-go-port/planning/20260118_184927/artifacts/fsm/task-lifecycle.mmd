@@ -1,0 +1,36 @@
+stateDiagram-v2
+    [*] --> Uninitialized
+
+    Uninitialized --> Initialized : TR1: init command
+
+    Initialized --> TasksLoaded : TR2: load-tasks
+    Initialized --> Corrupted : TR11: corruption detected
+    Initialized --> TasksLoaded : TR12: auto-recovery
+
+    TasksLoaded --> TaskPending : TR3: ready-tasks query
+
+    TaskPending --> TaskRunning : TR4: start-task
+    TaskPending --> TaskSkipped : TR8: skip-task
+
+    TaskRunning --> TaskComplete : TR5: complete-task
+    TaskRunning --> TaskFailed : TR6: fail-task
+    TaskRunning --> Halted : TR9: halt
+
+    TaskFailed --> TaskPending : TR7: retry-task
+
+    Halted --> TasksLoaded : TR10: resume
+
+    TaskComplete --> [*]
+    TaskSkipped --> [*]
+    Corrupted --> [*]
+
+    note right of Uninitialized : No state.json exists
+    note right of Initialized : State file created
+    note right of TasksLoaded : Tasks loaded from files
+    note right of TaskPending : Task ready for execution
+    note right of TaskRunning : Task being executed
+    note right of TaskComplete : Task finished successfully
+    note right of TaskFailed : Task failed, may retry
+    note right of TaskSkipped : Task skipped intentionally
+    note right of Halted : Execution paused
+    note right of Corrupted : Unrecoverable error

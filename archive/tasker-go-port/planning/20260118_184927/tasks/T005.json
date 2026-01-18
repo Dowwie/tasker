@@ -1,0 +1,51 @@
+{
+  "id": "T005",
+  "name": "Metrics and logging operations",
+  "phase": 2,
+  "context": {
+    "domain": "State Management",
+    "capability": "Metrics & Logging",
+    "spec_ref": {
+      "quote": "log-tokens - Log token usage for tracking",
+      "location": "state.py docstring"
+    },
+    "steel_thread": false
+  },
+  "behaviors": ["B20", "B21", "B22", "B23"],
+  "files": [
+    {
+      "path": "go/internal/state/metrics.go",
+      "action": "create",
+      "purpose": "LogTokens, GetMetrics, GetPlanningMetrics, GetFailureMetrics operations"
+    },
+    {
+      "path": "go/internal/state/metrics_test.go",
+      "action": "create",
+      "purpose": "Unit tests for metrics operations"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T001", "T002"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "LogTokens records token usage with timestamp and task context",
+      "verification": "go test ./go/internal/state/... -run TestLogTokens -v"
+    },
+    {
+      "criterion": "GetMetrics computes performance metrics including completion rate and duration",
+      "verification": "go test ./go/internal/state/... -run TestGetMetrics -v"
+    },
+    {
+      "criterion": "GetPlanningMetrics computes planning quality metrics",
+      "verification": "go test ./go/internal/state/... -run TestGetPlanningMetrics -v"
+    },
+    {
+      "criterion": "GetFailureMetrics shows failure breakdown by classification",
+      "verification": "go test ./go/internal/state/... -run TestGetFailureMetrics -v"
+    }
+  ],
+  "constraints": ["INV-008: Log output (when enabled) MUST NOT interfere with stdout data"],
+  "estimate_hours": 3
+}

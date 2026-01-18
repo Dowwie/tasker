@@ -1,0 +1,51 @@
+{
+  "id": "T012",
+  "name": "FSM validator",
+  "phase": 3,
+  "context": {
+    "domain": "FSM Tools",
+    "capability": "FSM Validation",
+    "spec_ref": {
+      "quote": "fsm-validate.py - Validate FSM invariants and coverage",
+      "location": "fsm-validate.py docstring"
+    },
+    "steel_thread": false
+  },
+  "behaviors": ["B41", "B42", "B43", "B44"],
+  "files": [
+    {
+      "path": "go/internal/fsm/validate.go",
+      "action": "create",
+      "purpose": "ValidateInvariants, CheckCompleteness, ComputeCoverage, CheckTaskCoverage"
+    },
+    {
+      "path": "go/internal/fsm/validate_test.go",
+      "action": "create",
+      "purpose": "Unit tests for FSM validation"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T010"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "ValidateInvariants checks I1-I5 invariants from FSM spec",
+      "verification": "go test ./go/internal/fsm/... -run TestValidateInvariants -v"
+    },
+    {
+      "criterion": "CheckCompleteness identifies dead-end states without outgoing transitions",
+      "verification": "go test ./go/internal/fsm/... -run TestCheckCompleteness -v"
+    },
+    {
+      "criterion": "ComputeCoverage calculates transition coverage percentage",
+      "verification": "go test ./go/internal/fsm/... -run TestComputeCoverage -v"
+    },
+    {
+      "criterion": "CheckTaskCoverage verifies tasks implement all required FSM transitions",
+      "verification": "go test ./go/internal/fsm/... -run TestCheckTaskCoverage -v"
+    }
+  ],
+  "constraints": [],
+  "estimate_hours": 3
+}

@@ -1,0 +1,56 @@
+{
+  "id": "T004",
+  "name": "Halt control operations",
+  "phase": 1,
+  "context": {
+    "domain": "State Management",
+    "capability": "Halt Control",
+    "spec_ref": {
+      "quote": "halt - Request graceful halt of execution",
+      "location": "Workflow 1, Variants"
+    },
+    "steel_thread": false
+  },
+  "behaviors": ["B16", "B17", "B18", "B19"],
+  "files": [
+    {
+      "path": "go/internal/state/halt.go",
+      "action": "create",
+      "purpose": "RequestHalt, CheckHalt, ResumeExecution, GetHaltStatus operations"
+    },
+    {
+      "path": "go/internal/state/halt_test.go",
+      "action": "create",
+      "purpose": "Unit tests for halt control"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T001"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "RequestHalt sets halt flag in state file with reason",
+      "verification": "go test ./go/internal/state/... -run TestRequestHalt -v"
+    },
+    {
+      "criterion": "CheckHalt returns true when halt has been requested",
+      "verification": "go test ./go/internal/state/... -run TestCheckHalt -v"
+    },
+    {
+      "criterion": "ResumeExecution clears halt flag and allows task execution",
+      "verification": "go test ./go/internal/state/... -run TestResumeExecution -v"
+    },
+    {
+      "criterion": "GetHaltStatus shows current halt status and reason",
+      "verification": "go test ./go/internal/state/... -run TestGetHaltStatus -v"
+    }
+  ],
+  "constraints": [],
+  "estimate_hours": 2,
+  "state_machine": {
+    "transitions_covered": ["TR9", "TR10"],
+    "guards_enforced": ["I3"],
+    "states_reached": ["S9"]
+  }
+}

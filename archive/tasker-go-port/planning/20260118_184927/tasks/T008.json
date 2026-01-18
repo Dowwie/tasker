@@ -1,0 +1,51 @@
+{
+  "id": "T008",
+  "name": "Planning gates validation",
+  "phase": 3,
+  "context": {
+    "domain": "Validation",
+    "capability": "Planning Gates",
+    "spec_ref": {
+      "quote": "Planning validation gates: spec coverage, phase leakage detection, AC quality",
+      "location": "validate.py docstring"
+    },
+    "steel_thread": false
+  },
+  "behaviors": ["B27", "B28", "B29", "B30"],
+  "files": [
+    {
+      "path": "go/internal/validate/gates.go",
+      "action": "create",
+      "purpose": "CheckSpecCoverage, DetectPhaseLeakage, ValidateAcceptanceCriteria, RunAllGates"
+    },
+    {
+      "path": "go/internal/validate/gates_test.go",
+      "action": "create",
+      "purpose": "Unit tests for planning gates"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T007"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "CheckSpecCoverage verifies all spec requirements are covered by tasks",
+      "verification": "go test ./go/internal/validate/... -run TestCheckSpecCoverage -v"
+    },
+    {
+      "criterion": "DetectPhaseLeakage identifies Phase 2+ content in Phase 1 tasks",
+      "verification": "go test ./go/internal/validate/... -run TestDetectPhaseLeakage -v"
+    },
+    {
+      "criterion": "ValidateAcceptanceCriteria checks AC quality and verification commands",
+      "verification": "go test ./go/internal/validate/... -run TestValidateAcceptanceCriteria -v"
+    },
+    {
+      "criterion": "RunAllGates runs all planning validation gates and reports results",
+      "verification": "go test ./go/internal/validate/... -run TestRunAllGates -v"
+    }
+  ],
+  "constraints": [],
+  "estimate_hours": 3
+}

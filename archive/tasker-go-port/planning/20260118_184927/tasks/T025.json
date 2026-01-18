@@ -1,0 +1,42 @@
+{
+  "id": "T025",
+  "name": "CI/CD pipeline",
+  "phase": 3,
+  "context": {
+    "domain": "Build & Distribution",
+    "capability": "Build System",
+    "spec_ref": {
+      "quote": "CI pipeline for tests and linting",
+      "location": "Infrastructure section"
+    },
+    "steel_thread": false
+  },
+  "behaviors": [],
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "action": "create",
+      "purpose": "CI pipeline for tests and linting on push/PR"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T024"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "CI workflow runs tests on push to main and PRs",
+      "verification": "test -f .github/workflows/ci.yml && grep 'go test' .github/workflows/ci.yml"
+    },
+    {
+      "criterion": "CI workflow runs golangci-lint on all Go code",
+      "verification": "grep 'golangci-lint' .github/workflows/ci.yml"
+    },
+    {
+      "criterion": "CI workflow tests on Go 1.21 and latest Go version",
+      "verification": "grep '1.21' .github/workflows/ci.yml"
+    }
+  ],
+  "constraints": [],
+  "estimate_hours": 2
+}

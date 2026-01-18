@@ -1,0 +1,405 @@
+{
+  "version": "1.0",
+  "spec_slug": "tasker-go-port",
+  "spec_checksum": "draft-pending",
+
+  "domains": [
+    {
+      "id": "D1",
+      "name": "State Management",
+      "description": "Core state operations for task decomposition protocol",
+      "capabilities": [
+        {
+          "id": "C1",
+          "name": "State File Operations",
+          "discovery_ref": "Round 4: Same JSON format; Round 7: File locking",
+          "behaviors": [
+            {"id": "B1", "name": "LoadState", "type": "state", "description": "Read state.json with file locking"},
+            {"id": "B2", "name": "SaveState", "type": "state", "description": "Write state.json with file locking"},
+            {"id": "B3", "name": "ValidateState", "type": "process", "description": "Validate state against schema"},
+            {"id": "B4", "name": "RecoverState", "type": "process", "description": "Auto-recover from corrupted state"}
+          ]
+        },
+        {
+          "id": "C2",
+          "name": "Task Lifecycle",
+          "discovery_ref": "Round 1: CLI structure; Scope: all scripts replaced",
+          "behaviors": [
+            {"id": "B5", "name": "InitDecomposition", "type": "state", "description": "Initialize new decomposition"},
+            {"id": "B6", "name": "LoadTasks", "type": "state", "description": "Load task files from directory"},
+            {"id": "B7", "name": "GetReadyTasks", "type": "process", "description": "Compute tasks ready for execution"},
+            {"id": "B8", "name": "StartTask", "type": "state", "description": "Mark task as running"},
+            {"id": "B9", "name": "CompleteTask", "type": "state", "description": "Mark task as complete"},
+            {"id": "B10", "name": "FailTask", "type": "state", "description": "Mark task as failed with classification"},
+            {"id": "B11", "name": "RetryTask", "type": "state", "description": "Reset failed task to pending"},
+            {"id": "B12", "name": "SkipTask", "type": "state", "description": "Skip task without blocking dependents"}
+          ]
+        },
+        {
+          "id": "C3",
+          "name": "Phase Management",
+          "discovery_ref": "Round 1: subcommand structure",
+          "behaviors": [
+            {"id": "B13", "name": "GetStatus", "type": "output", "description": "Show current state and phase"},
+            {"id": "B14", "name": "AdvancePhase", "type": "process", "description": "Attempt to advance to next phase"},
+            {"id": "B15", "name": "ValidateArtifact", "type": "process", "description": "Validate artifact against schema"}
+          ]
+        },
+        {
+          "id": "C4",
+          "name": "Halt Control",
+          "discovery_ref": "state.py docstring analysis",
+          "behaviors": [
+            {"id": "B16", "name": "RequestHalt", "type": "state", "description": "Request graceful halt"},
+            {"id": "B17", "name": "CheckHalt", "type": "process", "description": "Check if halt requested"},
+            {"id": "B18", "name": "ResumeExecution", "type": "state", "description": "Clear halt flag"},
+            {"id": "B19", "name": "GetHaltStatus", "type": "output", "description": "Show halt status"}
+          ]
+        },
+        {
+          "id": "C5",
+          "name": "Metrics & Logging",
+          "discovery_ref": "Round 10: Log levels; state.py docstring",
+          "behaviors": [
+            {"id": "B20", "name": "LogTokens", "type": "state", "description": "Log token usage"},
+            {"id": "B21", "name": "GetMetrics", "type": "output", "description": "Compute performance metrics"},
+            {"id": "B22", "name": "GetPlanningMetrics", "type": "output", "description": "Compute planning quality metrics"},
+            {"id": "B23", "name": "GetFailureMetrics", "type": "output", "description": "Show failure breakdown"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D2",
+      "name": "Validation",
+      "description": "DAG validation, planning gates, and integrity checks",
+      "capabilities": [
+        {
+          "id": "C6",
+          "name": "DAG Validation",
+          "discovery_ref": "validate.py docstring analysis",
+          "behaviors": [
+            {"id": "B24", "name": "DetectCycles", "type": "process", "description": "Check for dependency cycles"},
+            {"id": "B25", "name": "ValidateSteelThread", "type": "process", "description": "Validate steel thread path"},
+            {"id": "B26", "name": "CheckDependencyExistence", "type": "process", "description": "Verify all dependencies exist"}
+          ]
+        },
+        {
+          "id": "C7",
+          "name": "Planning Gates",
+          "discovery_ref": "validate.py docstring analysis",
+          "behaviors": [
+            {"id": "B27", "name": "CheckSpecCoverage", "type": "process", "description": "Check spec requirement coverage"},
+            {"id": "B28", "name": "DetectPhaseLeakage", "type": "process", "description": "Detect Phase 2+ content in tasks"},
+            {"id": "B29", "name": "ValidateAcceptanceCriteria", "type": "process", "description": "Check AC quality"},
+            {"id": "B30", "name": "RunAllGates", "type": "process", "description": "Run all planning validation gates"}
+          ]
+        },
+        {
+          "id": "C8",
+          "name": "Verification",
+          "discovery_ref": "state.py and validate.py analysis",
+          "behaviors": [
+            {"id": "B31", "name": "RecordVerification", "type": "state", "description": "Record verification results"},
+            {"id": "B32", "name": "ValidateRollback", "type": "process", "description": "Validate rollback integrity"},
+            {"id": "B33", "name": "RecordCalibration", "type": "state", "description": "Record verifier calibration"},
+            {"id": "B34", "name": "GetCalibrationScore", "type": "output", "description": "Show calibration metrics"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D3",
+      "name": "FSM Tools",
+      "description": "Finite state machine compilation, visualization, and validation",
+      "capabilities": [
+        {
+          "id": "C9",
+          "name": "FSM Compilation",
+          "discovery_ref": "fsm-compiler.py docstring analysis",
+          "behaviors": [
+            {"id": "B35", "name": "CompileFromSpec", "type": "process", "description": "Compile FSM from spec JSON"},
+            {"id": "B36", "name": "CompileFromCapabilityMap", "type": "process", "description": "Compile FSM from capability map"},
+            {"id": "B37", "name": "WriteStates", "type": "output", "description": "Write states.json"},
+            {"id": "B38", "name": "WriteTransitions", "type": "output", "description": "Write transitions.json"}
+          ]
+        },
+        {
+          "id": "C10",
+          "name": "FSM Visualization",
+          "discovery_ref": "fsm-mermaid.py analysis",
+          "behaviors": [
+            {"id": "B39", "name": "GenerateMermaid", "type": "output", "description": "Generate Mermaid diagram"},
+            {"id": "B40", "name": "GenerateNotes", "type": "output", "description": "Generate FSM notes"}
+          ]
+        },
+        {
+          "id": "C11",
+          "name": "FSM Validation",
+          "discovery_ref": "fsm-validate.py docstring analysis",
+          "behaviors": [
+            {"id": "B41", "name": "ValidateInvariants", "type": "process", "description": "Validate I1-I5 invariants"},
+            {"id": "B42", "name": "CheckCompleteness", "type": "process", "description": "Check for dead ends"},
+            {"id": "B43", "name": "ComputeCoverage", "type": "process", "description": "Compute transition coverage"},
+            {"id": "B44", "name": "CheckTaskCoverage", "type": "process", "description": "Check task FSM coverage"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D4",
+      "name": "Spec Tools",
+      "description": "Specification review, generation, and session management",
+      "capabilities": [
+        {
+          "id": "C12",
+          "name": "Spec Review",
+          "discovery_ref": "spec-review.py analysis",
+          "behaviors": [
+            {"id": "B45", "name": "AnalyzeSpec", "type": "process", "description": "Run weakness detection"},
+            {"id": "B46", "name": "GetReviewStatus", "type": "output", "description": "Show review status"}
+          ]
+        },
+        {
+          "id": "C13",
+          "name": "Spec Generation",
+          "discovery_ref": "spec-generate.py analysis",
+          "behaviors": [
+            {"id": "B47", "name": "GenerateSpec", "type": "output", "description": "Generate spec from inputs"}
+          ]
+        },
+        {
+          "id": "C14",
+          "name": "Session Management",
+          "discovery_ref": "spec-session.py analysis",
+          "behaviors": [
+            {"id": "B48", "name": "ManageSession", "type": "state", "description": "Manage spec session state"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D5",
+      "name": "Bundle Management",
+      "description": "Task execution bundle generation and validation",
+      "capabilities": [
+        {
+          "id": "C15",
+          "name": "Bundle Operations",
+          "discovery_ref": "bundle.py docstring analysis",
+          "behaviors": [
+            {"id": "B49", "name": "GenerateBundle", "type": "output", "description": "Generate bundle for task"},
+            {"id": "B50", "name": "GenerateReadyBundles", "type": "output", "description": "Generate bundles for ready tasks"},
+            {"id": "B51", "name": "ValidateBundle", "type": "process", "description": "Validate bundle against schema"},
+            {"id": "B52", "name": "ValidateIntegrity", "type": "process", "description": "Validate bundle integrity"},
+            {"id": "B53", "name": "ListBundles", "type": "output", "description": "List existing bundles"},
+            {"id": "B54", "name": "CleanBundles", "type": "state", "description": "Remove all bundles"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D6",
+      "name": "Utilities",
+      "description": "Archive, dashboard, status, and other utilities",
+      "capabilities": [
+        {
+          "id": "C16",
+          "name": "Archive",
+          "discovery_ref": "archive.py analysis",
+          "behaviors": [
+            {"id": "B55", "name": "ArchivePlanning", "type": "state", "description": "Archive planning artifacts"}
+          ]
+        },
+        {
+          "id": "C17",
+          "name": "Display",
+          "discovery_ref": "dashboard.py, status.py analysis",
+          "behaviors": [
+            {"id": "B56", "name": "ShowDashboard", "type": "output", "description": "Display dashboard"},
+            {"id": "B57", "name": "ShowStatus", "type": "output", "description": "Show status"}
+          ]
+        },
+        {
+          "id": "C18",
+          "name": "Evaluation",
+          "discovery_ref": "evaluate.py analysis",
+          "behaviors": [
+            {"id": "B58", "name": "RunEvaluation", "type": "process", "description": "Run evaluation"}
+          ]
+        },
+        {
+          "id": "C19",
+          "name": "Compliance",
+          "discovery_ref": "compliance-check.py analysis",
+          "behaviors": [
+            {"id": "B59", "name": "CheckCompliance", "type": "process", "description": "Run compliance checks"}
+          ]
+        },
+        {
+          "id": "C20",
+          "name": "Git Utilities",
+          "discovery_ref": "Round 12: ensure-git.sh",
+          "behaviors": [
+            {"id": "B60", "name": "EnsureGitRepo", "type": "process", "description": "Verify git repository"}
+          ]
+        },
+        {
+          "id": "C21",
+          "name": "Directory Setup",
+          "discovery_ref": "Round 12: init-planning-dirs.sh",
+          "behaviors": [
+            {"id": "B61", "name": "InitDirectories", "type": "state", "description": "Initialize planning directories"}
+          ]
+        },
+        {
+          "id": "C22",
+          "name": "Activity Logging",
+          "discovery_ref": "Round 12: log-activity.sh",
+          "behaviors": [
+            {"id": "B62", "name": "LogActivity", "type": "state", "description": "Log activity to file"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D7",
+      "name": "TUI",
+      "description": "Interactive terminal user interface",
+      "capabilities": [
+        {
+          "id": "C23",
+          "name": "TUI Application",
+          "discovery_ref": "Round 3: Port to Go; Round 10: Keyboard only",
+          "behaviors": [
+            {"id": "B63", "name": "RenderDashboard", "type": "output", "description": "Render dashboard view"},
+            {"id": "B64", "name": "RenderTaskDetail", "type": "output", "description": "Render task detail view"},
+            {"id": "B65", "name": "HandleKeyboard", "type": "input", "description": "Process keyboard input"},
+            {"id": "B66", "name": "FetchState", "type": "state", "description": "Fetch state for display"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D8",
+      "name": "Build & Distribution",
+      "description": "Build system and distribution infrastructure",
+      "capabilities": [
+        {
+          "id": "C24",
+          "name": "Build System",
+          "discovery_ref": "Round 4: Distribution; Round 8: Go patterns",
+          "behaviors": [
+            {"id": "B67", "name": "BuildBinary", "type": "process", "description": "Compile Go binary"},
+            {"id": "B68", "name": "CrossCompile", "type": "process", "description": "Build for multiple platforms"},
+            {"id": "B69", "name": "RunTests", "type": "process", "description": "Execute test suite"}
+          ]
+        },
+        {
+          "id": "C25",
+          "name": "Distribution",
+          "discovery_ref": "Round 4: GitHub releases + Homebrew",
+          "behaviors": [
+            {"id": "B70", "name": "CreateRelease", "type": "output", "description": "Create GitHub release"},
+            {"id": "B71", "name": "UpdateHomebrew", "type": "output", "description": "Update Homebrew formula"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D9",
+      "name": "Compatibility Layer",
+      "description": "Shim scripts for backward compatibility",
+      "capabilities": [
+        {
+          "id": "C26",
+          "name": "Shim Scripts",
+          "discovery_ref": "Round 11: Shim scripts for compatibility",
+          "behaviors": [
+            {"id": "B72", "name": "TranslateArgs", "type": "process", "description": "Translate Python args to Go subcommand"},
+            {"id": "B73", "name": "ExecBinary", "type": "process", "description": "Execute Go binary with translated args"},
+            {"id": "B74", "name": "HandleError", "type": "output", "description": "Report errors if binary not found"}
+          ]
+        }
+      ]
+    }
+  ],
+
+  "flows": [
+    {
+      "id": "F1",
+      "name": "State Management Flow (Steel Thread)",
+      "is_steel_thread": true,
+      "steps": [
+        {"order": 1, "behavior_id": "B1", "description": "Load current state"},
+        {"order": 2, "behavior_id": "B3", "description": "Validate state structure"},
+        {"order": 3, "behavior_id": "B7", "description": "Compute ready tasks"},
+        {"order": 4, "behavior_id": "B8", "description": "Start a task"},
+        {"order": 5, "behavior_id": "B9", "description": "Complete task"},
+        {"order": 6, "behavior_id": "B2", "description": "Save updated state"}
+      ]
+    },
+    {
+      "id": "F2",
+      "name": "Validation Flow",
+      "is_steel_thread": false,
+      "steps": [
+        {"order": 1, "behavior_id": "B24", "description": "Check for cycles"},
+        {"order": 2, "behavior_id": "B25", "description": "Validate steel thread"},
+        {"order": 3, "behavior_id": "B27", "description": "Check spec coverage"},
+        {"order": 4, "behavior_id": "B30", "description": "Run all gates"}
+      ]
+    },
+    {
+      "id": "F3",
+      "name": "FSM Compilation Flow",
+      "is_steel_thread": false,
+      "steps": [
+        {"order": 1, "behavior_id": "B36", "description": "Compile from capability map"},
+        {"order": 2, "behavior_id": "B37", "description": "Write states"},
+        {"order": 3, "behavior_id": "B38", "description": "Write transitions"},
+        {"order": 4, "behavior_id": "B39", "description": "Generate Mermaid"},
+        {"order": 5, "behavior_id": "B41", "description": "Validate invariants"}
+      ]
+    },
+    {
+      "id": "F4",
+      "name": "Bundle Generation Flow",
+      "is_steel_thread": false,
+      "steps": [
+        {"order": 1, "behavior_id": "B7", "description": "Get ready tasks"},
+        {"order": 2, "behavior_id": "B50", "description": "Generate bundles"},
+        {"order": 3, "behavior_id": "B51", "description": "Validate bundles"}
+      ]
+    },
+    {
+      "id": "F5",
+      "name": "Shim Execution Flow",
+      "is_steel_thread": false,
+      "steps": [
+        {"order": 1, "behavior_id": "B72", "description": "Translate arguments"},
+        {"order": 2, "behavior_id": "B73", "description": "Execute Go binary"},
+        {"order": 3, "behavior_id": "B74", "description": "Handle any errors"}
+      ]
+    }
+  ],
+
+  "invariants": [
+    {"id": "I1", "description": "JSON file formats must remain byte-compatible with Python version", "discovery_ref": "Round 4, Q1: Same JSON format"},
+    {"id": "I2", "description": "Exit codes must match Python script behavior", "discovery_ref": "Round 2, Q2: Exact compatibility"},
+    {"id": "I3", "description": "File locking must be used for all state file writes", "discovery_ref": "Round 7, Q2: File locking"},
+    {"id": "I4", "description": "Skills must work without modification via shim scripts", "discovery_ref": "Round 11, Q2: Shim scripts"},
+    {"id": "I5", "description": "TUI must support keyboard-only navigation", "discovery_ref": "Round 10, Q1: Keyboard only"},
+    {"id": "I6", "description": "Auto-recovery must not lose valid data", "discovery_ref": "Round 9, Q1: Auto-recover"},
+    {"id": "I7", "description": "Schema validation must use same JSON Schema files as Python", "discovery_ref": "Round 2, Q1: JSON schema"},
+    {"id": "I8", "description": "No Python runtime dependency after migration", "discovery_ref": "Scope: port to Go"},
+    {"id": "I9", "description": "Log output must not interfere with stdout data", "discovery_ref": "Round 10, Q2: Log levels"},
+    {"id": "I10", "description": "Minimum Go version 1.21", "discovery_ref": "Round 8, Q2: Go 1.21+"}
+  ],
+
+  "coverage": {
+    "total_requirements": 35,
+    "covered_requirements": 35,
+    "gaps": []
+  }
+}

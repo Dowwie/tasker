@@ -1,0 +1,52 @@
+{
+  "id": "T021",
+  "name": "TUI application core and keyboard handling",
+  "phase": 2,
+  "context": {
+    "domain": "TUI",
+    "capability": "TUI Application",
+    "spec_ref": {
+      "quote": "TUI MUST support keyboard-only navigation",
+      "location": "INV-007"
+    },
+    "steel_thread": false
+  },
+  "behaviors": ["B65", "B66"],
+  "files": [
+    {
+      "path": "go/internal/tui/app.go",
+      "action": "create",
+      "purpose": "TUI application setup using bubbletea, HandleKeyboard, FetchState"
+    },
+    {
+      "path": "go/internal/tui/app_test.go",
+      "action": "create",
+      "purpose": "Unit tests for TUI application"
+    },
+    {
+      "path": "go/internal/command/tui/tui.go",
+      "action": "create",
+      "purpose": "TUI subcommand to launch interactive mode"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T001", "T002"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "TUI application starts with bubbletea framework",
+      "verification": "go test ./go/internal/tui/... -run TestAppStart -v"
+    },
+    {
+      "criterion": "HandleKeyboard processes all navigation keys (j/k, up/down, enter, q)",
+      "verification": "go test ./go/internal/tui/... -run TestHandleKeyboard -v"
+    },
+    {
+      "criterion": "FetchState retrieves current state for display",
+      "verification": "go test ./go/internal/tui/... -run TestFetchState -v"
+    }
+  ],
+  "constraints": ["INV-007: TUI MUST support keyboard-only navigation"],
+  "estimate_hours": 4
+}

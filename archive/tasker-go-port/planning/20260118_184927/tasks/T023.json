@@ -1,0 +1,47 @@
+{
+  "id": "T023",
+  "name": "TUI task detail view",
+  "phase": 3,
+  "context": {
+    "domain": "TUI",
+    "capability": "TUI Application",
+    "spec_ref": {
+      "quote": "RenderTaskDetail - Render task detail view with full task info",
+      "location": "TUI Application capability"
+    },
+    "steel_thread": false
+  },
+  "behaviors": ["B64"],
+  "files": [
+    {
+      "path": "go/internal/tui/task_detail.go",
+      "action": "create",
+      "purpose": "RenderTaskDetail for TUI task detail view"
+    },
+    {
+      "path": "go/internal/tui/task_detail_test.go",
+      "action": "create",
+      "purpose": "Unit tests for task detail view"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T021"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "RenderTaskDetail shows task name, status, and dependencies",
+      "verification": "go test ./go/internal/tui/... -run TestRenderTaskDetail -v"
+    },
+    {
+      "criterion": "Task detail shows acceptance criteria with verification status",
+      "verification": "go test ./go/internal/tui/... -run TestTaskDetailCriteria -v"
+    },
+    {
+      "criterion": "Task detail shows file list with action types",
+      "verification": "go test ./go/internal/tui/... -run TestTaskDetailFiles -v"
+    }
+  ],
+  "constraints": ["INV-007: TUI MUST support keyboard-only navigation"],
+  "estimate_hours": 2
+}

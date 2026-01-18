@@ -42,7 +42,7 @@ After completion, artifacts are archived to `archive/{project}/` for post-hoc an
 ## MANDATORY: Phase Order
 
 ```
-Scope → Clarify (Ralph Loop) → Synthesis → Architecture Sketch → Decisions/ADRs → Gate → Spec Review → Export
+Scope → Clarification Loop (Discovery) → Synthesis → Architecture Sketch → Decisions/ADRs → Gate → Spec Review → Export
 ```
 
 **NEVER skip or reorder these phases.**

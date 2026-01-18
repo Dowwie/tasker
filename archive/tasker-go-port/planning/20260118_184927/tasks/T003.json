@@ -1,0 +1,66 @@
+{
+  "id": "T003",
+  "name": "Phase management and state recovery",
+  "phase": 2,
+  "context": {
+    "domain": "State Management",
+    "capability": "Phase Management",
+    "spec_ref": {
+      "quote": "If state file is corrupted, attempt auto-recovery before failing",
+      "location": "Workflow 1, Failures section"
+    },
+    "steel_thread": true
+  },
+  "behaviors": ["B4", "B13", "B14", "B15"],
+  "files": [
+    {
+      "path": "go/internal/state/phase.go",
+      "action": "create",
+      "purpose": "GetStatus, AdvancePhase, ValidateArtifact operations"
+    },
+    {
+      "path": "go/internal/state/recovery.go",
+      "action": "create",
+      "purpose": "Auto-recovery from corrupted state without losing valid data"
+    },
+    {
+      "path": "go/internal/state/phase_test.go",
+      "action": "create",
+      "purpose": "Unit tests for phase management"
+    },
+    {
+      "path": "go/internal/state/recovery_test.go",
+      "action": "create",
+      "purpose": "Unit tests for state recovery"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T001", "T002"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "GetStatus returns current phase and task status summary",
+      "verification": "go test ./go/internal/state/... -run TestGetStatus -v"
+    },
+    {
+      "criterion": "AdvancePhase moves to next phase when all current phase tasks complete",
+      "verification": "go test ./go/internal/state/... -run TestAdvancePhase -v"
+    },
+    {
+      "criterion": "ValidateArtifact validates artifact files against JSON schema",
+      "verification": "go test ./go/internal/state/... -run TestValidateArtifact -v"
+    },
+    {
+      "criterion": "RecoverState reconstructs valid state from corrupted file without data loss",
+      "verification": "go test ./go/internal/state/... -run TestRecoverState -v"
+    }
+  ],
+  "constraints": ["INV-010: Auto-recovery from corrupted state MUST NOT lose valid data"],
+  "estimate_hours": 4,
+  "state_machine": {
+    "transitions_covered": ["TR11", "TR12"],
+    "guards_enforced": ["I6"],
+    "states_reached": ["S10"]
+  }
+}

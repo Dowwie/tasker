@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "spec_checksum": "from-specify-workflow",
+  "analyzed_at": "2026-01-18T18:28:00+00:00",
+  "status": "resolved",
+  "summary": {
+    "total": 0,
+    "by_severity": {
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "blocking": false
+  },
+  "weaknesses": [],
+  "notes": "Spec came from /specify workflow - already reviewed and accepted by user. Capability map was extracted during specification phase."
+}

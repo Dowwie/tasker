@@ -1,0 +1,82 @@
+{
+  "id": "T002",
+  "name": "Task lifecycle operations",
+  "phase": 1,
+  "context": {
+    "domain": "State Management",
+    "capability": "Task Lifecycle",
+    "spec_ref": {
+      "quote": "task start|complete|fail|retry|skip <task_id> - Task lifecycle management",
+      "location": "Workflow 1: State Management Flow"
+    },
+    "steel_thread": true
+  },
+  "behaviors": ["B5", "B6", "B7", "B8", "B9", "B10", "B11", "B12"],
+  "files": [
+    {
+      "path": "go/internal/state/task.go",
+      "action": "create",
+      "purpose": "Task lifecycle: InitDecomposition, LoadTasks, GetReadyTasks, StartTask, CompleteTask, FailTask, RetryTask, SkipTask"
+    },
+    {
+      "path": "go/internal/state/task_test.go",
+      "action": "create",
+      "purpose": "Unit tests for task lifecycle operations"
+    },
+    {
+      "path": "go/internal/command/root.go",
+      "action": "create",
+      "purpose": "Cobra root command definition"
+    },
+    {
+      "path": "go/internal/command/state/state.go",
+      "action": "create",
+      "purpose": "State subcommands (init, status, task start/complete/fail/retry/skip)"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T001"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "InitDecomposition creates new state.json with default structure",
+      "verification": "go test ./go/internal/state/... -run TestInitDecomposition -v"
+    },
+    {
+      "criterion": "LoadTasks loads task files from tasks/ directory into state",
+      "verification": "go test ./go/internal/state/... -run TestLoadTasks -v"
+    },
+    {
+      "criterion": "GetReadyTasks returns only tasks with all dependencies satisfied",
+      "verification": "go test ./go/internal/state/... -run TestGetReadyTasks -v"
+    },
+    {
+      "criterion": "StartTask marks task as running with timestamp",
+      "verification": "go test ./go/internal/state/... -run TestStartTask -v"
+    },
+    {
+      "criterion": "CompleteTask marks task as complete with file tracking",
+      "verification": "go test ./go/internal/state/... -run TestCompleteTask -v"
+    },
+    {
+      "criterion": "FailTask marks task as failed with classification",
+      "verification": "go test ./go/internal/state/... -run TestFailTask -v"
+    },
+    {
+      "criterion": "RetryTask resets failed task to pending state",
+      "verification": "go test ./go/internal/state/... -run TestRetryTask -v"
+    },
+    {
+      "criterion": "SkipTask marks task as skipped without blocking dependents",
+      "verification": "go test ./go/internal/state/... -run TestSkipTask -v"
+    }
+  ],
+  "constraints": ["INV-002: Exit codes MUST match Python script behavior for all commands"],
+  "estimate_hours": 5,
+  "state_machine": {
+    "transitions_covered": ["TR2", "TR3", "TR4", "TR5", "TR6", "TR7", "TR8"],
+    "guards_enforced": ["I1", "I3"],
+    "states_reached": ["S3", "S4", "S5", "S6", "S7", "S8"]
+  }
+}

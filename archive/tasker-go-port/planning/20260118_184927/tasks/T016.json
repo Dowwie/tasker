@@ -1,0 +1,64 @@
+{
+  "id": "T016",
+  "name": "Bundle generation and operations",
+  "phase": 2,
+  "context": {
+    "domain": "Bundle Management",
+    "capability": "Bundle Operations",
+    "spec_ref": {
+      "quote": "bundle.py - Generate task execution bundles",
+      "location": "bundle.py docstring"
+    },
+    "steel_thread": false
+  },
+  "behaviors": ["B49", "B50", "B51", "B52", "B53", "B54"],
+  "files": [
+    {
+      "path": "go/internal/bundle/bundle.go",
+      "action": "create",
+      "purpose": "GenerateBundle, GenerateReadyBundles, ValidateBundle, ValidateIntegrity, ListBundles, CleanBundles"
+    },
+    {
+      "path": "go/internal/bundle/bundle_test.go",
+      "action": "create",
+      "purpose": "Unit tests for bundle operations"
+    },
+    {
+      "path": "go/internal/command/bundle/bundle.go",
+      "action": "create",
+      "purpose": "Bundle subcommands (generate, list, clean, validate)"
+    }
+  ],
+  "dependencies": {
+    "tasks": ["T002", "T006"],
+    "external": []
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "GenerateBundle creates bundle JSON for a single task with context",
+      "verification": "go test ./go/internal/bundle/... -run TestGenerateBundle -v"
+    },
+    {
+      "criterion": "GenerateReadyBundles creates bundles for all ready tasks",
+      "verification": "go test ./go/internal/bundle/... -run TestGenerateReadyBundles -v"
+    },
+    {
+      "criterion": "ValidateBundle validates bundle against JSON schema",
+      "verification": "go test ./go/internal/bundle/... -run TestValidateBundle -v"
+    },
+    {
+      "criterion": "ValidateIntegrity checks bundle references exist in state",
+      "verification": "go test ./go/internal/bundle/... -run TestValidateIntegrity -v"
+    },
+    {
+      "criterion": "ListBundles shows existing bundles with status",
+      "verification": "go test ./go/internal/bundle/... -run TestListBundles -v"
+    },
+    {
+      "criterion": "CleanBundles removes all bundle files from directory",
+      "verification": "go test ./go/internal/bundle/... -run TestCleanBundles -v"
+    }
+  ],
+  "constraints": ["INV-001: JSON file formats MUST remain byte-compatible with Python version"],
+  "estimate_hours": 4
+}

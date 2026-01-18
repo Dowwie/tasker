@@ -52,10 +52,117 @@ Usage:
 
 import json
 import hashlib
+import os
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NoReturn
+
+
+# =============================================================================
+# SHIM LAYER - Forward to Go binary if available
+# =============================================================================
+
+# Commands supported by the Go binary
+GO_SUPPORTED_COMMANDS = {
+    "init", "status", "start-task", "complete-task", "fail-task",
+    "retry-task", "skip-task", "ready-tasks"
+}
+
+
+def _find_go_binary() -> str | None:
+    """Find the tasker Go binary."""
+    if env_binary := os.environ.get("TASKER_BINARY"):
+        if Path(env_binary).exists():
+            return env_binary
+
+    script_dir = Path(__file__).resolve().parent
+    possible_paths = [
+        script_dir.parent / "go" / "bin" / "tasker",
+        script_dir.parent / "bin" / "tasker",
+    ]
+    for p in possible_paths:
+        if p.exists():
+            return str(p)
+
+    import shutil
+    if path := shutil.which("tasker"):
+        return path
+
+    return None
+
+
+def _translate_args_to_go(args: list[str]) -> list[str]:
+    """Translate Python script args to Go subcommand format."""
+    if not args:
+        return ["state"]
+
+    cmd = args[0]
+    rest = args[1:]
+
+    translations = {
+        "start-task": ["state", "task", "start"],
+        "complete-task": ["state", "task", "complete"],
+        "fail-task": ["state", "task", "fail"],
+        "retry-task": ["state", "task", "retry"],
+        "skip-task": ["state", "task", "skip"],
+        "ready-tasks": ["state", "ready"],
+        "init": ["state", "init"],
+        "status": ["state", "status"],
+    }
+
+    if cmd in translations:
+        go_args = translations[cmd].copy()
+        translated_rest = []
+        i = 0
+        while i < len(rest):
+            arg = rest[i]
+            if arg == "--no-retry":
+                translated_rest.append("--retryable=false")
+            else:
+                translated_rest.append(arg)
+            i += 1
+        go_args.extend(translated_rest)
+        return go_args
+
+    return ["state"] + args
+
+
+def _try_shim_to_go() -> bool:
+    """Try to forward to Go binary. Returns True if forwarded, False if fallback needed."""
+    if os.environ.get("USE_PYTHON_IMPL") == "1":
+        return False
+
+    if len(sys.argv) < 2:
+        return False
+
+    cmd = sys.argv[1]
+    if cmd not in GO_SUPPORTED_COMMANDS:
+        return False
+
+    binary = _find_go_binary()
+    if not binary:
+        return False
+
+    go_args = _translate_args_to_go(sys.argv[1:])
+
+    try:
+        result = subprocess.run(
+            [binary] + go_args,
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+        sys.exit(result.returncode)
+    except Exception:
+        return False
+
+
+# =============================================================================
+# PYTHON IMPLEMENTATION
+# =============================================================================
 
 # Paths relative to script location
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -1611,10 +1718,13 @@ def print_status(state: dict) -> None:
 
 
 def main():
+    # Try to forward supported commands to Go binary
+    _try_shim_to_go()
+
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
-    
+
     cmd = sys.argv[1]
     
     if cmd == "init":
