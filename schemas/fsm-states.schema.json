@@ -1,12 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "FSMStates",
-  "description": "State definitions for a single state machine. Business states derived from workflows.",
+  "description": "State definitions for a single state machine. Business states derived from workflows. CANONICAL: JSON is the source of truth; Mermaid diagrams are derived.",
   "type": "object",
   "required": ["version", "machine_id", "states", "initial_state", "terminal_states"],
   "definitions": {
     "spec_ref": {
-      "description": "Reference to source spec content for traceability",
+      "description": "Reference to source spec content for traceability (MANDATORY for provenance)",
       "type": "object",
       "required": ["quote"],
       "properties": {
@@ -51,7 +51,7 @@
       "description": "All states in this machine (minimum: initial + one terminal)",
       "items": {
         "type": "object",
-        "required": ["id", "name", "type"],
+        "required": ["id", "name", "type", "spec_ref"],
         "properties": {
           "id": {
             "type": "string",
@@ -64,16 +64,20 @@
             "description": "Human-readable business state name"
           },
           "type": {
-            "enum": ["initial", "normal", "success", "failure"],
-            "description": "State classification for validation"
+            "enum": ["initial", "intermediate", "success", "failure", "normal"],
+            "description": "State classification: initial (entry point), intermediate (processing), success/failure (terminal), normal (legacy)"
           },
-          "description": {
+          "meaning": {
             "type": "string",
-            "description": "What this state represents in business terms"
+            "description": "Business meaning of this state - what does it signify in the domain?"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Additional context, rationale, or compilation decisions"
           },
           "spec_ref": {
             "$ref": "#/definitions/spec_ref",
-            "description": "Source spec content that defined this state"
+            "description": "REQUIRED: Source spec content that defined this state (prevents FSM hallucination)"
           },
           "invariants": {
             "type": "array",

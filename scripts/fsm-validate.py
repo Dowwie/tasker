@@ -260,6 +260,349 @@ def validate_coverage(fsm_index_path: Path, capability_map_path: Path) -> Valida
     return result
 
 
+def validate_task_coverage(
+    fsm_index_path: Path,
+    tasks_dir: Path,
+    steel_thread_threshold: float = 1.0,
+    non_steel_thread_threshold: float = 0.9
+) -> ValidationResult:
+    """
+    Validate that FSM transitions are covered by tasks (HARD PLANNING GATE).
+
+    - Steel thread transitions: 100% coverage required (default)
+    - Non-steel thread transitions: 90% coverage required (configurable)
+
+    Returns coverage report with pass/fail status.
+    """
+    result = ValidationResult()
+
+    index = load_json(fsm_index_path)
+    if not index:
+        result.add_issue("TASK_COVERAGE", f"Cannot load FSM index from {fsm_index_path}")
+        return result
+
+    task_files = list(tasks_dir.glob("T*.json"))
+    if not task_files:
+        result.add_issue("TASK_COVERAGE", f"No task files found in {tasks_dir}")
+        return result
+
+    tasks_by_transition: dict[str, list[str]] = {}
+    for task_file in task_files:
+        task = load_json(task_file)
+        if not task:
+            continue
+        task_id = task.get("id", task_file.stem)
+        state_machine = task.get("state_machine", {})
+        for tr_id in state_machine.get("transitions_covered", []):
+            if tr_id not in tasks_by_transition:
+                tasks_by_transition[tr_id] = []
+            tasks_by_transition[tr_id].append(task_id)
+
+    fsm_dir = fsm_index_path.parent
+    primary_machine = index.get("primary_machine")
+
+    steel_thread_transitions: list[str] = []
+    non_steel_thread_transitions: list[str] = []
+
+    for machine in index.get("machines", []):
+        files = machine.get("files", {})
+        transitions_path = fsm_dir / files.get("transitions", "")
+        transitions = load_json(transitions_path)
+        if not transitions:
+            continue
+
+        is_steel_thread = machine["id"] == primary_machine or machine.get("level") == "steel_thread"
+
+        for trans in transitions.get("transitions", []):
+            tr_id = trans["id"]
+            if is_steel_thread:
+                steel_thread_transitions.append(tr_id)
+            else:
+                non_steel_thread_transitions.append(tr_id)
+
+    steel_thread_covered = [t for t in steel_thread_transitions if t in tasks_by_transition]
+    steel_thread_uncovered = [t for t in steel_thread_transitions if t not in tasks_by_transition]
+    non_steel_covered = [t for t in non_steel_thread_transitions if t in tasks_by_transition]
+    non_steel_uncovered = [t for t in non_steel_thread_transitions if t not in tasks_by_transition]
+
+    steel_coverage = len(steel_thread_covered) / len(steel_thread_transitions) if steel_thread_transitions else 1.0
+    non_steel_coverage = len(non_steel_covered) / len(non_steel_thread_transitions) if non_steel_thread_transitions else 1.0
+
+    if steel_coverage < steel_thread_threshold:
+        result.add_issue(
+            "TASK_COVERAGE",
+            f"Steel thread coverage {steel_coverage:.1%} below required {steel_thread_threshold:.0%}",
+            {
+                "required": steel_thread_threshold,
+                "actual": steel_coverage,
+                "uncovered": steel_thread_uncovered
+            }
+        )
+
+    if non_steel_coverage < non_steel_thread_threshold:
+        result.add_issue(
+            "TASK_COVERAGE",
+            f"Non-steel-thread coverage {non_steel_coverage:.1%} below required {non_steel_thread_threshold:.0%}",
+            {
+                "required": non_steel_thread_threshold,
+                "actual": non_steel_coverage,
+                "uncovered": non_steel_uncovered
+            }
+        )
+
+    return result
+
+
+def generate_coverage_report(
+    fsm_index_path: Path,
+    tasks_dir: Path,
+    output_path: Path | None = None,
+    phase: str = "plan"
+) -> dict:
+    """
+    Generate FSM coverage report for /plan or /execute phase.
+
+    Output: fsm-coverage.plan.json or fsm-coverage.execute.json
+    """
+    index = load_json(fsm_index_path)
+    if not index:
+        return {"error": f"Cannot load FSM index from {fsm_index_path}"}
+
+    task_files = list(tasks_dir.glob("T*.json"))
+
+    tasks_by_transition: dict[str, list[str]] = {}
+    tasks_by_guard: dict[str, list[str]] = {}
+
+    for task_file in task_files:
+        task = load_json(task_file)
+        if not task:
+            continue
+        task_id = task.get("id", task_file.stem)
+        state_machine = task.get("state_machine", {})
+
+        for tr_id in state_machine.get("transitions_covered", []):
+            if tr_id not in tasks_by_transition:
+                tasks_by_transition[tr_id] = []
+            tasks_by_transition[tr_id].append(task_id)
+
+        for inv_id in state_machine.get("guards_enforced", []):
+            if inv_id not in tasks_by_guard:
+                tasks_by_guard[inv_id] = []
+            tasks_by_guard[inv_id].append(task_id)
+
+    fsm_dir = fsm_index_path.parent
+    machines_report = []
+
+    for machine in index.get("machines", []):
+        files = machine.get("files", {})
+        transitions_path = fsm_dir / files.get("transitions", "")
+        transitions_data = load_json(transitions_path)
+
+        transitions_report = []
+        if transitions_data:
+            for trans in transitions_data.get("transitions", []):
+                tr_id = trans["id"]
+                covering_tasks = tasks_by_transition.get(tr_id, [])
+                transitions_report.append({
+                    "id": tr_id,
+                    "trigger": trans.get("trigger"),
+                    "covered": len(covering_tasks) > 0,
+                    "covering_tasks": covering_tasks
+                })
+
+        covered_count = sum(1 for t in transitions_report if t["covered"])
+        total_count = len(transitions_report)
+
+        machines_report.append({
+            "machine_id": machine["id"],
+            "name": machine.get("name"),
+            "level": machine.get("level"),
+            "transitions": {
+                "total": total_count,
+                "covered": covered_count,
+                "coverage_pct": (covered_count / total_count * 100) if total_count else 100,
+                "details": transitions_report
+            }
+        })
+
+    invariants = index.get("invariants", [])
+    invariants_report = []
+    for inv in invariants:
+        inv_id = inv["id"]
+        enforcing_tasks = tasks_by_guard.get(inv_id, [])
+        invariants_report.append({
+            "id": inv_id,
+            "rule": inv.get("rule"),
+            "enforced": len(enforcing_tasks) > 0,
+            "enforcing_tasks": enforcing_tasks
+        })
+
+    report = {
+        "version": "1.0",
+        "phase": phase,
+        "spec_slug": index.get("spec_slug"),
+        "machines": machines_report,
+        "invariants": {
+            "total": len(invariants_report),
+            "enforced": sum(1 for i in invariants_report if i["enforced"]),
+            "details": invariants_report
+        },
+        "summary": {
+            "total_transitions": sum(m["transitions"]["total"] for m in machines_report),
+            "covered_transitions": sum(m["transitions"]["covered"] for m in machines_report),
+            "total_invariants": len(invariants_report),
+            "enforced_invariants": sum(1 for i in invariants_report if i["enforced"])
+        }
+    }
+
+    if output_path:
+        with open(output_path, "w") as f:
+            json.dump(report, f, indent=2)
+
+    return report
+
+
+def generate_execute_coverage_report(
+    fsm_index_path: Path,
+    bundles_dir: Path,
+    output_path: Path | None = None
+) -> dict:
+    """
+    Generate FSM coverage report for /execute phase.
+
+    Includes evidence from verification results in bundle result files.
+    Output: fsm-coverage.execute.json
+    """
+    index = load_json(fsm_index_path)
+    if not index:
+        return {"error": f"Cannot load FSM index from {fsm_index_path}"}
+
+    result_files = list(bundles_dir.glob("T*-result.json"))
+
+    transitions_evidence: dict[str, list[dict]] = {}
+    guards_evidence: dict[str, list[dict]] = {}
+
+    for result_file in result_files:
+        result = load_json(result_file)
+        if not result:
+            continue
+
+        task_id = result.get("task_id")
+        verification = result.get("verification", {})
+        fsm_adherence = verification.get("fsm_adherence", {})
+
+        for tr_info in fsm_adherence.get("transitions_verified", []):
+            if isinstance(tr_info, dict):
+                tr_id = tr_info.get("id")
+                if tr_id:
+                    if tr_id not in transitions_evidence:
+                        transitions_evidence[tr_id] = []
+                    transitions_evidence[tr_id].append({
+                        "task_id": task_id,
+                        "evidence_type": tr_info.get("evidence_type"),
+                        "evidence": tr_info.get("evidence")
+                    })
+            elif isinstance(tr_info, str):
+                if tr_info not in transitions_evidence:
+                    transitions_evidence[tr_info] = []
+                transitions_evidence[tr_info].append({
+                    "task_id": task_id,
+                    "evidence_type": "unknown",
+                    "evidence": "Verified (legacy format)"
+                })
+
+        for guard_info in fsm_adherence.get("guards_verified", []):
+            if isinstance(guard_info, dict):
+                guard_id = guard_info.get("id")
+                if guard_id:
+                    if guard_id not in guards_evidence:
+                        guards_evidence[guard_id] = []
+                    guards_evidence[guard_id].append({
+                        "task_id": task_id,
+                        "evidence_type": guard_info.get("evidence_type"),
+                        "evidence": guard_info.get("evidence")
+                    })
+            elif isinstance(guard_info, str):
+                if guard_info not in guards_evidence:
+                    guards_evidence[guard_info] = []
+                guards_evidence[guard_info].append({
+                    "task_id": task_id,
+                    "evidence_type": "unknown",
+                    "evidence": "Verified (legacy format)"
+                })
+
+    fsm_dir = fsm_index_path.parent
+    machines_report = []
+
+    for machine in index.get("machines", []):
+        files = machine.get("files", {})
+        transitions_path = fsm_dir / files.get("transitions", "")
+        transitions_data = load_json(transitions_path)
+
+        transitions_report = []
+        if transitions_data:
+            for trans in transitions_data.get("transitions", []):
+                tr_id = trans["id"]
+                evidence_list = transitions_evidence.get(tr_id, [])
+                transitions_report.append({
+                    "id": tr_id,
+                    "trigger": trans.get("trigger"),
+                    "verified": len(evidence_list) > 0,
+                    "evidence": evidence_list
+                })
+
+        verified_count = sum(1 for t in transitions_report if t["verified"])
+        total_count = len(transitions_report)
+
+        machines_report.append({
+            "machine_id": machine["id"],
+            "name": machine.get("name"),
+            "level": machine.get("level"),
+            "transitions": {
+                "total": total_count,
+                "verified": verified_count,
+                "verification_pct": (verified_count / total_count * 100) if total_count else 100,
+                "details": transitions_report
+            }
+        })
+
+    invariants = index.get("invariants", [])
+    invariants_report = []
+    for inv in invariants:
+        inv_id = inv["id"]
+        evidence_list = guards_evidence.get(inv_id, [])
+        invariants_report.append({
+            "id": inv_id,
+            "rule": inv.get("rule"),
+            "verified": len(evidence_list) > 0,
+            "evidence": evidence_list
+        })
+
+    report = {
+        "version": "1.0",
+        "phase": "execute",
+        "spec_slug": index.get("spec_slug"),
+        "machines": machines_report,
+        "invariants": {
+            "total": len(invariants_report),
+            "verified": sum(1 for i in invariants_report if i["verified"]),
+            "details": invariants_report
+        },
+        "summary": {
+            "total_transitions": sum(m["transitions"]["total"] for m in machines_report),
+            "verified_transitions": sum(m["transitions"]["verified"] for m in machines_report),
+            "total_invariants": len(invariants_report),
+            "verified_invariants": sum(1 for i in invariants_report if i["verified"])
+        }
+    }
+
+    if output_path:
+        with open(output_path, "w") as f:
+            json.dump(report, f, indent=2)
+
+    return report
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     fsm_dir = Path(args.fsm_dir)
     if not fsm_dir.is_dir():
@@ -310,6 +653,59 @@ def cmd_coverage(args: argparse.Namespace) -> int:
     return 0 if result.passed else 1
 
 
+def cmd_task_coverage(args: argparse.Namespace) -> int:
+    """Validate task coverage of FSM transitions (hard planning gate)."""
+    fsm_index = Path(args.fsm_index)
+    tasks_dir = Path(args.tasks_dir)
+
+    steel_threshold = args.steel_threshold if hasattr(args, 'steel_threshold') else 1.0
+    other_threshold = args.other_threshold if hasattr(args, 'other_threshold') else 0.9
+
+    result = validate_task_coverage(
+        fsm_index,
+        tasks_dir,
+        steel_thread_threshold=steel_threshold,
+        non_steel_thread_threshold=other_threshold
+    )
+
+    output = result.to_dict()
+    print(json.dumps(output, indent=2))
+
+    return 0 if result.passed else 1
+
+
+def cmd_coverage_report(args: argparse.Namespace) -> int:
+    """Generate FSM coverage report for plan phase."""
+    fsm_index = Path(args.fsm_index)
+    tasks_dir = Path(args.tasks_dir)
+    output_path = Path(args.output) if args.output else None
+
+    report = generate_coverage_report(fsm_index, tasks_dir, output_path, phase="plan")
+
+    if not output_path:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"Coverage report written to: {output_path}")
+
+    return 0
+
+
+def cmd_execute_coverage_report(args: argparse.Namespace) -> int:
+    """Generate FSM coverage report for execute phase with verification evidence."""
+    fsm_index = Path(args.fsm_index)
+    bundles_dir = Path(args.bundles_dir)
+    output_path = Path(args.output) if args.output else None
+
+    report = generate_execute_coverage_report(fsm_index, bundles_dir, output_path)
+
+    if not output_path:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"Execute coverage report written to: {output_path}")
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Validate FSM artifacts against I1-I5 invariants"
@@ -338,6 +734,50 @@ def main():
     coverage_parser.add_argument("fsm_index", help="Path to FSM index.json")
     coverage_parser.add_argument("capability_map", help="Path to capability-map.json")
     coverage_parser.set_defaults(func=cmd_coverage)
+
+    task_coverage_parser = subparsers.add_parser(
+        "task-coverage",
+        help="Validate task coverage of FSM transitions (HARD PLANNING GATE)"
+    )
+    task_coverage_parser.add_argument("fsm_index", help="Path to FSM index.json")
+    task_coverage_parser.add_argument("tasks_dir", help="Path to tasks directory")
+    task_coverage_parser.add_argument(
+        "--steel-threshold",
+        type=float,
+        default=1.0,
+        help="Coverage threshold for steel-thread transitions (default: 1.0 = 100%%)"
+    )
+    task_coverage_parser.add_argument(
+        "--other-threshold",
+        type=float,
+        default=0.9,
+        help="Coverage threshold for non-steel-thread transitions (default: 0.9 = 90%%)"
+    )
+    task_coverage_parser.set_defaults(func=cmd_task_coverage)
+
+    report_parser = subparsers.add_parser(
+        "coverage-report",
+        help="Generate FSM coverage report for plan phase"
+    )
+    report_parser.add_argument("fsm_index", help="Path to FSM index.json")
+    report_parser.add_argument("tasks_dir", help="Path to tasks directory")
+    report_parser.add_argument(
+        "--output", "-o",
+        help="Output file path (default: stdout)"
+    )
+    report_parser.set_defaults(func=cmd_coverage_report)
+
+    exec_report_parser = subparsers.add_parser(
+        "execute-coverage-report",
+        help="Generate FSM coverage report for execute phase with verification evidence"
+    )
+    exec_report_parser.add_argument("fsm_index", help="Path to FSM index.json")
+    exec_report_parser.add_argument("bundles_dir", help="Path to bundles directory")
+    exec_report_parser.add_argument(
+        "--output", "-o",
+        help="Output file path (default: stdout)"
+    )
+    exec_report_parser.set_defaults(func=cmd_execute_coverage_report)
 
     args = parser.parse_args()
     return args.func(args)

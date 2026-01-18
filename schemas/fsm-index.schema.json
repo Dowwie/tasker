@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "FSMIndex",
-  "description": "Index of all state machines for a specification. Primary artifact for FSM discovery.",
+  "description": "Index of all state machines for a specification. Primary artifact for FSM discovery. CANONICAL: JSON files are the source of truth; Mermaid diagrams are derived and must never be manually edited.",
   "type": "object",
   "required": ["version", "spec_slug", "spec_checksum", "machines", "primary_machine"],
   "properties": {

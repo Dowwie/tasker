@@ -231,13 +231,33 @@ If `state_machine` is present, evaluate these dimensions:
    grep -r "test.*tr[0-9]" tests/ && echo "Transition tests exist"
    ```
 
+#### Allowed Evidence Types (MANDATORY)
+
+For each transition and critical invariant, ONE of these evidence types MUST exist:
+
+| Evidence Type | Description | Example |
+|---------------|-------------|---------|
+| **Test evidence** (preferred) | Unit/integration/e2e test that exercises the transition | `pytest tests/auth/test_login.py::test_tr1_valid_credentials` |
+| **Runtime assertion** | Explicit guard check in code with corresponding test | `if not validate_email(email): raise ValidationError(...)` with test |
+| **Manual verification** | ONLY allowed if explicitly permitted in spec/task AND documented with steps | Documented checklist with expected results |
+
+**Evidence Requirements:**
+- **Steel-thread transitions**: Test evidence REQUIRED (runtime assertion alone not sufficient)
+- **Non-steel-thread transitions**: Test OR runtime assertion evidence acceptable
+- **Critical invariants**: Test evidence REQUIRED
+
+**Insufficient Evidence (will FAIL):**
+- "Code exists" without tests
+- "I verified manually" without documented steps
+- Relying on implicit behavior without explicit checks
+
 #### FSM Verification Rubric
 
 | Score | Meaning |
 |-------|---------|
-| PASS | All transitions implemented, guards enforced, states reachable |
-| PARTIAL | Some transitions or guards missing, but core flow works |
-| FAIL | Critical transitions missing or guards not enforced |
+| PASS | All transitions have valid evidence, guards enforced with tests, states reachable |
+| PARTIAL | Some transitions have only runtime assertions (not test evidence), but core flow works |
+| FAIL | Critical transitions missing evidence or guards not enforced |
 
 **Example FSM evaluation:**
 
@@ -263,9 +283,16 @@ If `state_machine` is present, evaluate these dimensions:
 {
   "task_id": "T003",
   "fsm_adherence": {
-    "transitions_verified": ["TR1", "TR2", "TR3"],
+    "transitions_verified": [
+      {"id": "TR1", "evidence_type": "test", "evidence": "test_tr1_login_triggers_validation passes"},
+      {"id": "TR2", "evidence_type": "test", "evidence": "test_tr2_validation_success passes"},
+      {"id": "TR3", "evidence_type": "runtime_assertion", "evidence": "Guard check at validator.py:45"}
+    ],
     "transitions_missing": [],
-    "guards_verified": ["I1", "I2"],
+    "guards_verified": [
+      {"id": "I1", "evidence_type": "test", "evidence": "test_guard_invalid_email_blocked passes"},
+      {"id": "I2", "evidence_type": "test", "evidence": "test_guard_weak_password_rejected passes"}
+    ],
     "guards_missing": [],
     "states_verified": ["S2", "S3", "S4"],
     "invalid_prevention": "PARTIAL",

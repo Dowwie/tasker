@@ -720,15 +720,35 @@ Example:
 }
 ```
 
-### Coverage validation
-After creating tasks, verify FSM coverage:
+### Coverage validation (HARD GATE)
+
+After creating tasks, verify FSM transition coverage. **This is a HARD PLANNING GATE**:
+
 ```bash
-python3 scripts/fsm-validate.py coverage \
+# Generate coverage report (for observability)
+python3 scripts/fsm-validate.py coverage-report \
     {PLANNING_DIR}/artifacts/fsm/index.json \
-    {PLANNING_DIR}/artifacts/capability-map.json
+    {PLANNING_DIR}/tasks \
+    --output {PLANNING_DIR}/artifacts/fsm-coverage.plan.json
+
+# Validate coverage meets thresholds (HARD GATE)
+python3 scripts/fsm-validate.py task-coverage \
+    {PLANNING_DIR}/artifacts/fsm/index.json \
+    {PLANNING_DIR}/tasks \
+    --steel-threshold 1.0 \
+    --other-threshold 0.9
 ```
 
-Every transition should have at least one task covering it.
+**Coverage Requirements:**
+- **Steel-thread transitions: 100% coverage required** - Every transition in the primary machine MUST have at least one task covering it
+- **Non-steel-thread transitions: 90% coverage required** (configurable)
+
+**If coverage gate fails:**
+1. Planning BLOCKS until coverage is achieved
+2. Task-author must add tasks to cover missing transitions
+3. Each transition should have:
+   - Implementation task(s) that implement the transition
+   - Verification in acceptance criteria that the transition works
 
 IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 1. You MUST use the Write tool to save each file. Simply outputting JSON to the conversation is NOT sufficient.
@@ -736,6 +756,13 @@ IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 3. After Write, you MUST verify: `ls {PLANNING_DIR}/tasks/*.json | wc -l` - if count is 0, Write again!
 4. You MUST run load-tasks and confirm it succeeds.
 5. For existing projects, tasks must include verification that new code integrates cleanly.
+6. **If FSM artifacts exist**: You MUST run FSM coverage validation:
+   ```bash
+   python3 scripts/fsm-validate.py task-coverage \
+       {PLANNING_DIR}/artifacts/fsm/index.json \
+       {PLANNING_DIR}/tasks
+   ```
+   This is a **HARD GATE** - planning cannot proceed if steel-thread coverage < 100%.
 
 **Note:** The orchestrator has already created all required directories. Do NOT create directories yourself. If you encounter "directory does not exist" errors, report this to the orchestrator.
 
@@ -1426,6 +1453,26 @@ If compliance check finds critical gaps:
    # Report is saved to:
    $PLANNING_DIR/reports/compliance-report.json
    ```
+
+## FSM Coverage Report (After Execution Completes)
+
+After all tasks complete, generate the execution coverage report:
+
+```bash
+# Generate execute phase coverage report with verification evidence
+python3 scripts/fsm-validate.py execute-coverage-report \
+    {PLANNING_DIR}/artifacts/fsm/index.json \
+    {PLANNING_DIR}/bundles \
+    --output {PLANNING_DIR}/artifacts/fsm-coverage.execute.json
+```
+
+This report includes:
+- Which transitions were verified during execution
+- Evidence type for each transition (test, runtime_assertion, manual)
+- Which invariants were enforced
+- Pointers to tasks and acceptance criteria that provide evidence
+
+Use this report for post-execution compliance auditing.
 
 ## Archive Execution Artifacts (After Completion)
 

@@ -13,7 +13,7 @@ Make **state machine behavior models** a first-class, mandatory artifact produce
 
 ## Done means
 - `/specify` always produces a **Behavior Model** (state machine) for the Steel Thread workflow, plus any additional models triggered by complexity rules.
-- The Behavior Model is exported to the target project under a stable directory (`docs/fsm/…` by default).
+- The Behavior Model is exported to the target project under a stable directory (`docs/state-machines/…` by default).
 - `/plan` reads the exported model(s) and enforces **coverage + completeness checks** before producing a plan.
 - `/execute` uses the model(s) to run **adherence checks** during implementation (at minimum: test/verification checklist coverage per transition + invariant/guard enforcement).
 - If the model is ambiguous or incomplete, `/specify` loops with `AskUserQuestion` until the model is handoff-ready.
@@ -33,13 +33,13 @@ Make **state machine behavior models** a first-class, mandatory artifact produce
    - One workflow-level state machine for the **Steel Thread**
 4. `/specify` runs Behavior Model validation checks (see “Invariants” + “Gate”).
 5. If validation fails due to ambiguity, `/specify` uses `AskUserQuestion` to close gaps.
-6. On export, `/specify` writes Behavior Model artifacts into the target project under `docs/fsm/<slug>/`.
+6. On export, `/specify` writes Behavior Model artifacts into the target project under `docs/state-machines/<slug>/`.
 
 ### W2: `/plan` consumes Behavior Models (mandatory QA gate)
 1. `/plan` loads:
    - Spec Packet (`docs/specs/<slug>.md`)
    - Capability map (`docs/specs/<slug>.capabilities.json`)
-   - Behavior Model index (`docs/fsm/<slug>/index.json`)
+   - Behavior Model index (`docs/state-machines/<slug>/index.json`)
 2. `/plan` validates:
    - Every workflow capability maps to ≥1 transition (or a declared non-transition capability type)
    - Every transition maps to one or more planned tasks (or an explicit “covered by existing system” note)
@@ -97,12 +97,12 @@ Words like “fast”, “soon”, “handles errors”, “robust”, “etc.�
 - Discovery trace (optional, for traceability IDs)
 
 ### Exported Behavior Model Artifacts (to target project)
-Default directory: `docs/fsm/`
+Default directory: `docs/state-machines/`
 
 For each spec slug:
 ```
 
-docs/fsm/<slug>/
+docs/state-machines/<slug>/
 ├─ index.json
 ├─ steel-thread.mmd
 ├─ steel-thread.transitions.json
@@ -116,7 +116,7 @@ docs/fsm/<slug>/
 
 ```
 
-#### Why `docs/fsm/`?
+#### Why `docs/state-machines/`?
 - short, recognizable, and stable
 - “FSM” is widely understood in engineering orgs
 - directory name can be configurable (see Open Questions)
@@ -129,7 +129,7 @@ docs/fsm/<slug>/
 - version metadata (schema version)
 
 ### Consumers
-- `/plan` MUST read `docs/fsm/<slug>/index.json` and machine JSON
+- `/plan` MUST read `docs/state-machines/<slug>/index.json` and machine JSON
 - `/execute` MUST read the same artifacts for adherence checks
 
 ---
@@ -160,9 +160,13 @@ Rationale: planning/execution tooling needs structured data; Mermaid is for huma
   - cross-boundary workflow present
   - multiple user journeys defined as “in scope”
 
-### D3: Export location defaults to `docs/fsm/`
+### D3: Export location defaults to `docs/state-machines/`
 - Stable, short, repo-friendly
 - Configurable if needed (Open Question)
+
+### D4: FSM Canonical Contract (CRITICAL)
+**FSM JSON is canonical; Mermaid is generated. `/plan` and `/execute` must fail if required transitions and invariants lack coverage evidence.**
+- This prevents FSM drift into "pretty diagrams" that don't constrain execution
 
 #### ADR triggers
 Create an ADR if we decide:
@@ -176,7 +180,7 @@ Otherwise keep decisions in this spec.
 ## Open Questions
 
 ### Blocking
-1. Should the directory be exactly `docs/fsm/`, or configurable via Tasker setting (with `docs/fsm/` default)?
+1. Should the directory be exactly `docs/state-machines/`, or configurable via Tasker setting (with `docs/state-machines/` default)?
 2. What is the minimum acceptable “verification evidence” in `/execute`?
    - tests only?
    - tests OR runtime assertions OR documented manual verification?

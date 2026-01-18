@@ -957,6 +957,7 @@ make clean      # Remove artifacts
 6. **Steel Thread First** - Validate architecture early
 7. **LLM-as-Judge** - Structured verification with calibration tracking
 8. **Schema Validation** - All artifacts validated against JSON schemas
+9. **FSM Canonical Contract** - FSM JSON is canonical; Mermaid is generated. `/plan` and `/execute` must fail if required transitions and invariants lack coverage evidence.
 
 ---
 

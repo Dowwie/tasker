@@ -26,7 +26,7 @@ An **agent-driven interactive workflow** that transforms ideas into actionable s
 ### Required Outputs (in TARGET project)
 - **Spec Packet** — `{TARGET}/docs/specs/<slug>.md` (human-readable)
 - **Capability Map** — `{TARGET}/docs/specs/<slug>.capabilities.json` (machine-readable, for `/plan`)
-- **Behavior Model (FSM)** — `{TARGET}/docs/fsm/<slug>/` (state machine artifacts, for `/plan` and `/execute`)
+- **Behavior Model (FSM)** — `{TARGET}/docs/state-machines/<slug>/` (state machine artifacts, for `/plan` and `/execute`)
 - **ADR files** — `{TARGET}/docs/adrs/ADR-####-<slug>.md` (0..N)
 
 ### Working Files (in tasker)
@@ -311,6 +311,15 @@ The FSM serves two purposes:
 1. **QA during implementation** - Shapes acceptance criteria, enables transition/guard coverage verification
 2. **Documentation** - Human-readable diagrams for ongoing system understanding
 
+### CRITICAL INVARIANT: Canonical Truth
+
+> **FSM JSON is canonical; Mermaid is generated. `/plan` and `/execute` must fail if required transitions and invariants lack coverage evidence.**
+
+- **Canonical artifacts**: `*.states.json`, `*.transitions.json`, `index.json`
+- **Derived artifacts**: `*.mmd` (Mermaid diagrams) - generated ONLY from canonical JSON
+- **NEVER** manually edit `.mmd` files - regenerate from JSON using `fsm-mermaid.py`
+- If Mermaid is ever edited manually, the system loses machine trust
+
 ### Compilation Steps
 
 1. **Identify Steel Thread Flow**: The primary end-to-end workflow
@@ -339,12 +348,24 @@ The FSM MUST satisfy these invariants:
 | I4 | Guard-Invariant linkage | Every guard links to an invariant ID |
 | I5 | No silent ambiguity | Vague terms resolved or flagged as Open Questions |
 
-### Complexity Triggers
+### Complexity Triggers (Splitting Rules)
 
-Create additional machines when:
+Create additional machines based on **structural heuristics**, not just state count:
+
+**State Count Triggers:**
 - Steel Thread exceeds 12 states → split into domain-level sub-machines
-- Workflow crosses domain boundaries → domain-level machine
-- Entity has lifecycle invariants → entity-level machine
+- Any machine exceeds 20 states → mandatory split
+
+**Structural Triggers (split even with fewer states):**
+- **Divergent user journeys**: Two or more distinct journeys that share only an initial prefix, then branch into unrelated flows → separate machines for each journey
+- **Unrelated failure clusters**: Multiple failure states that handle different categories of errors (e.g., validation errors vs. system errors vs. business rule violations) → group related failures into their own machines
+- **Mixed abstraction levels**: Machine combines business lifecycle states (e.g., Order: Created → Paid → Shipped) with UI microstates (e.g., Modal: Open → Editing → Validating) → separate business lifecycle from UI state machines
+- **Cross-boundary workflows**: Workflow that spans multiple bounded contexts or domains → domain-level machine for each context
+
+**Hierarchy Guidelines:**
+- `steel_thread` level: Primary end-to-end flow
+- `domain` level: Sub-flows within a bounded context
+- `entity` level: Lifecycle states for a specific entity
 
 ### Ambiguity Resolution
 
@@ -365,7 +386,7 @@ If the compiler detects ambiguous workflow language, use AskUserQuestion:
 
 ### FSM Output Structure
 
-The FSM artifacts will be exported to `{TARGET}/docs/fsm/<slug>/`:
+The FSM artifacts will be exported to `{TARGET}/docs/state-machines/<slug>/`:
 - `index.json` - Machine list, hierarchy, primary machine
 - `steel-thread.states.json` - State definitions (S1, S2, ...)
 - `steel-thread.transitions.json` - Transition definitions (TR1, TR2, ...)
@@ -378,9 +399,21 @@ The FSM artifacts will be exported to `{TARGET}/docs/fsm/<slug>/`:
 - States: `S1`, `S2`, `S3`...
 - Transitions: `TR1`, `TR2`, `TR3`...
 
-### Traceability
+### Traceability (Spec Provenance - MANDATORY)
 
-Every state and transition MUST have a `spec_ref` pointing to the specific workflow step, variant, or failure that defined it.
+Every state and transition MUST have a `spec_ref` pointing to the specific workflow step, variant, or failure that defined it. This prevents "FSM hallucination" where states/transitions are invented without spec basis.
+
+**Required for each state:**
+- `spec_ref.quote` - Verbatim text from the spec that defines this state
+- `spec_ref.location` - Section reference (e.g., "Workflow 1, Step 3")
+
+**Required for each transition:**
+- `spec_ref.quote` - Verbatim text from the spec that defines this transition
+- `spec_ref.location` - Section reference (e.g., "Workflow 1, Variant 2")
+
+**If no spec text exists for an element:**
+1. The element should NOT be created (likely FSM hallucination)
+2. Or, use AskUserQuestion to get clarification and document the decision
 
 ---
 
@@ -779,7 +812,7 @@ Only after spec review passes. All permanent artifacts go to the **TARGET projec
 ### 1. Ensure Target Directory Structure
 
 ```bash
-mkdir -p {TARGET}/docs/specs {TARGET}/docs/adrs {TARGET}/docs/fsm/<slug>
+mkdir -p {TARGET}/docs/specs {TARGET}/docs/adrs {TARGET}/docs/state-machines/<slug>
 ```
 
 ### 2. Spec Packet
@@ -850,25 +883,25 @@ python3 scripts/state.py validate capability_map --file {TARGET}/docs/specs/<slu
 
 ### 4. Behavior Model (FSM)
 
-Export FSM artifacts to `{TARGET}/docs/fsm/<slug>/`:
+Export FSM artifacts to `{TARGET}/docs/state-machines/<slug>/`:
 
 ```bash
 # Compile FSM from capability map and spec
 python3 scripts/fsm-compiler.py from-capability-map \
     {TARGET}/docs/specs/<slug>.capabilities.json \
     {TARGET}/docs/specs/<slug>.md \
-    --output-dir {TARGET}/docs/fsm/<slug>
+    --output-dir {TARGET}/docs/state-machines/<slug>
 
 # Generate Mermaid diagrams and notes
-python3 scripts/fsm-mermaid.py generate-all {TARGET}/docs/fsm/<slug>
+python3 scripts/fsm-mermaid.py generate-all {TARGET}/docs/state-machines/<slug>
 
 # Validate FSM artifacts (I1-I5 invariants)
-python3 scripts/fsm-validate.py validate {TARGET}/docs/fsm/<slug>
+python3 scripts/fsm-validate.py validate {TARGET}/docs/state-machines/<slug>
 ```
 
 Validate against schemas:
 ```bash
-python3 scripts/validate.py fsm --dir {TARGET}/docs/fsm/<slug>
+python3 scripts/validate.py fsm --dir {TARGET}/docs/state-machines/<slug>
 ```
 
 ### 6. ADR Files (0..N)
@@ -953,7 +986,7 @@ Because `/specify` already produced a capability map and FSM, `/plan` can **skip
 `/plan` starts directly at **Physical Mapping** (mapping capabilities to files).
 
 Additionally, `/plan` will:
-- Load FSM artifacts from `{TARGET}/docs/fsm/<slug>/`
+- Load FSM artifacts from `{TARGET}/docs/state-machines/<slug>/`
 - Validate transition coverage (every FSM transition → ≥1 task)
 - Generate FSM-aware acceptance criteria for tasks
 

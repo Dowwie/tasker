@@ -1,12 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "FSMTransitions",
-  "description": "Transition definitions for a single state machine. Links behaviors to state changes.",
+  "description": "Transition definitions for a single state machine. Links behaviors to state changes. CANONICAL: JSON is the source of truth; Mermaid diagrams are derived.",
   "type": "object",
   "required": ["version", "machine_id", "transitions"],
   "definitions": {
     "spec_ref": {
-      "description": "Reference to source spec content for traceability",
+      "description": "Reference to source spec content for traceability (MANDATORY for provenance)",
       "type": "object",
       "required": ["quote"],
       "properties": {
@@ -23,8 +23,8 @@
     },
     "guard": {
       "type": "object",
-      "required": ["condition"],
-      "description": "Condition that must hold for transition to fire (linked to invariant per I4)",
+      "required": ["condition", "invariant_id"],
+      "description": "Condition that must hold for transition to fire. MUST link to invariant per I4.",
       "properties": {
         "condition": {
           "type": "string",
@@ -33,12 +33,55 @@
         },
         "invariant_id": {
           "type": "string",
-          "description": "Link to spec invariant that this guard enforces"
+          "minLength": 1,
+          "description": "REQUIRED: Link to spec invariant that this guard enforces"
         },
         "negated": {
           "type": "boolean",
           "default": false,
           "description": "True if this guard checks for condition NOT holding"
+        }
+      }
+    },
+    "failure_outcome": {
+      "type": "object",
+      "required": ["condition"],
+      "description": "What happens when a transition fails or guard is not satisfied",
+      "properties": {
+        "condition": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Condition that triggers this failure outcome"
+        },
+        "to_state": {
+          "type": "string",
+          "pattern": "^S[0-9]+$",
+          "description": "Target failure state (mutually exclusive with terminal)"
+        },
+        "terminal": {
+          "type": "boolean",
+          "description": "True if this failure terminates the flow (mutually exclusive with to_state)"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional context about this failure case"
+        }
+      }
+    },
+    "trigger": {
+      "type": "object",
+      "description": "Structured trigger definition (preferred over string)",
+      "required": ["type", "name"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["event", "action", "timeout", "condition"],
+          "description": "Category of trigger"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Trigger identifier"
         }
       }
     }
@@ -58,7 +101,7 @@
       "description": "All transitions in this machine",
       "items": {
         "type": "object",
-        "required": ["id", "from_state", "to_state", "trigger"],
+        "required": ["id", "from_state", "to_state", "trigger", "spec_ref"],
         "properties": {
           "id": {
             "type": "string",
@@ -76,8 +119,17 @@
             "description": "Target state ID"
           },
           "trigger": {
-            "type": "string",
-            "minLength": 1,
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "Simple trigger string (legacy support)"
+              },
+              {
+                "$ref": "#/definitions/trigger",
+                "description": "Structured trigger (preferred)"
+              }
+            ],
             "description": "Event or action that triggers this transition"
           },
           "guards": {
@@ -85,7 +137,14 @@
             "items": {
               "$ref": "#/definitions/guard"
             },
-            "description": "Conditions that must hold for transition (all must be satisfied)"
+            "description": "Conditions that must hold for transition (all must be satisfied). Guards MUST link to invariants."
+          },
+          "failure_outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/failure_outcome"
+            },
+            "description": "What happens when guards fail or transition cannot complete. Empty array explicitly means 'not applicable'."
           },
           "behaviors": {
             "type": "array",
@@ -104,7 +163,7 @@
           },
           "spec_ref": {
             "$ref": "#/definitions/spec_ref",
-            "description": "Source spec content that defined this transition"
+            "description": "REQUIRED: Source spec content that defined this transition (prevents FSM hallucination)"
           },
           "is_failure_path": {
             "type": "boolean",
