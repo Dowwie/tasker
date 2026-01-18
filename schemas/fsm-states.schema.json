@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FSMStates",
+  "description": "State definitions for a single state machine. Business states derived from workflows.",
+  "type": "object",
+  "required": ["version", "machine_id", "states", "initial_state", "terminal_states"],
+  "definitions": {
+    "spec_ref": {
+      "description": "Reference to source spec content for traceability",
+      "type": "object",
+      "required": ["quote"],
+      "properties": {
+        "quote": {
+          "type": "string",
+          "minLength": 5,
+          "description": "Verbatim text from workflow/invariant"
+        },
+        "location": {
+          "type": "string",
+          "description": "Section reference (e.g., 'Workflow 1, Step 3')"
+        }
+      }
+    }
+  },
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "machine_id": {
+      "type": "string",
+      "pattern": "^M[0-9]+$",
+      "description": "Reference to parent machine in index"
+    },
+    "initial_state": {
+      "type": "string",
+      "pattern": "^S[0-9]+$",
+      "description": "ID of the initial state (entry point)"
+    },
+    "terminal_states": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^S[0-9]+$"
+      },
+      "description": "IDs of terminal states (success and/or failure outcomes per I3)"
+    },
+    "states": {
+      "type": "array",
+      "minItems": 2,
+      "description": "All states in this machine (minimum: initial + one terminal)",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^S[0-9]+$",
+            "description": "State ID (S1, S2, etc.)"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable business state name"
+          },
+          "type": {
+            "enum": ["initial", "normal", "success", "failure"],
+            "description": "State classification for validation"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this state represents in business terms"
+          },
+          "spec_ref": {
+            "$ref": "#/definitions/spec_ref",
+            "description": "Source spec content that defined this state"
+          },
+          "invariants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Invariant IDs that must hold while in this state"
+          },
+          "behaviors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^B[0-9]+$"
+            },
+            "description": "Behavior IDs active/relevant in this state"
+          },
+          "entry_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Actions to perform on entering this state"
+          },
+          "exit_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Actions to perform on leaving this state"
+          }
+        }
+      }
+    }
+  }
+}

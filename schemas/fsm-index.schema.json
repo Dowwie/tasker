@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FSMIndex",
+  "description": "Index of all state machines for a specification. Primary artifact for FSM discovery.",
+  "type": "object",
+  "required": ["version", "spec_slug", "spec_checksum", "machines", "primary_machine"],
+  "properties": {
+    "version": {
+      "const": "1.0",
+      "description": "Schema version for forward compatibility"
+    },
+    "spec_slug": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Slug identifier matching the spec file name (e.g., 'user-auth')"
+    },
+    "spec_checksum": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{16}$",
+      "description": "SHA256 checksum (first 16 chars) of source spec for change detection"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when FSM was compiled"
+    },
+    "primary_machine": {
+      "type": "string",
+      "pattern": "^M[0-9]+$",
+      "description": "ID of the Steel Thread machine (always required per I1)"
+    },
+    "machines": {
+      "type": "array",
+      "minItems": 1,
+      "description": "List of all state machines in this spec",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "level", "files"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^M[0-9]+$",
+            "description": "Machine ID (M1, M2, etc.)"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable machine name"
+          },
+          "level": {
+            "enum": ["steel_thread", "domain", "entity"],
+            "description": "FSM hierarchy level"
+          },
+          "description": {
+            "type": "string",
+            "description": "Purpose and scope of this machine"
+          },
+          "parent_machine": {
+            "type": "string",
+            "pattern": "^M[0-9]+$",
+            "description": "Parent machine ID if this is a nested/child machine"
+          },
+          "trigger_reason": {
+            "type": "string",
+            "enum": ["mandatory", "complexity", "cross_boundary", "entity_lifecycle"],
+            "description": "Why this machine was created"
+          },
+          "files": {
+            "type": "object",
+            "required": ["states", "transitions", "diagram"],
+            "description": "Relative paths to machine artifact files",
+            "properties": {
+              "states": {
+                "type": "string",
+                "description": "Path to states JSON file"
+              },
+              "transitions": {
+                "type": "string",
+                "description": "Path to transitions JSON file"
+              },
+              "diagram": {
+                "type": "string",
+                "description": "Path to Mermaid diagram file"
+              },
+              "notes": {
+                "type": "string",
+                "description": "Path to notes markdown file (optional)"
+              }
+            }
+          }
+        }
+      }
+    },
+    "hierarchy": {
+      "type": "object",
+      "description": "Tree structure: parent_machine_id -> [child_machine_ids]",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^M[0-9]+$"
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "description": "Spec invariants referenced by guards across all machines",
+      "items": {
+        "type": "object",
+        "required": ["id", "rule"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Invariant identifier (e.g., 'I1', 'INV-001')"
+          },
+          "rule": {
+            "type": "string",
+            "description": "The invariant rule text"
+          },
+          "spec_ref": {
+            "type": "object",
+            "properties": {
+              "quote": { "type": "string" },
+              "location": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

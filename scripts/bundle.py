@@ -125,6 +125,66 @@ def find_dependencies_files(state: dict, task_deps: list[str]) -> list[str]:
     return files
 
 
+def load_fsm_transitions() -> dict | None:
+    """Load FSM transitions from artifacts/fsm/ directory."""
+    fsm_dir = ARTIFACTS_DIR / "fsm"
+    index_path = fsm_dir / "index.json"
+    if not index_path.exists():
+        return None
+
+    index = load_json(index_path)
+    if not index:
+        return None
+
+    transitions_by_id: dict[str, dict] = {}
+
+    for machine in index.get("machines", []):
+        files = machine.get("files", {})
+        trans_file = files.get("transitions")
+        if trans_file:
+            trans_path = fsm_dir / trans_file
+            trans_data = load_json(trans_path)
+            if trans_data:
+                for trans in trans_data.get("transitions", []):
+                    transitions_by_id[trans["id"]] = trans
+
+    return transitions_by_id
+
+
+def expand_fsm_context(task_fsm: dict) -> dict | None:
+    """Expand FSM context from task definition with full transition details."""
+    if not task_fsm:
+        return None
+
+    transitions_covered = task_fsm.get("transitions_covered", [])
+    if not transitions_covered:
+        return task_fsm
+
+    all_transitions = load_fsm_transitions()
+    if not all_transitions:
+        return task_fsm
+
+    transitions_detail = []
+    for trans_id in transitions_covered:
+        trans = all_transitions.get(trans_id)
+        if trans:
+            transitions_detail.append({
+                "id": trans["id"],
+                "from_state": trans.get("from_state"),
+                "to_state": trans.get("to_state"),
+                "trigger": trans.get("trigger"),
+                "guards": trans.get("guards", []),
+                "is_failure_path": trans.get("is_failure_path", False),
+            })
+
+    return {
+        "transitions_covered": transitions_covered,
+        "guards_enforced": task_fsm.get("guards_enforced", []),
+        "states_reached": task_fsm.get("states_reached", []),
+        "transitions_detail": transitions_detail,
+    }
+
+
 def parse_constraints(raw_constraints: str | None) -> dict:
     """Parse constraints.md into structured format."""
     if not raw_constraints:
@@ -251,7 +311,7 @@ def generate_bundle(task_id: str) -> tuple[bool, str, dict | None]:
         dependency_checksums[dep_file] = file_checksum(full_path)
 
     bundle = {
-        "version": "1.2",  # Version bump for behaviors rename
+        "version": "1.3",  # Version bump for FSM support
         "bundle_created_at": now_iso(),
         "task_id": task_id,
         "name": task.get("name", ""),
@@ -272,6 +332,13 @@ def generate_bundle(task_id: str) -> tuple[bool, str, dict | None]:
             "dependency_files": dependency_checksums,
         },
     }
+
+    # Add FSM context if task has state_machine field
+    task_fsm = task.get("state_machine")
+    if task_fsm:
+        fsm_context = expand_fsm_context(task_fsm)
+        if fsm_context:
+            bundle["state_machine"] = fsm_context
 
     BUNDLES_DIR.mkdir(parents=True, exist_ok=True)
     bundle_path = BUNDLES_DIR / f"{task_id}-bundle.json"

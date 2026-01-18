@@ -149,6 +149,53 @@
           "description": "Similar files to reference for patterns"
         }
       }
+    },
+
+    "state_machine": {
+      "type": "object",
+      "description": "FSM context for behavior model verification (expanded from task definition)",
+      "properties": {
+        "transitions_covered": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^TR[0-9]+$" },
+          "description": "Transition IDs this task implements"
+        },
+        "guards_enforced": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Invariant IDs this task enforces as guards"
+        },
+        "states_reached": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^S[0-9]+$" },
+          "description": "State IDs this task enables reaching"
+        },
+        "transitions_detail": {
+          "type": "array",
+          "description": "Expanded transition details for verification",
+          "items": {
+            "type": "object",
+            "required": ["id", "from_state", "to_state", "trigger"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^TR[0-9]+$" },
+              "from_state": { "type": "string", "pattern": "^S[0-9]+$" },
+              "to_state": { "type": "string", "pattern": "^S[0-9]+$" },
+              "trigger": { "type": "string" },
+              "guards": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "condition": { "type": "string" },
+                    "invariant_id": { "type": "string" }
+                  }
+                }
+              },
+              "is_failure_path": { "type": "boolean", "default": false }
+            }
+          }
+        }
+      }
     }
   }
 }

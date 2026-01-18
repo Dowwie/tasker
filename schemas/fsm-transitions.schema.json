@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FSMTransitions",
+  "description": "Transition definitions for a single state machine. Links behaviors to state changes.",
+  "type": "object",
+  "required": ["version", "machine_id", "transitions"],
+  "definitions": {
+    "spec_ref": {
+      "description": "Reference to source spec content for traceability",
+      "type": "object",
+      "required": ["quote"],
+      "properties": {
+        "quote": {
+          "type": "string",
+          "minLength": 5,
+          "description": "Verbatim text from workflow variant/failure"
+        },
+        "location": {
+          "type": "string",
+          "description": "Section reference (e.g., 'Workflow 1, Variant 2')"
+        }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "required": ["condition"],
+      "description": "Condition that must hold for transition to fire (linked to invariant per I4)",
+      "properties": {
+        "condition": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Human-readable guard condition"
+        },
+        "invariant_id": {
+          "type": "string",
+          "description": "Link to spec invariant that this guard enforces"
+        },
+        "negated": {
+          "type": "boolean",
+          "default": false,
+          "description": "True if this guard checks for condition NOT holding"
+        }
+      }
+    }
+  },
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "machine_id": {
+      "type": "string",
+      "pattern": "^M[0-9]+$",
+      "description": "Reference to parent machine in index"
+    },
+    "transitions": {
+      "type": "array",
+      "minItems": 1,
+      "description": "All transitions in this machine",
+      "items": {
+        "type": "object",
+        "required": ["id", "from_state", "to_state", "trigger"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^TR[0-9]+$",
+            "description": "Transition ID (TR1, TR2, etc.)"
+          },
+          "from_state": {
+            "type": "string",
+            "pattern": "^S[0-9]+$",
+            "description": "Source state ID"
+          },
+          "to_state": {
+            "type": "string",
+            "pattern": "^S[0-9]+$",
+            "description": "Target state ID"
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Event or action that triggers this transition"
+          },
+          "guards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/guard"
+            },
+            "description": "Conditions that must hold for transition (all must be satisfied)"
+          },
+          "behaviors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^B[0-9]+$"
+            },
+            "description": "Behavior IDs executed during this transition"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Actions to perform during transition"
+          },
+          "spec_ref": {
+            "$ref": "#/definitions/spec_ref",
+            "description": "Source spec content that defined this transition"
+          },
+          "is_failure_path": {
+            "type": "boolean",
+            "default": false,
+            "description": "True if this handles an error/failure condition"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Evaluation priority when multiple transitions from same state (lower = first)"
+          }
+        }
+      }
+    },
+    "guards_index": {
+      "type": "object",
+      "description": "Invariant ID -> transition IDs that use it as guard (for coverage validation)",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^TR[0-9]+$"
+        }
+      }
+    }
+  }
+}

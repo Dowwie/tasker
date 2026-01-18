@@ -26,6 +26,7 @@ An **agent-driven interactive workflow** that transforms ideas into actionable s
 ### Required Outputs (in TARGET project)
 - **Spec Packet** — `{TARGET}/docs/specs/<slug>.md` (human-readable)
 - **Capability Map** — `{TARGET}/docs/specs/<slug>.capabilities.json` (machine-readable, for `/plan`)
+- **Behavior Model (FSM)** — `{TARGET}/docs/fsm/<slug>/` (state machine artifacts, for `/plan` and `/execute`)
 - **ADR files** — `{TARGET}/docs/adrs/ADR-####-<slug>.md` (0..N)
 
 ### Working Files (in tasker)
@@ -300,6 +301,89 @@ Classified by blocking status:
 
 ---
 
+## Part A.5: Behavior Model Compilation (FSM)
+
+After synthesizing Workflows, Invariants, and Interfaces, compile the Behavior Model (state machine).
+
+### Purpose
+
+The FSM serves two purposes:
+1. **QA during implementation** - Shapes acceptance criteria, enables transition/guard coverage verification
+2. **Documentation** - Human-readable diagrams for ongoing system understanding
+
+### Compilation Steps
+
+1. **Identify Steel Thread Flow**: The primary end-to-end workflow
+2. **Derive States**: Convert workflow steps to business states
+   - Initial state from workflow trigger
+   - Normal states from step postconditions
+   - Success terminal from workflow completion
+   - Failure terminals from failure clauses
+3. **Derive Transitions**: Convert step sequences, variants, and failures
+   - Happy path: step N → step N+1
+   - Variants: conditional branches with guards
+   - Failures: error transitions to failure states
+4. **Link Guards to Invariants**: Map spec invariants to transition guards
+5. **Validate Completeness**: Run I1-I5 checks (see below)
+6. **Resolve Ambiguity**: Use AskUserQuestion for any gaps
+
+### Completeness Invariants
+
+The FSM MUST satisfy these invariants:
+
+| ID | Invariant | Check |
+|----|-----------|-------|
+| I1 | Steel Thread FSM mandatory | At least one machine for primary workflow |
+| I2 | Behavior-first | No architecture dependencies required |
+| I3 | Completeness | Initial state, terminals, no dead ends |
+| I4 | Guard-Invariant linkage | Every guard links to an invariant ID |
+| I5 | No silent ambiguity | Vague terms resolved or flagged as Open Questions |
+
+### Complexity Triggers
+
+Create additional machines when:
+- Steel Thread exceeds 12 states → split into domain-level sub-machines
+- Workflow crosses domain boundaries → domain-level machine
+- Entity has lifecycle invariants → entity-level machine
+
+### Ambiguity Resolution
+
+If the compiler detects ambiguous workflow language, use AskUserQuestion:
+
+```json
+{
+  "question": "The workflow step '{step}' has ambiguous outcome. What business state results?",
+  "header": "FSM State",
+  "options": [
+    {"label": "Define state", "description": "I'll provide the state name"},
+    {"label": "Same as previous", "description": "Remains in current state"},
+    {"label": "Terminal success", "description": "Workflow completes successfully"},
+    {"label": "Terminal failure", "description": "Workflow fails with error"}
+  ]
+}
+```
+
+### FSM Output Structure
+
+The FSM artifacts will be exported to `{TARGET}/docs/fsm/<slug>/`:
+- `index.json` - Machine list, hierarchy, primary machine
+- `steel-thread.states.json` - State definitions (S1, S2, ...)
+- `steel-thread.transitions.json` - Transition definitions (TR1, TR2, ...)
+- `steel-thread.mmd` - Mermaid stateDiagram-v2 for visualization
+- `steel-thread.notes.md` - Ambiguity resolutions and rationale
+
+### ID Conventions (FSM-specific)
+
+- Machines: `M1`, `M2`, `M3`...
+- States: `S1`, `S2`, `S3`...
+- Transitions: `TR1`, `TR2`, `TR3`...
+
+### Traceability
+
+Every state and transition MUST have a `spec_ref` pointing to the specific workflow step, variant, or failure that defined it.
+
+---
+
 ## Part B: Capability Extraction
 
 Extract capabilities from the synthesized workflows using **I.P.S.O. decomposition**.
@@ -542,6 +626,7 @@ Write ADRs to `{TARGET}/docs/adrs/ADR-####-<slug>.md`:
 | Decisions present | Decisions section exists |
 | Workflows defined | At least one workflow with variants/failures |
 | Invariants stated | At least one invariant |
+| FSM compiled | Steel Thread FSM compiled with I1-I5 passing |
 
 ## Gate Failure
 
@@ -694,7 +779,7 @@ Only after spec review passes. All permanent artifacts go to the **TARGET projec
 ### 1. Ensure Target Directory Structure
 
 ```bash
-mkdir -p {TARGET}/docs/specs {TARGET}/docs/adrs
+mkdir -p {TARGET}/docs/specs {TARGET}/docs/adrs {TARGET}/docs/fsm/<slug>
 ```
 
 ### 2. Spec Packet
@@ -751,6 +836,7 @@ Summary of key decisions made during specification:
 
 ## Artifacts
 - **Capability Map:** [<slug>.capabilities.json](./<slug>.capabilities.json)
+- **Behavior Model (FSM):** [fsm/<slug>/](../fsm/<slug>/) - State machine diagrams
 - **Discovery Log:** Archived in tasker project
 ```
 
@@ -762,10 +848,33 @@ Validate against schema:
 python3 scripts/state.py validate capability_map --file {TARGET}/docs/specs/<slug>.capabilities.json
 ```
 
-### 4. ADR Files (0..N)
+### 4. Behavior Model (FSM)
+
+Export FSM artifacts to `{TARGET}/docs/fsm/<slug>/`:
+
+```bash
+# Compile FSM from capability map and spec
+python3 scripts/fsm-compiler.py from-capability-map \
+    {TARGET}/docs/specs/<slug>.capabilities.json \
+    {TARGET}/docs/specs/<slug>.md \
+    --output-dir {TARGET}/docs/fsm/<slug>
+
+# Generate Mermaid diagrams and notes
+python3 scripts/fsm-mermaid.py generate-all {TARGET}/docs/fsm/<slug>
+
+# Validate FSM artifacts (I1-I5 invariants)
+python3 scripts/fsm-validate.py validate {TARGET}/docs/fsm/<slug>
+```
+
+Validate against schemas:
+```bash
+python3 scripts/validate.py fsm --dir {TARGET}/docs/fsm/<slug>
+```
+
+### 6. ADR Files (0..N)
 Write each ADR to `{TARGET}/docs/adrs/ADR-####-<slug>.md`.
 
-### 5. Spec Review Results
+### 7. Spec Review Results
 Verify `.claude/spec-review.json` is saved.
 
 ## Completion Message
@@ -776,6 +885,9 @@ Verify `.claude/spec-review.json` is saved.
 **Exported to {TARGET}/docs/:**
 - `specs/<slug>.md` (human-readable spec)
 - `specs/<slug>.capabilities.json` (machine-readable for /plan)
+- `fsm/<slug>/` (behavior model - state machine)
+  - `index.json`, `steel-thread.states.json`, `steel-thread.transitions.json`
+  - `steel-thread.mmd` (Mermaid diagram)
 - `adrs/ADR-####-*.md` (N ADRs)
 
 **Working files (in tasker):**
@@ -788,13 +900,19 @@ Verify `.claude/spec-review.json` is saved.
 - Behaviors: N
 - Steel Thread: F1 (name)
 
+**Behavior Model (FSM) Summary:**
+- Machines: N (primary: M1 Steel Thread)
+- States: N
+- Transitions: N
+- Guards linked to invariants: N
+
 **Spec Review Summary:**
 - Total weaknesses detected: X
 - Critical resolved: Y
 - Warnings noted: Z
 
 **Next steps:**
-- Review exported spec and capability map
+- Review exported spec, capability map, and FSM diagrams
 - Run `/plan {TARGET}/docs/specs/<slug>.md` to begin task decomposition
 ```
 
@@ -828,8 +946,23 @@ After `/specify` completes, user runs:
 /plan {TARGET}/docs/specs/<slug>.md
 ```
 
-Because `/specify` already produced a capability map, `/plan` can **skip** these phases:
+Because `/specify` already produced a capability map and FSM, `/plan` can **skip** these phases:
 - Spec Review (already done)
 - Capability Extraction (already done)
 
 `/plan` starts directly at **Physical Mapping** (mapping capabilities to files).
+
+Additionally, `/plan` will:
+- Load FSM artifacts from `{TARGET}/docs/fsm/<slug>/`
+- Validate transition coverage (every FSM transition → ≥1 task)
+- Generate FSM-aware acceptance criteria for tasks
+
+# Integration with /execute
+
+When executing tasks, `/execute` will:
+- Load FSM artifacts for adherence verification
+- For each task with FSM context:
+  - Verify transitions are implemented
+  - Verify guards are enforced
+  - Verify states are reachable
+- Include FSM verification results in task completion

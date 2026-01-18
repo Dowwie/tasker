@@ -184,13 +184,104 @@ If `task_type == "refactor"`, evaluate these additional dimensions:
 }
 ```
 
-### 5. Determine Verdict
+### 5. FSM Adherence Verification (Required when state_machine present)
+
+**This section applies only when the bundle has a `state_machine` field.**
+
+Check if FSM context exists:
+```bash
+cat {PLANNING_DIR}/bundles/T001-bundle.json | jq '.state_machine'
+```
+
+If `state_machine` is present, evaluate these dimensions:
+
+#### FSM-Specific Checks
+
+| Dimension | Check |
+|-----------|-------|
+| Transitions Implemented | Are all `transitions_covered` transitions present in code? |
+| Guards Enforced | Are all `guards_enforced` invariants checked before transitions? |
+| States Reachable | Can all `states_reached` states be reached from code paths? |
+| Invalid Prevention | Does code prevent transitions not listed in the FSM? |
+
+**Evidence to gather:**
+
+1. **Transition implementation:**
+   ```bash
+   # For each transition trigger in state_machine.transitions_detail
+   # Search for the trigger implementation
+   grep -r "trigger_name" src/ && echo "PASS: Transition trigger exists"
+   ```
+
+2. **Guard enforcement:**
+   ```bash
+   # For each guard condition in transitions_detail[].guards
+   grep -r "guard_condition" src/ && echo "PASS: Guard check exists"
+   ```
+
+3. **State representation:**
+   ```bash
+   # Search for state names/enums
+   grep -r "StateEnum\|state_name" src/ && echo "States represented"
+   ```
+
+4. **Transition tests:**
+   ```bash
+   # Search for tests covering transitions
+   grep -r "test.*tr[0-9]" tests/ && echo "Transition tests exist"
+   ```
+
+#### FSM Verification Rubric
+
+| Score | Meaning |
+|-------|---------|
+| PASS | All transitions implemented, guards enforced, states reachable |
+| PARTIAL | Some transitions or guards missing, but core flow works |
+| FAIL | Critical transitions missing or guards not enforced |
+
+**Example FSM evaluation:**
+
+```markdown
+#### FSM Adherence for T003
+
+**Transitions Covered:** TR1, TR2, TR3
+**Guards Enforced:** I1, I2
+**States Reached:** S2, S3, S4
+
+| Check | Score | Evidence |
+|-------|-------|----------|
+| Transitions Implemented | PASS | All 3 transitions have code paths |
+| Guards Enforced | PASS | `validate_email()` enforces I1, `check_auth()` enforces I2 |
+| States Reachable | PASS | All states reachable via transition chain |
+| Invalid Prevention | PARTIAL | No explicit state machine, relies on logic flow |
+
+**FSM Verdict:** PASS (with note: consider explicit state enum)
+```
+
+**Include in structured JSON output:**
+```json
+{
+  "task_id": "T003",
+  "fsm_adherence": {
+    "transitions_verified": ["TR1", "TR2", "TR3"],
+    "transitions_missing": [],
+    "guards_verified": ["I1", "I2"],
+    "guards_missing": [],
+    "states_verified": ["S2", "S3", "S4"],
+    "invalid_prevention": "PARTIAL",
+    "verdict": "PASS"
+  }
+}
+```
+
+### 6. Determine Verdict
 
 **PASS criteria:**
 - ALL functional criteria: PASS
 - Code quality: No critical issues
 - Tests (if required): Passing
 - Refactor verification (if task_type == "refactor"): PASS
+- FSM adherence (if state_machine present): PASS
 - Spec file exists: `docs/{task_id}-spec.md`
 
 **FAIL criteria:**
@@ -198,6 +289,7 @@ If `task_type == "refactor"`, evaluate these additional dimensions:
 - Critical code quality issue (no types, broken imports)
 - Required tests failing
 - Refactor verification: FAIL (directive not met or regression)
+- FSM adherence: FAIL (critical transitions missing or guards not enforced)
 - **Spec file missing** - `docs/{task_id}-spec.md` does not exist
 
 **CONDITIONAL PASS:**
@@ -329,9 +421,18 @@ At the very end of your report, include a JSON block for programmatic parsing:
     "coverage": "PASS",
     "assertions": "PASS",
     "edge_cases": "PARTIAL"
+  },
+  "fsm_adherence": {
+    "transitions_verified": ["TR1", "TR2"],
+    "transitions_missing": [],
+    "guards_verified": ["I1"],
+    "guards_missing": [],
+    "verdict": "PASS"
   }
 }
 ```
+
+**Note:** `fsm_adherence` field is only present when bundle has `state_machine` context.
 
 **Score values:** `PASS`, `PARTIAL`, or `FAIL`
 

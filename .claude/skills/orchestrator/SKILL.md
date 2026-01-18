@@ -327,6 +327,20 @@ if [ -f "$CAPABILITY_MAP" ]; then
     cp "$CAPABILITY_MAP" "$PLANNING_DIR/artifacts/capability-map.json"
     [ -f "$SPEC_REVIEW" ] && cp "$SPEC_REVIEW" "$PLANNING_DIR/artifacts/spec-review.json"
 
+    # Check for FSM artifacts from /specify workflow
+    FSM_DIR="${SPEC_DIR}/../fsm/${SPEC_SLUG}"
+    if [ -d "$FSM_DIR" ]; then
+        echo "FSM artifacts found from /specify workflow: $FSM_DIR"
+        mkdir -p "$PLANNING_DIR/artifacts/fsm"
+        cp -r "$FSM_DIR"/* "$PLANNING_DIR/artifacts/fsm/"
+
+        # Validate FSM artifacts
+        python3 scripts/fsm-validate.py validate "$PLANNING_DIR/artifacts/fsm"
+        if [ $? -ne 0 ]; then
+            echo "WARNING: FSM validation failed. Review artifacts before proceeding."
+        fi
+    fi
+
     # Skip spec_review AND logical phases - advance directly to physical
     python3 scripts/state.py set-phase physical
 fi
@@ -658,13 +672,63 @@ Key information for task definitions:
 
 1. Read {PLANNING_DIR}/artifacts/physical-map.json
 2. Read {PLANNING_DIR}/artifacts/capability-map.json (for behavior details)
-3. **For existing projects:** Include acceptance criteria that verify integration:
+3. **Check for FSM artifacts**: If {PLANNING_DIR}/artifacts/fsm/index.json exists:
+   - Read the FSM index and transitions files
+   - For each task, identify which FSM transitions it covers
+   - Add `state_machine` field to task definitions (see FSM Integration below)
+   - Generate FSM-aware acceptance criteria
+4. **For existing projects:** Include acceptance criteria that verify integration:
    - Tests pass with existing test suite
    - Linting passes (ruff, eslint, etc.)
    - New code follows established patterns
-4. **CRITICAL: Use the Write tool** to save each task file to {PLANNING_DIR}/tasks/T001.json, etc.
-5. **Verify files exist**: `ls -la {PLANNING_DIR}/tasks/`
-6. Load tasks with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
+5. **CRITICAL: Use the Write tool** to save each task file to {PLANNING_DIR}/tasks/T001.json, etc.
+6. **Verify files exist**: `ls -la {PLANNING_DIR}/tasks/`
+7. Load tasks with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
+
+## FSM Integration (if FSM artifacts exist)
+
+When FSM artifacts are present at {PLANNING_DIR}/artifacts/fsm/:
+
+### Add state_machine field to tasks
+```json
+{
+  "id": "T001",
+  "name": "Implement credential validation",
+  ...
+  "state_machine": {
+    "transitions_covered": ["TR1", "TR2"],
+    "guards_enforced": ["I1"],
+    "states_reached": ["S2", "S3"]
+  }
+}
+```
+
+### Generate FSM-aware acceptance criteria
+For each transition covered:
+- "Transition TR1 (S1→S2) fires when trigger X occurs"
+- "Guard I1 prevents invalid transition when condition Y fails"
+
+Example:
+```json
+{
+  "criterion": "Transition TR1: Unauthenticated→Validating fires on login request",
+  "verification": "pytest tests/auth/test_fsm.py::test_tr1_login_triggers_validation"
+},
+{
+  "criterion": "Guard I1: Invalid email format prevents authentication",
+  "verification": "pytest tests/auth/test_fsm.py::test_guard_invalid_email_blocked"
+}
+```
+
+### Coverage validation
+After creating tasks, verify FSM coverage:
+```bash
+python3 scripts/fsm-validate.py coverage \
+    {PLANNING_DIR}/artifacts/fsm/index.json \
+    {PLANNING_DIR}/artifacts/capability-map.json
+```
+
+Every transition should have at least one task covering it.
 
 IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 1. You MUST use the Write tool to save each file. Simply outputting JSON to the conversation is NOT sufficient.
@@ -1264,6 +1328,35 @@ The bundle (`{PLANNING_DIR}/bundles/T001-bundle.json`) includes:
 | `constraints` | Tech stack, patterns, testing |
 | `dependencies.files` | Files from prior tasks to read |
 | `context` | Domain, capability, spec reference |
+| `state_machine` | FSM context for adherence verification (if present) |
+
+### FSM Context in Bundle (when present)
+
+If the task has `state_machine` field, the bundle includes expanded FSM details:
+
+```json
+{
+  "state_machine": {
+    "transitions_covered": ["TR1", "TR2"],
+    "guards_enforced": ["I1"],
+    "states_reached": ["S2", "S3"],
+    "transitions_detail": [
+      {
+        "id": "TR1",
+        "from_state": "S1",
+        "to_state": "S2",
+        "trigger": "validate_credentials",
+        "guards": [{"condition": "email_valid", "invariant_id": "I1"}]
+      }
+    ]
+  }
+}
+```
+
+The task-executor uses this for:
+1. Understanding the state transitions being implemented
+2. Ensuring guards are properly enforced
+3. Writing tests that verify FSM behavior
 
 Generate bundles with:
 ```bash

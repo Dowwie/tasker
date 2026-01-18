@@ -160,6 +160,28 @@
       "type": "number",
       "minimum": 0.5,
       "maximum": 8
+    },
+
+    "state_machine": {
+      "type": "object",
+      "description": "FSM context for behavior model verification (optional, from /specify)",
+      "properties": {
+        "transitions_covered": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^TR[0-9]+$" },
+          "description": "Transition IDs this task implements"
+        },
+        "guards_enforced": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Invariant IDs this task enforces as guards"
+        },
+        "states_reached": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^S[0-9]+$" },
+          "description": "State IDs this task enables reaching"
+        }
+      }
     }
   }
 }
