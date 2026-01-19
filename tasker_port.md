@@ -624,8 +624,7 @@ Actions:
 | `spec-session.py` | `internal/spec/` | P2 - Important |
 | `spec-generate.py` | `internal/spec/` | P2 - Important |
 | `archive.py` | `internal/archive/` | P3 - Nice to have |
-| `status.py` | Merged into state | P0 - Core |
-| `dashboard.py` | Separate TUI (optional) | P4 - Optional |
+| `status.py` | Merged into TUI | P0 - Core |
 | `evaluate.py` | `internal/metrics/` | P3 - Nice to have |
 
 ## Verification Plan
