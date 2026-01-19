@@ -29,23 +29,23 @@ When invoked, this command will:
 - `/tasker-to-beads --batch` — Process all tasks and create manifest for batch import
 - `/tasker-to-beads --target /path/to/project` — Skip target prompt, use specified directory
 
-## Helper Script
+## CLI Commands
 
-The skill includes a Python script for mechanical transformations:
+The tasker binary includes transform commands for mechanical transformations:
 
 ```bash
 # Check status of source and target
-python3 .claude/skills/tasker-to-beads/scripts/transform.py status -t /path/to/target
+tasker transform status -t /path/to/target
 
 # Initialize beads in target with custom prefix
 # Runs: bd init <PREFIX> && bd onboard
-python3 .claude/skills/tasker-to-beads/scripts/transform.py init-target /path/to/target FATHOM
+tasker transform init-target /path/to/target FATHOM
 
 # Prepare context for all tasks
-python3 .claude/skills/tasker-to-beads/scripts/transform.py context --all
+tasker transform context --all
 
 # Create issue in target directory
-python3 .claude/skills/tasker-to-beads/scripts/transform.py create T001 project-planning/beads-export/T001-enriched.json -t /path/to/target
+tasker transform create T001 project-planning/beads-export/T001-enriched.json -t /path/to/target
 ```
 
 ## Example Session

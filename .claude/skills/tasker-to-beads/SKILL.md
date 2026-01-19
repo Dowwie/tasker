@@ -53,11 +53,11 @@ Common scenarios:
 
 ```bash
 # Check status and see if target needs initialization
-.claude/skills/tasker-to-beads/bin/transform status -t /path/to/target
+tasker transform status -t /path/to/target
 
 # Initialize beads in target directory with custom prefix
 # This runs: bd init <PREFIX> && bd onboard
-.claude/skills/tasker-to-beads/bin/transform init-target /path/to/target FATHOM
+tasker transform init-target /path/to/target FATHOM
 ```
 
 The `init-target` command runs two steps:
@@ -67,7 +67,7 @@ The `init-target` command runs two steps:
 ### Step 2: Prepare Context
 
 ```bash
-.claude/skills/tasker-to-beads/bin/transform context --all -t /path/to/target
+tasker transform context --all -t /path/to/target
 ```
 
 This extracts structural data from task files and saves context bundles to `project-planning/beads-export/`.
@@ -90,12 +90,12 @@ cat project-planning/beads-export/{TASK_ID}-context.json
 
 After enrichment, create issues in the target directory:
 ```bash
-.claude/skills/tasker-to-beads/bin/transform create {TASK_ID} project-planning/beads-export/{TASK_ID}-enriched.json -t /path/to/target
+tasker transform create {TASK_ID} project-planning/beads-export/{TASK_ID}-enriched.json -t /path/to/target
 ```
 
 Or batch create from manifest:
 ```bash
-.claude/skills/tasker-to-beads/bin/transform batch-create project-planning/beads-export/manifest.json -t /path/to/target
+tasker transform batch-create project-planning/beads-export/manifest.json -t /path/to/target
 ```
 
 ---
@@ -218,7 +218,7 @@ To transform a single task:
 
 ```bash
 # 1. Prepare context
-.claude/skills/tasker-to-beads/bin/transform context T001
+tasker transform context T001
 
 # 2. Read and understand
 cat project-planning/beads-export/T001-context.json
@@ -228,7 +228,7 @@ cat project-planning/beads-export/T001-context.json
 # Save to project-planning/beads-export/T001-enriched.json
 
 # 4. Create the issue in target directory
-.claude/skills/tasker-to-beads/bin/transform create T001 project-planning/beads-export/T001-enriched.json -t /path/to/target
+tasker transform create T001 project-planning/beads-export/T001-enriched.json -t /path/to/target
 ```
 
 ---
@@ -239,10 +239,10 @@ To transform all tasks:
 
 ```bash
 # 1. Check status and determine target
-.claude/skills/tasker-to-beads/bin/transform status -t /path/to/target
+tasker transform status -t /path/to/target
 
 # 2. Prepare all contexts
-.claude/skills/tasker-to-beads/bin/transform context --all
+tasker transform context --all
 
 # 3. For each context file, generate enriched content
 # This is the neural loop - process each T*-context.json
@@ -252,7 +252,7 @@ To transform all tasks:
 # { "issues": [ {...enriched issue 1...}, {...enriched issue 2...}, ... ] }
 
 # 5. Batch create in target directory
-.claude/skills/tasker-to-beads/bin/transform batch-create project-planning/beads-export/manifest.json -t /path/to/target
+tasker transform batch-create project-planning/beads-export/manifest.json -t /path/to/target
 ```
 
 ---

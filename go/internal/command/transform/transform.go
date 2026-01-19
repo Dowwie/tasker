@@ -1,4 +1,4 @@
-package main
+package transform
 
 import (
 	"encoding/json"
@@ -11,31 +11,25 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/dgordon/tasker/internal/command"
+	"github.com/spf13/cobra"
 )
 
 var (
-	projectRoot    string
-	planningDir    string
-	tasksDir       string
-	artifactsDir   string
-	inputsDir      string
-	beadsExportDir string
-	targetDir      string
+	targetDir string
 
-	// Pre-compiled regex patterns
-	pathSplitter    = regexp.MustCompile(`[/_.]`)
-	sectionHeader   = regexp.MustCompile(`^#{1,3}\s`)
+	pathSplitter  = regexp.MustCompile(`[/_.]`)
+	sectionHeader = regexp.MustCompile(`^#{1,3}\s`)
 
-	// Cached shared resources (loaded once)
-	cachedSpec        string
-	cachedCapMap      *CapabilityMap
-	cachedState       *State
-	sharedDataOnce    sync.Once
-	sharedDataErr     error
+	cachedSpec     string
+	cachedCapMap   *CapabilityMap
+	cachedState    *State
+	sharedDataOnce sync.Once
+	sharedDataErr  error
 
-	// Task cache for avoiding repeated file reads
-	taskCache     = make(map[string]*Task)
-	taskCacheMu   sync.RWMutex
+	taskCache   = make(map[string]*Task)
+	taskCacheMu sync.RWMutex
 )
 
 type Task struct {
@@ -177,138 +171,118 @@ type depLinkResult struct {
 	success bool
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
-	}
+var transformCmd = &cobra.Command{
+	Use:   "transform",
+	Short: "Transform tasker tasks to beads issues",
+	Long: `Commands for transforming Tasker task definitions into Beads issues.
 
-	args := os.Args[1:]
-	var err error
-	targetDir, args = parseTargetDir(args)
-
-	if err = initPaths(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	if len(args) == 0 {
-		printUsage()
-		os.Exit(1)
-	}
-
-	cmd := args[0]
-	cmdArgs := args[1:]
-
-	switch cmd {
-	case "context":
-		err = cmdContext(cmdArgs)
-	case "status":
-		err = cmdStatus()
-	case "init-target":
-		err = cmdInitTarget(cmdArgs)
-	case "create":
-		err = cmdCreate(cmdArgs)
-	case "batch-create":
-		err = cmdBatchCreate(cmdArgs)
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
-		printUsage()
-		os.Exit(1)
-	}
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+This bridges the planning phase with persistent issue tracking by:
+- Preparing task context for LLM enrichment
+- Creating beads issues from enriched descriptions
+- Batch creating issues with dependency linking`,
 }
 
-func printUsage() {
-	fmt.Println(`Tasker to Beads Transformer
+var contextCmd = &cobra.Command{
+	Use:   "context [task-id | --all]",
+	Short: "Prepare context for task enrichment",
+	Long: `Extracts structural data from task files and saves context bundles.
 
-Usage:
-    transform context <task_id> [-t TARGET_DIR]    Prepare context for single task
-    transform context --all [-t TARGET_DIR]        Prepare context for all tasks
-    transform create <task_id> <desc_file> [-t TARGET_DIR]
-                                                   Create beads issue from enriched description
-    transform batch-create <manifest_file> [-t TARGET_DIR]
-                                                   Create multiple issues from manifest
-    transform status [-t TARGET_DIR]               Show transformation status
-    transform init-target <target_dir> [PREFIX]    Initialize beads in target directory
-
-Options:
-    -t, --target-dir DIR    Target directory for beads management`)
+Use --all to prepare context for all tasks, or specify a single task ID.
+Context files are saved to project-planning/beads-export/`,
+	RunE: runContext,
 }
 
-func parseTargetDir(args []string) (string, []string) {
-	var target string
-	remaining := make([]string, 0, len(args))
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show transformation status",
+	Long:  `Displays the current status of the transformation workflow including task counts and beads initialization state.`,
+	RunE:  runStatus,
+}
 
-	for i := 0; i < len(args); i++ {
-		if args[i] == "-t" || args[i] == "--target-dir" {
-			if i+1 < len(args) {
-				target = args[i+1]
-				i++
-				continue
-			}
+var initTargetCmd = &cobra.Command{
+	Use:   "init-target <target-dir> [prefix]",
+	Short: "Initialize beads in target directory",
+	Long: `Initializes beads in the target directory for issue tracking.
+
+Runs 'bd init <PREFIX>' followed by 'bd onboard' to set up the beads system.
+Default prefix is 'TASK' if not specified.`,
+	Args: cobra.RangeArgs(1, 2),
+	RunE: runInitTarget,
+}
+
+var createCmd = &cobra.Command{
+	Use:   "create <task-id> <enriched-file>",
+	Short: "Create beads issue from enriched description",
+	Long: `Creates a single beads issue from an enriched JSON description file.
+
+The enriched file should contain: task_id, title, description, priority, labels.`,
+	Args: cobra.ExactArgs(2),
+	RunE: runCreate,
+}
+
+var batchCreateCmd = &cobra.Command{
+	Use:   "batch-create <manifest-file>",
+	Short: "Create multiple issues from manifest",
+	Long: `Creates multiple beads issues from a manifest file in parallel.
+
+Phase 1: Creates all issues concurrently
+Phase 2: Links dependencies between issues
+
+Outputs task-to-beads-mapping.json with the mapping of task IDs to beads IDs.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runBatchCreate,
+}
+
+var contextAll bool
+
+func init() {
+	transformCmd.PersistentFlags().StringVarP(&targetDir, "target-dir", "t", "", "Target directory for beads management")
+
+	contextCmd.Flags().BoolVar(&contextAll, "all", false, "Prepare context for all tasks")
+
+	transformCmd.AddCommand(contextCmd)
+	transformCmd.AddCommand(statusCmd)
+	transformCmd.AddCommand(initTargetCmd)
+	transformCmd.AddCommand(createCmd)
+	transformCmd.AddCommand(batchCreateCmd)
+
+	command.RootCmd.AddCommand(transformCmd)
+}
+
+func getPlanningDir() string {
+	return command.GetPlanningDir()
+}
+
+func getTasksDir() string {
+	return filepath.Join(getPlanningDir(), "tasks")
+}
+
+func getArtifactsDir() string {
+	return filepath.Join(getPlanningDir(), "artifacts")
+}
+
+func getInputsDir() string {
+	return filepath.Join(getPlanningDir(), "inputs")
+}
+
+func getBeadsExportDir() string {
+	return filepath.Join(getPlanningDir(), "beads-export")
+}
+
+func getTargetDir() string {
+	if targetDir != "" {
+		if abs, err := filepath.Abs(targetDir); err == nil {
+			return abs
 		}
-		remaining = append(remaining, args[i])
+		return targetDir
 	}
-
-	if target != "" {
-		if abs, err := filepath.Abs(target); err == nil {
-			target = abs
-		}
-	}
-
-	return target, remaining
-}
-
-func initPaths() error {
 	cwd, _ := os.Getwd()
-	root, err := findProjectRoot(cwd)
-	if err != nil {
-		return err
-	}
-
-	projectRoot = root
-	planningDir = filepath.Join(root, "project-planning")
-	tasksDir = filepath.Join(planningDir, "tasks")
-	artifactsDir = filepath.Join(planningDir, "artifacts")
-	inputsDir = filepath.Join(planningDir, "inputs")
-	beadsExportDir = filepath.Join(planningDir, "beads-export")
-
-	return nil
-}
-
-func findProjectRoot(start string) (string, error) {
-	current := start
-	for i := 0; i < 10; i++ {
-		if isDir(filepath.Join(current, "project-planning")) {
-			return current, nil
-		}
-		if isDir(filepath.Join(current, ".git")) {
-			return current, nil
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			break
-		}
-		current = parent
-	}
-	return "", fmt.Errorf("could not find project root (no project-planning/ or .git/ found)")
+	return cwd
 }
 
 func isDir(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
-}
-
-func getTargetDir() string {
-	if targetDir != "" {
-		return targetDir
-	}
-	return projectRoot
 }
 
 func isBeadsInitialized(dir string) bool {
@@ -337,13 +311,13 @@ func loadSharedData() error {
 
 		go func() {
 			defer wg.Done()
-			data, _ := os.ReadFile(filepath.Join(inputsDir, "spec.md"))
+			data, _ := os.ReadFile(filepath.Join(getInputsDir(), "spec.md"))
 			cachedSpec = string(data)
 		}()
 
 		go func() {
 			defer wg.Done()
-			cm, _ := loadJSON[CapabilityMap](filepath.Join(artifactsDir, "capability-map.json"))
+			cm, _ := loadJSON[CapabilityMap](filepath.Join(getArtifactsDir(), "capability-map.json"))
 			if cm == nil {
 				cachedCapMap = &CapabilityMap{}
 			} else {
@@ -353,7 +327,7 @@ func loadSharedData() error {
 
 		go func() {
 			defer wg.Done()
-			s, _ := loadJSON[State](filepath.Join(planningDir, "state.json"))
+			s, _ := loadJSON[State](filepath.Join(getPlanningDir(), "state.json"))
 			if s == nil {
 				cachedState = &State{Tasks: make(map[string]TaskState)}
 			} else {
@@ -377,7 +351,7 @@ func loadTask(taskID string) (*Task, error) {
 	}
 	taskCacheMu.RUnlock()
 
-	task, err := loadJSON[Task](filepath.Join(tasksDir, taskID+".json"))
+	task, err := loadJSON[Task](filepath.Join(getTasksDir(), taskID+".json"))
 	if err != nil {
 		return nil, err
 	}
@@ -408,7 +382,7 @@ func preloadTasks(taskIDs []string) {
 }
 
 func getAllTaskIDs() ([]string, error) {
-	entries, err := os.ReadDir(tasksDir)
+	entries, err := os.ReadDir(getTasksDir())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -671,6 +645,7 @@ func prepareTaskContext(taskID string) (*PreparedContext, error) {
 }
 
 func saveContextForEnrichment(taskID string, ctx *PreparedContext) (string, error) {
+	beadsExportDir := getBeadsExportDir()
 	if err := os.MkdirAll(beadsExportDir, 0755); err != nil {
 		return "", err
 	}
@@ -694,12 +669,8 @@ func printContextSummary(ctx *PreparedContext) {
 	fmt.Printf("  Behaviors: %d\n", len(ctx.CapabilityContext.Behaviors))
 }
 
-func cmdContext(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: transform context <task_id> | --all [-t TARGET_DIR]")
-	}
-
-	if args[0] == "--all" {
+func runContext(cmd *cobra.Command, args []string) error {
+	if contextAll {
 		taskIDs, err := getAllTaskIDs()
 		if err != nil {
 			return err
@@ -726,12 +697,17 @@ func cmdContext(args []string) error {
 			fmt.Println()
 		}
 
-		fmt.Printf("\nContext files saved to: %s/\n", beadsExportDir)
+		fmt.Printf("\nContext files saved to: %s/\n", getBeadsExportDir())
+		target := getTargetDir()
 		if targetDir != "" {
-			fmt.Printf("Target directory for beads: %s\n", targetDir)
-			fmt.Printf("  Beads initialized: %v\n", isBeadsInitialized(targetDir))
+			fmt.Printf("Target directory for beads: %s\n", target)
+			fmt.Printf("  Beads initialized: %v\n", isBeadsInitialized(target))
 		}
 		return nil
+	}
+
+	if len(args) < 1 {
+		return fmt.Errorf("usage: tasker transform context <task-id> | --all")
 	}
 
 	taskID := args[0]
@@ -753,7 +729,7 @@ func cmdContext(args []string) error {
 	return nil
 }
 
-func cmdStatus() error {
+func runStatus(cmd *cobra.Command, args []string) error {
 	taskIDs, err := getAllTaskIDs()
 	if err != nil {
 		return err
@@ -763,12 +739,14 @@ func cmdStatus() error {
 		return err
 	}
 
+	cwd, _ := os.Getwd()
 	target := getTargetDir()
 
-	fmt.Printf("Source Project: %s\n", projectRoot)
+	fmt.Printf("Source Project: %s\n", cwd)
 	fmt.Printf("Tasker Tasks: %d\n", len(taskIDs))
 	fmt.Printf("State phase: %s\n", cachedState.Phase.Current)
 
+	beadsExportDir := getBeadsExportDir()
 	if isDir(beadsExportDir) {
 		exported, _ := filepath.Glob(filepath.Join(beadsExportDir, "*-context.json"))
 		enriched, _ := filepath.Glob(filepath.Join(beadsExportDir, "*-enriched.json"))
@@ -786,36 +764,9 @@ func cmdStatus() error {
 		}
 	} else {
 		fmt.Println("  Beads: not initialized")
-		fmt.Println("  Run 'transform init-target <dir>' to initialize")
+		fmt.Println("  Run 'tasker transform init-target <dir>' to initialize")
 	}
 
-	return nil
-}
-
-func cmdInitTarget(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: transform init-target <target_dir> [PREFIX]")
-	}
-
-	target, err := filepath.Abs(args[0])
-	if err != nil {
-		return err
-	}
-
-	if !isDir(target) {
-		return fmt.Errorf("target directory does not exist: %s", target)
-	}
-
-	prefix := "TASK"
-	if len(args) > 1 {
-		prefix = args[1]
-	}
-
-	success, msg := initBeadsInTarget(target, prefix)
-	fmt.Println(msg)
-	if !success {
-		os.Exit(1)
-	}
 	return nil
 }
 
@@ -843,6 +794,29 @@ func initBeadsInTarget(target, prefix string) (bool, string) {
 	return true, fmt.Sprintf("Beads initialized and onboarded in %s with prefix '%s'", target, prefix)
 }
 
+func runInitTarget(cmd *cobra.Command, args []string) error {
+	target, err := filepath.Abs(args[0])
+	if err != nil {
+		return err
+	}
+
+	if !isDir(target) {
+		return fmt.Errorf("target directory does not exist: %s", target)
+	}
+
+	prefix := "TASK"
+	if len(args) > 1 {
+		prefix = args[1]
+	}
+
+	success, msg := initBeadsInTarget(target, prefix)
+	fmt.Println(msg)
+	if !success {
+		return fmt.Errorf("initialization failed")
+	}
+	return nil
+}
+
 var bdPriorityMap = map[string]string{
 	"critical": "0",
 	"high":     "1",
@@ -864,7 +838,7 @@ func createBeadsIssue(taskID, title, description, priority string, labels []stri
 	copy(allLabels, labels)
 	allLabels = append(allLabels, "tasker:"+taskID)
 
-	args := []string{
+	cmdArgs := []string{
 		"create", title,
 		"-t", "task",
 		"-p", priorityToBdPriority(priority),
@@ -873,14 +847,14 @@ func createBeadsIssue(taskID, title, description, priority string, labels []stri
 	}
 
 	if description != "" {
-		args = append(args, "-d", description)
+		cmdArgs = append(cmdArgs, "-d", description)
 	}
 
-	cmd := exec.Command("bd", args...)
-	cmd.Dir = target
-	cmd.Env = append(os.Environ(), "PWD="+target)
+	bdCmd := exec.Command("bd", cmdArgs...)
+	bdCmd.Dir = target
+	bdCmd.Env = append(os.Environ(), "PWD="+target)
 
-	output, err := cmd.Output()
+	output, err := bdCmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return false, fmt.Sprintf("Failed to create issue: %s", string(exitErr.Stderr))
@@ -976,9 +950,9 @@ func linkDependenciesParallel(taskToBeads map[string]string, taskDeps map[string
 	env := append(os.Environ(), "PWD="+target)
 
 	type depJob struct {
-		taskID    string
-		beadsID   string
-		depTaskID string
+		taskID     string
+		beadsID    string
+		depTaskID  string
 		depBeadsID string
 	}
 
@@ -1011,11 +985,11 @@ func linkDependenciesParallel(taskToBeads map[string]string, taskDeps map[string
 		go func() {
 			defer wg.Done()
 			for job := range jobCh {
-				cmd := exec.Command("bd", "dep", "add", job.beadsID, job.depBeadsID, "-t", "blocks")
-				cmd.Dir = target
-				cmd.Env = env
+				bdCmd := exec.Command("bd", "dep", "add", job.beadsID, job.depBeadsID, "-t", "blocks")
+				bdCmd.Dir = target
+				bdCmd.Env = env
 
-				_, err := cmd.CombinedOutput()
+				_, err := bdCmd.CombinedOutput()
 				results <- depLinkResult{
 					from:    job.taskID,
 					to:      job.depTaskID,
@@ -1048,11 +1022,7 @@ func linkDependenciesParallel(taskToBeads map[string]string, taskDeps map[string
 	return successCount, failCount
 }
 
-func cmdCreate(args []string) error {
-	if len(args) < 2 {
-		return fmt.Errorf("usage: transform create <task_id> <enriched_file> [-t TARGET_DIR]")
-	}
-
+func runCreate(cmd *cobra.Command, args []string) error {
 	taskID := args[0]
 	descFile := args[1]
 
@@ -1084,11 +1054,7 @@ func cmdCreate(args []string) error {
 	return fmt.Errorf("%s", result)
 }
 
-func cmdBatchCreate(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: transform batch-create <manifest_file> [-t TARGET_DIR]")
-	}
-
+func runBatchCreate(cmd *cobra.Command, args []string) error {
 	manifestPath := args[0]
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -1127,6 +1093,7 @@ func cmdBatchCreate(args []string) error {
 		fmt.Println("\nNo dependencies to link.")
 	}
 
+	beadsExportDir := getBeadsExportDir()
 	mappingFile := filepath.Join(beadsExportDir, "task-to-beads-mapping.json")
 	mappingData, _ := json.MarshalIndent(taskToBeads, "", "  ")
 	if err := os.WriteFile(mappingFile, mappingData, 0644); err != nil {
