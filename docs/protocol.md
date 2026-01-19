@@ -442,10 +442,10 @@ This section documents how the Task Decomposition Protocol v2 implements the abo
 /execute --batch     # All ready tasks
 
 # State management
-python3 scripts/state.py status
-python3 scripts/state.py ready-tasks
-python3 scripts/state.py retry-task T005
-python3 scripts/state.py skip-task T005 "reason"
+tasker state status
+tasker state ready-tasks
+tasker state retry-task T005
+tasker state skip-task T005 "reason"
 ```
 
 ### Validation Gates
@@ -453,9 +453,9 @@ python3 scripts/state.py skip-task T005 "reason"
 Phase transitions require schema validation:
 
 ```bash
-python3 scripts/state.py validate capability_map
-python3 scripts/state.py validate physical_map
-python3 scripts/state.py advance
+tasker state validate capability_map
+tasker state validate physical_map
+tasker state advance
 ```
 
 ### Execution Bundles

@@ -705,7 +705,7 @@ EOF
 ### Step 2: Run Weakness Detection
 
 ```bash
-python3 scripts/spec-review.py analyze /tmp/claude/spec-draft.md
+tasker spec review analyze /tmp/claude/spec-draft.md
 ```
 
 This detects:
@@ -777,7 +777,7 @@ For each resolved weakness:
 
 ```bash
 # Re-run analysis
-python3 scripts/spec-review.py analyze /tmp/claude/spec-draft.md
+tasker spec review analyze /tmp/claude/spec-draft.md
 ```
 
 **Continue until:**
@@ -789,7 +789,7 @@ python3 scripts/spec-review.py analyze /tmp/claude/spec-draft.md
 Save the final review results:
 
 ```bash
-python3 scripts/spec-review.py analyze /tmp/claude/spec-draft.md > .claude/spec-review.json
+tasker spec review analyze /tmp/claude/spec-draft.md > .claude/spec-review.json
 ```
 
 ## Spec Review Gate
@@ -878,7 +878,7 @@ Write to `{TARGET}/docs/specs/<slug>.capabilities.json` (from Phase 3 Synthesis)
 
 Validate against schema:
 ```bash
-python3 scripts/state.py validate capability_map --file {TARGET}/docs/specs/<slug>.capabilities.json
+tasker state validate capability_map --file {TARGET}/docs/specs/<slug>.capabilities.json
 ```
 
 ### 4. Behavior Model (FSM)
@@ -887,21 +887,21 @@ Export FSM artifacts to `{TARGET}/docs/state-machines/<slug>/`:
 
 ```bash
 # Compile FSM from capability map and spec
-python3 scripts/fsm-compiler.py from-capability-map \
+tasker fsm compile from-capability-map \
     {TARGET}/docs/specs/<slug>.capabilities.json \
     {TARGET}/docs/specs/<slug>.md \
     --output-dir {TARGET}/docs/state-machines/<slug>
 
 # Generate Mermaid diagrams and notes
-python3 scripts/fsm-mermaid.py generate-all {TARGET}/docs/state-machines/<slug>
+tasker fsm mermaid generate-all {TARGET}/docs/state-machines/<slug>
 
 # Validate FSM artifacts (I1-I5 invariants)
-python3 scripts/fsm-validate.py validate {TARGET}/docs/state-machines/<slug>
+tasker fsm validate validate {TARGET}/docs/state-machines/<slug>
 ```
 
 Validate against schemas:
 ```bash
-python3 scripts/validate.py fsm --dir {TARGET}/docs/state-machines/<slug>
+tasker validate fsm --dir {TARGET}/docs/state-machines/<slug>
 ```
 
 ### 6. ADR Files (0..N)

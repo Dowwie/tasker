@@ -2,10 +2,10 @@
 description: Display executor status dashboard with task progress and recent activity
 ---
 
-Run the status script to display a workflow dashboard:
+Run the status command to display a workflow dashboard:
 
 ```bash
-python3 scripts/status.py --once
+tasker state status --once
 ```
 
 This shows:
@@ -18,12 +18,12 @@ This shows:
 - Active tasks currently running
 - Recent failures
 
-For interactive TUI mode (requires textual), use:
+For interactive TUI mode, use:
 ```bash
-python3 scripts/status.py
+tasker tui
 ```
 
 For JSON output:
 ```bash
-python3 scripts/status.py --json
+tasker state status --json
 ```

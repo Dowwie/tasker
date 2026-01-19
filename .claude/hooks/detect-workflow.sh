@@ -7,12 +7,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TASKER_BIN="${TASKER_BINARY:-$SCRIPT_DIR/../../go/bin/tasker}"
 
 # Read the input JSON from stdin
 INPUT=$(cat)
 
-# Extract the prompt field
-PROMPT=$(echo "$INPUT" | python3 -c "import sys, json; print(json.load(sys.stdin).get('prompt', ''))" 2>/dev/null || echo "")
+# Extract the prompt field using Go CLI
+PROMPT=$(echo "$INPUT" | "$TASKER_BIN" hook get-prompt 2>/dev/null || echo "")
 
 # Check if this is a /plan or /execute command
 if [[ "$PROMPT" =~ ^[[:space:]]*/plan([[:space:]]|$) ]] || [[ "$PROMPT" =~ ^[[:space:]]*/execute([[:space:]]|$) ]]; then

@@ -1,6 +1,6 @@
 ---
 name: task-executor
-description: Execute a single task in isolation. Self-completing - calls state.py directly and writes result file. Returns minimal status to orchestrator. Context-isolated - no memory of previous tasks.
+description: Execute a single task in isolation. Self-completing - calls tasker state directly and writes result file. Returns minimal status to orchestrator. Context-isolated - no memory of previous tasks.
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
@@ -50,7 +50,7 @@ The bundle contains:
 
 ```bash
 # Run state.py from orchestrator root (parent of PLANNING_DIR)
-cd {PLANNING_DIR}/.. && python3 scripts/state.py start-task T001
+cd {PLANNING_DIR}/.. && tasker state start-task T001
 ```
 
 ### 3. Track Changes
@@ -222,7 +222,7 @@ The verifier includes a JSON block at the end of its report. Extract it and pers
 # Parse the JSON block from verifier output
 # The JSON contains: task_id, verdict, recommendation, criteria, quality, tests
 
-cd {PLANNING_DIR}/.. && python3 scripts/state.py record-verification T001 \
+cd {PLANNING_DIR}/.. && tasker state record-verification T001 \
   --verdict PASS \
   --recommendation PROCEED \
   --criteria '[{"name": "...", "score": "PASS", "evidence": "..."}]' \
@@ -240,12 +240,12 @@ cd {PLANNING_DIR}/.. && python3 scripts/state.py record-verification T001 \
 
 ```bash
 # 1. Update state directly (spec file MUST be in --created list)
-cd {PLANNING_DIR}/.. && python3 scripts/state.py complete-task T001 \
+cd {PLANNING_DIR}/.. && tasker state complete-task T001 \
   --created src/auth/validator.py src/auth/errors.py docs/T001-spec.md \
   --modified src/auth/__init__.py README.md
 
 # 2. Commit changes to git
-cd {PLANNING_DIR}/.. && python3 scripts/state.py commit-task T001
+cd {PLANNING_DIR}/.. && tasker state commit-task T001
 
 # 3. Write result file for observability (see step 8)
 
@@ -267,7 +267,7 @@ for bak in /tmp/rollback-T001/*.bak; do
 done
 
 # 3. Update state directly
-cd {PLANNING_DIR}/.. && python3 scripts/state.py fail-task T001 \
+cd {PLANNING_DIR}/.. && tasker state fail-task T001 \
   "Acceptance criteria failed: <details>" \
   --category test --retryable
 

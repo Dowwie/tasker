@@ -467,7 +467,7 @@ At the very end of your report, include a JSON block for programmatic parsing:
 
 This JSON block enables the executor to persist verification results via:
 ```bash
-cd {PLANNING_DIR}/.. && python3 scripts/state.py record-verification T001 \
+cd {PLANNING_DIR}/.. && tasker state record-verification T001 \
   --verdict PASS \
   --recommendation PROCEED \
   --criteria '[...]' \

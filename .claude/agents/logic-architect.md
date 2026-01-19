@@ -53,7 +53,7 @@ The JSON MUST validate against `schemas/capability-map.schema.json`.
 2. **READ** the spec from `{PLANNING_DIR}/inputs/spec.md`
 3. **ANALYZE** using I.P.S.O. decomposition (see below)
 4. **OVERWRITE** the file with your complete analysis using the Write tool
-5. **VALIDATE**: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+5. **VALIDATE**: `cd {PLANNING_DIR}/.. && tasker state validate capability_map`
 6. **If validation fails**: Fix the JSON, Write again, re-validate
 
 **Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
@@ -236,7 +236,7 @@ The quote provides 100% traceability - it IS the spec content. The location is b
 - [ ] Placeholder was written as FIRST action
 - [ ] Final JSON was written using Write tool to `{PLANNING_DIR}/artifacts/capability-map.json`
 - [ ] File exists: `ls -la {PLANNING_DIR}/artifacts/capability-map.json` shows the file
-- [ ] Validation passes: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+- [ ] Validation passes: `cd {PLANNING_DIR}/.. && tasker state validate capability_map`
 
 ### Content Quality
 - [ ] Phase markers identified and Phase 2+ content excluded

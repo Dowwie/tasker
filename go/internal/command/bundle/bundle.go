@@ -1,7 +1,10 @@
 package bundle
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/dgordon/tasker/internal/command"
 	bundlelib "github.com/dgordon/tasker/internal/bundle"
@@ -189,13 +192,149 @@ var cleanCmd = &cobra.Command{
 	},
 }
 
+type ResultFiles struct {
+	Created  []string `json:"created,omitempty"`
+	Modified []string `json:"modified,omitempty"`
+}
+
+type ResultGit struct {
+	Committed     bool   `json:"committed"`
+	CommitSHA     string `json:"commit_sha,omitempty"`
+	CommitMessage string `json:"commit_message,omitempty"`
+	CommittedBy   string `json:"committed_by,omitempty"`
+}
+
+type Result struct {
+	Version     string      `json:"version"`
+	TaskID      string      `json:"task_id"`
+	Name        string      `json:"name"`
+	Status      string      `json:"status"`
+	StartedAt   string      `json:"started_at,omitempty"`
+	CompletedAt string      `json:"completed_at,omitempty"`
+	Files       ResultFiles `json:"files,omitempty"`
+	Git         *ResultGit  `json:"git,omitempty"`
+}
+
+func loadResult(planningDir, taskID string) (*Result, string, error) {
+	resultPath := filepath.Join(planningDir, "bundles", fmt.Sprintf("%s-result.json", taskID))
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		return nil, resultPath, fmt.Errorf("failed to read result file: %w", err)
+	}
+
+	var result Result
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, resultPath, fmt.Errorf("failed to parse result JSON: %w", err)
+	}
+
+	return &result, resultPath, nil
+}
+
+var resultInfoCmd = &cobra.Command{
+	Use:   "result-info <task-id>",
+	Short: "Get name and status from result file",
+	Long:  `Outputs the task name and status from the result file, tab-separated.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+		planningDir := getPlanningDirFunc()
+
+		result, _, err := loadResult(planningDir, taskID)
+		if err != nil {
+			return err
+		}
+
+		name := result.Name
+		if name == "" {
+			name = taskID
+		}
+		fmt.Printf("%s\t%s\n", name, result.Status)
+		return nil
+	},
+}
+
+var resultFilesCmd = &cobra.Command{
+	Use:   "result-files <task-id>",
+	Short: "Get files from result file",
+	Long:  `Outputs all files (created and modified) from the result file, one per line.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+		planningDir := getPlanningDirFunc()
+
+		result, _, err := loadResult(planningDir, taskID)
+		if err != nil {
+			return err
+		}
+
+		for _, f := range result.Files.Created {
+			if f != "" {
+				fmt.Println(f)
+			}
+		}
+		for _, f := range result.Files.Modified {
+			if f != "" {
+				fmt.Println(f)
+			}
+		}
+		return nil
+	},
+}
+
+var (
+	gitSHA     string
+	gitMessage string
+)
+
+var updateGitCmd = &cobra.Command{
+	Use:   "update-git <task-id>",
+	Short: "Update result file with git commit info",
+	Long:  `Adds git commit information to the result file.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+		planningDir := getPlanningDirFunc()
+
+		result, resultPath, err := loadResult(planningDir, taskID)
+		if err != nil {
+			return err
+		}
+
+		result.Git = &ResultGit{
+			Committed:     true,
+			CommitSHA:     gitSHA,
+			CommitMessage: gitMessage,
+			CommittedBy:   "hook",
+		}
+
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to serialize result: %w", err)
+		}
+
+		if err := os.WriteFile(resultPath, data, 0644); err != nil {
+			return fmt.Errorf("failed to write result file: %w", err)
+		}
+
+		return nil
+	},
+}
+
 func init() {
+	updateGitCmd.Flags().StringVar(&gitSHA, "sha", "", "Git commit SHA")
+	updateGitCmd.Flags().StringVar(&gitMessage, "msg", "", "Git commit message")
+	updateGitCmd.MarkFlagRequired("sha")
+	updateGitCmd.MarkFlagRequired("msg")
+
 	bundleCmd.AddCommand(generateCmd)
 	bundleCmd.AddCommand(generateReadyCmd)
 	bundleCmd.AddCommand(validateCmd)
 	bundleCmd.AddCommand(validateIntegrityCmd)
 	bundleCmd.AddCommand(listCmd)
 	bundleCmd.AddCommand(cleanCmd)
+	bundleCmd.AddCommand(resultInfoCmd)
+	bundleCmd.AddCommand(resultFilesCmd)
+	bundleCmd.AddCommand(updateGitCmd)
 
 	command.RootCmd.AddCommand(bundleCmd)
 }

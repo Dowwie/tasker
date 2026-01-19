@@ -16,7 +16,7 @@ You MUST write valid JSON to `{PLANNING_DIR}/artifacts/physical-map.json`.
 1. You MUST use the Write tool to save the file. Do NOT just output JSON to the conversation.
 2. You MUST use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.
 3. You MUST verify the file exists after writing by running: `ls -la {PLANNING_DIR}/artifacts/physical-map.json`
-4. You MUST run validation: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map`
+4. You MUST run validation: `cd {PLANNING_DIR}/.. && tasker state validate physical_map`
 
 If the file doesn't exist after Write, you have FAILED. Try again.**
 
@@ -28,7 +28,7 @@ If the file doesn't exist after Write, you have FAILED. Try again.**
 
 2. **Validate** the output:
    ```bash
-   cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map
+   cd {PLANNING_DIR}/.. && tasker state validate physical_map
    ```
 
 3. **If validation fails**: Read the error, fix the JSON, write again, re-validate
@@ -158,4 +158,4 @@ Before declaring done:
 - [ ] Cross-cutting concerns added
 - [ ] Infrastructure files added
 - [ ] **File written** using Write tool to `{PLANNING_DIR}/artifacts/physical-map.json` (absolute path!)
-- [ ] JSON validates: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map`
+- [ ] JSON validates: `cd {PLANNING_DIR}/.. && tasker state validate physical_map`

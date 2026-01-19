@@ -13,6 +13,9 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TASKER_BIN="${TASKER_BINARY:-$SCRIPT_DIR/../../go/bin/tasker}"
+
 # Determine mode based on arguments
 if [[ $# -ge 3 ]]; then
     # Manual mode: args provided
@@ -23,18 +26,8 @@ elif [[ $# -eq 0 ]]; then
     # Hook mode: parse from stdin JSON
     INPUT=$(cat)
 
-    # Extract output from hook JSON
-    OUTPUT=$(echo "$INPUT" | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    out = d.get('output', d.get('tool_output', ''))
-    if isinstance(out, dict):
-        out = out.get('output', '')
-    print(out)
-except:
-    print('')
-" 2>/dev/null || echo "")
+    # Extract output from hook JSON using Go CLI
+    OUTPUT=$(echo "$INPUT" | "$TASKER_BIN" hook parse-output 2>/dev/null || echo "")
 
     # Parse task ID from output (e.g., "T001: SUCCESS")
     TASK_ID=$(echo "$OUTPUT" | grep -oE 'T[0-9]+: SUCCESS' | head -1 | cut -d: -f1)
@@ -44,13 +37,8 @@ except:
         exit 0
     fi
 
-    # Get paths from state.json
-    STATE_FILE="./project-planning/state.json"
-    if [[ ! -f "$STATE_FILE" ]]; then
-        exit 0
-    fi
-
-    TARGET_DIR=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('target_dir', ''))" 2>/dev/null || echo "")
+    # Get paths from state.json using Go CLI
+    TARGET_DIR=$("$TASKER_BIN" state get-field target_dir 2>/dev/null || echo "")
     PLANNING_DIR="$(pwd)/project-planning"
 else
     echo "Usage: $0 <task_id> <target_dir> <planning_dir>" >&2
@@ -77,25 +65,18 @@ fi
 
 cd "$TARGET_DIR"
 
-# Extract task name and status from result JSON
-TASK_NAME=$(python3 -c "import json; print(json.load(open('$RESULT_FILE')).get('name', '$TASK_ID'))" 2>/dev/null || echo "$TASK_ID")
-STATUS=$(python3 -c "import json; print(json.load(open('$RESULT_FILE')).get('status', 'unknown'))" 2>/dev/null || echo "unknown")
+# Extract task name and status from result JSON using Go CLI
+RESULT_INFO=$("$TASKER_BIN" -p "$PLANNING_DIR" bundle result-info "$TASK_ID" 2>/dev/null || echo "$TASK_ID	unknown")
+TASK_NAME=$(echo "$RESULT_INFO" | cut -f1)
+STATUS=$(echo "$RESULT_INFO" | cut -f2)
 
 if [[ "$STATUS" != "success" ]]; then
     [[ $# -ge 3 ]] && echo "SKIP: Task $TASK_ID status is '$STATUS', not committing"
     exit 0
 fi
 
-# Get files from result (created + modified)
-FILES_JSON=$(python3 -c "
-import json
-result = json.load(open('$RESULT_FILE'))
-files = result.get('files', {})
-created = files.get('created', []) or []
-modified = files.get('modified', []) or []
-all_files = [f for f in created + modified if f]
-print('\n'.join(all_files))
-" 2>/dev/null || echo "")
+# Get files from result (created + modified) using Go CLI
+FILES_JSON=$("$TASKER_BIN" -p "$PLANNING_DIR" bundle result-files "$TASK_ID" 2>/dev/null || echo "")
 
 if [[ -z "$FILES_JSON" ]]; then
     [[ $# -ge 3 ]] && echo "SKIP: No files recorded in result for $TASK_ID"
@@ -134,20 +115,8 @@ git commit -m "$COMMIT_MSG" --no-verify
 COMMIT_SHA=$(git rev-parse HEAD)
 [[ $# -ge 3 ]] && echo "COMMITTED: $COMMIT_SHA - $COMMIT_MSG"
 
-# Update result file with commit info
-python3 -c "
-import json
-with open('$RESULT_FILE', 'r') as f:
-    result = json.load(f)
-result['git'] = {
-    'committed': True,
-    'commit_sha': '$COMMIT_SHA',
-    'commit_message': '$COMMIT_MSG',
-    'committed_by': 'hook'
-}
-with open('$RESULT_FILE', 'w') as f:
-    json.dump(result, f, indent=2)
-" 2>/dev/null || true
+# Update result file with commit info using Go CLI
+"$TASKER_BIN" -p "$PLANNING_DIR" bundle update-git "$TASK_ID" --sha="$COMMIT_SHA" --msg="$COMMIT_MSG" 2>/dev/null || true
 
 [[ $# -ge 3 ]] && echo "OK: Updated $RESULT_FILE with commit info"
 exit 0

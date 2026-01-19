@@ -8,7 +8,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TUI_SCRIPT="$PROJECT_ROOT/scripts/status.py"
+TASKER_BIN="${TASKER_BINARY:-$PROJECT_ROOT/go/bin/tasker}"
 TUI_PANE_MARKER="TASKER_TUI_PANE"
 
 # Only run if we're in tmux
@@ -26,7 +26,7 @@ fi
 
 # Create horizontal split (bottom pane, 30% height) and run TUI
 tmux split-window -v -l 30% -c "$PROJECT_ROOT" \
-    "printf '\\033]2;${TUI_PANE_MARKER}\\033\\\\'; uv run python3 '$TUI_SCRIPT'; read -p 'TUI exited. Press Enter to close...'"
+    "printf '\\033]2;${TUI_PANE_MARKER}\\033\\\\'; '$TASKER_BIN' tui; read -p 'TUI exited. Press Enter to close...'"
 
 # Return focus to the original pane (where Claude Code is running)
 tmux select-pane -t '{previous}'

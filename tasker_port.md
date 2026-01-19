@@ -629,7 +629,6 @@ Actions:
 | `status.py` | Merged into state | P0 - Core |
 | `dashboard.py` | Separate TUI (optional) | P4 - Optional |
 | `evaluate.py` | `internal/metrics/` | P3 - Nice to have |
-| `install_work_command.py` | N/A (obsolete) | Skip |
 
 ## Verification Plan
 

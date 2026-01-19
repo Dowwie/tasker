@@ -52,8 +52,8 @@ All artifacts are validated against JSON schemas:
 
 Run validation manually:
 ```bash
-python3 scripts/state.py validate capability_map
-python3 scripts/state.py validate physical_map
+tasker state validate capability_map
+tasker state validate physical_map
 ```
 
 ## Workflow

@@ -80,7 +80,7 @@ Build a mental model of:
 Before evaluating tasks manually, run the programmatic validation gates:
 
 ```bash
-cd {PLANNING_DIR}/.. && python3 scripts/validate.py planning-gates --threshold 0.9
+cd {PLANNING_DIR}/.. && tasker validate planning-gates --threshold 0.9
 ```
 
 This checks:
@@ -300,7 +300,7 @@ cat {PLANNING_DIR}/artifacts/capability-map.json | jq '.phase_filtering.excluded
 
 **Run refactor priority check:**
 ```bash
-cd {PLANNING_DIR}/.. && python3 scripts/validate.py refactor-priority
+cd {PLANNING_DIR}/.. && tasker validate refactor-priority
 ```
 
 This shows which original requirements are superseded by refactor tasks.
@@ -367,14 +367,14 @@ This file persists for review and debugging.
 
 ```bash
 # For READY (all tasks pass)
-cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks READY "All tasks aligned with spec and preferences"
+cd {PLANNING_DIR}/.. && tasker state validate-tasks READY "All tasks aligned with spec and preferences"
 
 # For READY_WITH_NOTES (pass with minor issues)
-cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks READY_WITH_NOTES "Minor issues found" \
+cd {PLANNING_DIR}/.. && tasker state validate-tasks READY_WITH_NOTES "Minor issues found" \
   --issues "T002: missing constraints" "T012: unclear verification"
 
 # For BLOCKED (critical issues)
-cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks BLOCKED "Critical issues block planning" \
+cd {PLANNING_DIR}/.. && tasker state validate-tasks BLOCKED "Critical issues block planning" \
   --issues "T005: not traceable to spec"
 ```
 
@@ -483,7 +483,7 @@ From `~/.claude/CLAUDE.md`:
 
 If BLOCKED:
 - Fix identified issues
-- Re-run verification: `python3 scripts/state.py validate tasks`
+- Re-run verification: `tasker state validate tasks`
 
 If READY or READY_WITH_NOTES:
 - Proceed to sequencing phase
@@ -503,7 +503,7 @@ If READY or READY_WITH_NOTES:
 
 Before your final message, you MUST:
 1. Save full report to `{PLANNING_DIR}/reports/task-validation-report.md` (absolute path!)
-2. Run `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate-tasks <VERDICT> "<summary>" [--issues ...]`
+2. Run `cd {PLANNING_DIR}/.. && tasker state validate-tasks <VERDICT> "<summary>" [--issues ...]`
    - **IMPORTANT:** The command is `validate-tasks` (with hyphen), NOT `validate-complete` or any other variant
 
 Your final message MUST include:

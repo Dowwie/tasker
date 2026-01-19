@@ -213,18 +213,18 @@ Each task is packaged into a self-contained **execution bundle**:
 The task-executor is **self-completing**: it updates state directly rather than relying on orchestrator acknowledgment.
 
 1. Load bundle from `bundles/{task_id}-bundle.json`
-2. Mark started via `state.py start-task`
+2. Mark started via `tasker state start-task`
 3. Track changes for rollback
 4. Implement behaviors in specified files
 5. Create documentation: `docs/{task_id}-spec.md` (mandatory)
 6. Spawn task-verifier subagent
 7. If all criteria pass:
-   - Call `state.py complete-task`
+   - Call `tasker state complete-task`
    - Commit to git
    - Write result file
 8. If criteria fail:
    - Rollback files
-   - Call `state.py fail-task`
+   - Call `tasker state fail-task`
 
 ### Task Verifier
 
@@ -258,7 +258,7 @@ The task-verifier runs in an **isolated context** (clean from implementation det
 
 ### Single Source of Truth
 
-All workflow state is managed through `scripts/state.py` with persistence to `project-planning/state.json`.
+All workflow state is managed through the `tasker` CLI with persistence to `project-planning/state.json`.
 
 ### State Structure
 
@@ -300,20 +300,20 @@ pending → ready → running → complete
 
 ```bash
 # Planning
-python3 scripts/state.py init <target_dir>
-python3 scripts/state.py advance
-python3 scripts/state.py load-tasks
+tasker state init <target_dir>
+tasker state advance
+tasker state load-tasks
 
 # Execution
-python3 scripts/state.py ready-tasks
-python3 scripts/state.py start-task T001
-python3 scripts/state.py complete-task T001 --files src/auth/validator.py
-python3 scripts/state.py fail-task T001 "Test failed" --category test
+tasker state ready-tasks
+tasker state start-task T001
+tasker state complete-task T001 --files src/auth/validator.py
+tasker state fail-task T001 "Test failed" --category test
 
 # Recovery
-python3 scripts/state.py checkpoint create T001 T002
-python3 scripts/state.py checkpoint recover
-python3 scripts/state.py retry-task T001
+tasker state checkpoint create T001 T002
+tasker state checkpoint recover
+tasker state retry-task T001
 ```
 
 ---
@@ -417,13 +417,14 @@ tasker/
 │   ├── fsm-*.schema.json
 │   └── ...
 │
-├── scripts/                   # Python utilities
-│   ├── state.py               # State management CLI
-│   ├── bundle.py              # Bundle generation
-│   ├── validate.py            # Validation gates
-│   ├── fsm-validate.py        # FSM invariant checks
-│   ├── fsm-compiler.py        # FSM from workflows
-│   └── fsm-mermaid.py         # Mermaid generation
+├── go/                        # Go CLI implementation
+│   ├── cmd/tasker/            # Main entry point
+│   └── internal/              # State, bundle, validation, FSM commands
+│
+├── scripts/                   # Python shims (forward to Go CLI)
+│   ├── state.py               # Shim → tasker state
+│   ├── bundle.py              # Shim → tasker bundle
+│   └── validate.py            # Shim → tasker validate
 │
 └── project-planning/          # Generated during workflow
     ├── inputs/spec.md
@@ -453,10 +454,10 @@ Executors update state directly rather than relying on orchestrator acknowledgme
 
 ```bash
 # Before spawning batch
-python3 scripts/state.py checkpoint create T001 T002 T003
+tasker state checkpoint create T001 T002 T003
 
 # On crash and restart
-python3 scripts/state.py checkpoint recover  # Finds orphaned tasks
+tasker state checkpoint recover  # Finds orphaned tasks
 ```
 
 ### 3. Phase Filtering
@@ -532,16 +533,16 @@ Commands must return exit code 0 on success.
 
 ```bash
 # Retry a failed task
-python3 scripts/state.py retry-task T001
+tasker state retry-task T001
 
 # Skip a blocked task
-python3 scripts/state.py skip-task T001 "reason"
+tasker state skip-task T001 "reason"
 
 # Manual halt
-python3 scripts/state.py halt "reason"
+tasker state halt "reason"
 
 # Resume after halt
-python3 scripts/state.py resume
+tasker state resume
 ```
 
 ---
@@ -586,8 +587,8 @@ Each task produces `bundles/{task_id}-result.json`:
 ### Dashboard
 
 ```bash
-python3 scripts/status.py  # Interactive TUI
-/status                    # CLI status
+tasker tui                 # Interactive TUI
+tasker state status        # CLI status
 ```
 
 ---

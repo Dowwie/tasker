@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-description: Thin orchestrator for Task Decomposition Protocol v2. Supports two modes - /plan (decompose spec into tasks) and /execute (run tasks via subagents). Delegates all state management to scripts/state.py.
+description: Thin orchestrator for Task Decomposition Protocol v2. Supports two modes - /plan (decompose spec into tasks) and /execute (run tasks via subagents). Delegates all state management to the tasker CLI.
 tools:
   - agent
   - bash
@@ -36,12 +36,12 @@ The full workflow from requirements to implementation:
 ## Philosophy
 
 The orchestrator does NOT:
-- Track state itself (state.py does this)
-- Validate artifacts (state.py does this)
-- Compute ready tasks (state.py does this)
+- Track state itself (tasker CLI does this)
+- Validate artifacts (tasker CLI does this)
+- Compute ready tasks (tasker CLI does this)
 
 The orchestrator ONLY:
-- Queries state via `scripts/state.py`
+- Queries state via `tasker state`
 - Dispatches agents based on mode/phase
 - Handles user interaction
 - **Ensures commits happen** via `scripts/commit-task.sh` (defense in depth)
@@ -335,14 +335,14 @@ if [ -f "$CAPABILITY_MAP" ]; then
         cp -r "$FSM_DIR"/* "$PLANNING_DIR/artifacts/fsm/"
 
         # Validate FSM artifacts
-        python3 scripts/fsm-validate.py validate "$PLANNING_DIR/artifacts/fsm"
+        tasker fsm validate validate "$PLANNING_DIR/artifacts/fsm"
         if [ $? -ne 0 ]; then
             echo "WARNING: FSM validation failed. Review artifacts before proceeding."
         fi
     fi
 
     # Skip spec_review AND logical phases - advance directly to physical
-    python3 scripts/state.py set-phase physical
+    tasker state set-phase physical
 fi
 ```
 
@@ -355,11 +355,11 @@ fi
 ```bash
 # Initialize if no state exists
 if [ ! -f "$PLANNING_DIR/state.json" ]; then
-    python3 scripts/state.py init "$TARGET_DIR"
+    tasker state init "$TARGET_DIR"
 fi
 
 # Check current phase
-python3 scripts/state.py status
+tasker state status
 ```
 
 | Phase | Agent | Output | Validation | Skip if |
@@ -461,7 +461,7 @@ PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/projec
 ## Your Task
 
 1. Run weakness detection:
-   python3 scripts/spec-review.py analyze {PLANNING_DIR}/inputs/spec.md
+   tasker spec review analyze {PLANNING_DIR}/inputs/spec.md
 
 2. Save results to {PLANNING_DIR}/artifacts/spec-review.json
 
@@ -470,7 +470,7 @@ PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/projec
    - Record resolutions to {PLANNING_DIR}/artifacts/spec-resolutions.json
 
 4. Check status:
-   python3 scripts/spec-review.py status {PLANNING_DIR}
+   tasker spec review status {PLANNING_DIR}
 
 CRITICAL WEAKNESS CATEGORIES:
 - W1: Non-behavioral (DDL/schema not stated as behavior) - Ask: "Should DDL be DB-level or app-layer?"
@@ -560,7 +560,7 @@ Read that file for the complete requirements. The spec has already been stored v
 5. Apply phase filtering (Phase 1 only)
 6. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/capability-map.json
 7. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
-8. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate capability_map`
+8. Validate with: `cd {PLANNING_DIR}/.. && tasker state validate capability_map`
 
 IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 1. You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
@@ -620,7 +620,7 @@ For new projects, state: "New project - establish sensible conventions"
 4. Add cross-cutting concerns and infrastructure
 5. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/physical-map.json
 6. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/physical-map.json`
-7. Validate with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py validate physical_map`
+7. Validate with: `cd {PLANNING_DIR}/.. && tasker state validate physical_map`
 
 IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 1. You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
@@ -683,7 +683,7 @@ Key information for task definitions:
    - New code follows established patterns
 5. **CRITICAL: Use the Write tool** to save each task file to {PLANNING_DIR}/tasks/T001.json, etc.
 6. **Verify files exist**: `ls -la {PLANNING_DIR}/tasks/`
-7. Load tasks with: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
+7. Load tasks with: `cd {PLANNING_DIR}/.. && tasker state load-tasks`
 
 ## FSM Integration (if FSM artifacts exist)
 
@@ -726,13 +726,13 @@ After creating tasks, verify FSM transition coverage. **This is a HARD PLANNING 
 
 ```bash
 # Generate coverage report (for observability)
-python3 scripts/fsm-validate.py coverage-report \
+tasker fsm validate coverage-report \
     {PLANNING_DIR}/artifacts/fsm/index.json \
     {PLANNING_DIR}/tasks \
     --output {PLANNING_DIR}/artifacts/fsm-coverage.plan.json
 
 # Validate coverage meets thresholds (HARD GATE)
-python3 scripts/fsm-validate.py task-coverage \
+tasker fsm validate task-coverage \
     {PLANNING_DIR}/artifacts/fsm/index.json \
     {PLANNING_DIR}/tasks \
     --steel-threshold 1.0 \
@@ -758,7 +758,7 @@ IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 5. For existing projects, tasks must include verification that new code integrates cleanly.
 6. **If FSM artifacts exist**: You MUST run FSM coverage validation:
    ```bash
-   python3 scripts/fsm-validate.py task-coverage \
+   tasker fsm validate task-coverage \
        {PLANNING_DIR}/artifacts/fsm/index.json \
        {PLANNING_DIR}/tasks
    ```
@@ -776,7 +776,7 @@ If you complete without task files existing at the absolute path, you have FAILE
 Before advancing from `definition` to `validation` phase, the system automatically runs programmatic validation gates:
 
 ```bash
-# This happens automatically when calling: python3 scripts/state.py advance
+# This happens automatically when calling: tasker state advance
 # The following gates are checked:
 # - Spec coverage ≥ 90% (tasks cover requirements)
 # - No phase leakage (Phase 2+ content not in Phase 1 tasks)
@@ -787,7 +787,7 @@ Before advancing from `definition` to `validation` phase, the system automatical
 If any gate fails, phase advancement is blocked:
 ```
 Planning gates failed: Spec coverage 75.0% below threshold 90.0%; Acceptance criteria quality issues: 3 problem(s)
-Run 'python3 scripts/validate.py planning-gates' for details
+Run 'tasker validate planning-gates' for details
 ```
 
 Results are stored in `state.json → artifacts.validation_results` for observability.
@@ -819,13 +819,13 @@ User Preferences: ~/.claude/CLAUDE.md (if exists)
 
 ## Required Command
 
-Register verdict using: python3 scripts/state.py validate-tasks <VERDICT> "<summary>"
+Register verdict using: tasker state validate-tasks <VERDICT> "<summary>"
 (IMPORTANT: The command is validate-tasks, NOT validate-complete or any other variant)
 ```
 
 The verifier:
 1. Evaluates all tasks against spec, strategy, and user preferences
-2. Registers its verdict via `python3 scripts/state.py validate-tasks <VERDICT> ...`
+2. Registers its verdict via `tasker state validate-tasks <VERDICT> ...`
 3. Returns a detailed report
 
 Verdicts:
@@ -836,7 +836,7 @@ Verdicts:
 After the verifier completes, the orchestrator:
 ```bash
 # Check if we can advance (verifier already registered verdict)
-python3 scripts/state.py advance
+tasker state advance
 ```
 
 If BLOCKED, the orchestrator:
@@ -873,7 +873,7 @@ PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/projec
 4. Assign phases (1: foundations, 2: steel thread, 3+: features)
 5. **CRITICAL: Update task files** using Write tool to {PLANNING_DIR}/tasks/T001.json etc.
 6. Validate DAG (no cycles, deps in earlier phases)
-7. Run: cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks
+7. Run: cd {PLANNING_DIR}/.. && tasker state load-tasks
 
 IMPORTANT:
 - You MUST update task files using the Write tool or jq.
@@ -904,7 +904,7 @@ After planning completes, archive the artifacts for post-hoc analysis:
 
 ```bash
 # Archive planning artifacts
-python3 scripts/archive.py planning {project_name}
+tasker archive planning {project_name}
 ```
 
 This creates:
@@ -940,7 +940,7 @@ Ask user for (or detect from current directory):
 
 ```bash
 # Verify planning is complete
-python3 scripts/state.py status
+tasker state status
 # Phase must be: ready, executing, or have tasks
 
 # Verify target directory
@@ -967,10 +967,10 @@ Bash: ./scripts/ensure-git.sh "$TARGET_DIR"
 
 ```bash
 # Check for existing checkpoint from previous run
-python3 scripts/state.py checkpoint status
+tasker state checkpoint status
 
 # If checkpoint exists and is active, recover
-python3 scripts/state.py checkpoint recover
+tasker state checkpoint recover
 
 # This will:
 # 1. Find tasks that completed (have result files) but weren't acknowledged
@@ -991,10 +991,10 @@ Options:
 
 To retry orphaned tasks:
 ```bash
-python3 scripts/state.py retry-task T019
-python3 scripts/state.py retry-task T011
-python3 scripts/state.py retry-task T006
-python3 scripts/state.py checkpoint clear
+tasker state retry-task T019
+tasker state retry-task T011
+tasker state retry-task T006
+tasker state checkpoint clear
 ```
 
 ## Execute Loop
@@ -1010,26 +1010,26 @@ PARALLEL_LIMIT=3
 
 while true; do
     # 0. CHECK FOR HALT
-    python3 scripts/state.py check-halt
+    tasker state check-halt
     if [ $? -ne 0 ]; then
         echo "Halt requested. Stopping gracefully."
-        python3 scripts/state.py checkpoint complete
-        python3 scripts/state.py confirm-halt
+        tasker state checkpoint complete
+        tasker state confirm-halt
         break
     fi
 
     # 1. Get ready tasks
-    READY=$(python3 scripts/state.py ready-tasks)
+    READY=$(tasker state ready-tasks)
 
     if [ -z "$READY" ]; then
-        python3 scripts/state.py advance
+        tasker state advance
         if [ $? -eq 0 ]; then
             echo "All tasks complete!"
-            python3 scripts/state.py checkpoint clear
+            tasker state checkpoint clear
             break
         else
             echo "No ready tasks. Check for blockers."
-            python3 scripts/state.py status
+            tasker state status
             break
         fi
     fi
@@ -1042,8 +1042,8 @@ while true; do
     # 3. Generate and validate bundles for all tasks in batch
     VALID_TASKS=()
     for TASK_ID in ${BATCH_ARRAY[@]}; do
-        python3 scripts/bundle.py generate $TASK_ID
-        python3 scripts/bundle.py validate-integrity $TASK_ID
+        tasker bundle generate $TASK_ID
+        tasker bundle validate-integrity $TASK_ID
         INTEGRITY_CODE=$?
 
         if [ $INTEGRITY_CODE -eq 0 ]; then
@@ -1052,12 +1052,12 @@ while true; do
         elif [ $INTEGRITY_CODE -eq 2 ]; then
             # WARNING: Artifacts changed since bundle creation - regenerate
             ./scripts/log-activity.sh WARN orchestrator validation "$TASK_ID: Bundle drift detected, regenerating"
-            python3 scripts/bundle.py generate $TASK_ID
+            tasker bundle generate $TASK_ID
             VALID_TASKS+=($TASK_ID)
         else
             # CRITICAL: Missing dependencies or validation failure
             ./scripts/log-activity.sh ERROR orchestrator validation "$TASK_ID: Bundle integrity FAILED"
-            python3 scripts/state.py fail-task $TASK_ID "Bundle integrity validation failed" --category dependency
+            tasker state fail-task $TASK_ID "Bundle integrity validation failed" --category dependency
             # Task will be skipped from this batch
         fi
     done
@@ -1070,11 +1070,11 @@ while true; do
     BATCH_ARRAY=(${VALID_TASKS[@]})
 
     # 4. CREATE CHECKPOINT before spawning (crash recovery)
-    python3 scripts/state.py checkpoint create ${BATCH_ARRAY[@]}
+    tasker state checkpoint create ${BATCH_ARRAY[@]}
 
     # 5. Mark all tasks as started
     for TASK_ID in ${BATCH_ARRAY[@]}; do
-        python3 scripts/state.py start-task $TASK_ID
+        tasker state start-task $TASK_ID
     done
 
     # 6. SPAWN EXECUTORS IN PARALLEL
@@ -1088,8 +1088,8 @@ while true; do
     for TASK_ID in ${BATCH_ARRAY[@]}; do
         # Executor returned - check result file exists
         if [ -f "$PLANNING_DIR/bundles/${TASK_ID}-result.json" ]; then
-            STATUS=$(python3 -c "import json; print(json.load(open('$PLANNING_DIR/bundles/${TASK_ID}-result.json'))['status'])")
-            python3 scripts/state.py checkpoint update $TASK_ID $STATUS
+            STATUS=$(tasker bundle result-info "$PLANNING_DIR/bundles/${TASK_ID}-result.json" | grep "^status:" | cut -d: -f2)
+            tasker state checkpoint update $TASK_ID $STATUS
             ./scripts/log-activity.sh INFO orchestrator task-result "$TASK_ID: $STATUS"
         else
             ./scripts/log-activity.sh WARN orchestrator task-result "$TASK_ID: no result file"
@@ -1097,13 +1097,13 @@ while true; do
     done
 
     # 8. COMPLETE CHECKPOINT for this batch
-    python3 scripts/state.py checkpoint complete
+    tasker state checkpoint complete
 
     # 9. Check for halt AFTER batch
-    python3 scripts/state.py check-halt
+    tasker state check-halt
     if [ $? -ne 0 ]; then
         echo "Halt requested after batch. Stopping gracefully."
-        python3 scripts/state.py confirm-halt
+        tasker state confirm-halt
         break
     fi
 
@@ -1165,23 +1165,23 @@ Configured in `.claude/settings.local.json`:
 
 ```bash
 # Create checkpoint before spawning batch
-python3 scripts/state.py checkpoint create T001 T002 T003
+tasker state checkpoint create T001 T002 T003
 
 # Update after each executor returns
-python3 scripts/state.py checkpoint update T001 success
-python3 scripts/state.py checkpoint update T002 failed
+tasker state checkpoint update T001 success
+tasker state checkpoint update T002 failed
 
 # Mark batch complete
-python3 scripts/state.py checkpoint complete
+tasker state checkpoint complete
 
 # Check current checkpoint status
-python3 scripts/state.py checkpoint status
+tasker state checkpoint status
 
 # Recover from crash (finds orphans, updates from result files)
-python3 scripts/state.py checkpoint recover
+tasker state checkpoint recover
 
 # Clear checkpoint (after successful completion or manual cleanup)
-python3 scripts/state.py checkpoint clear
+tasker state checkpoint clear
 ```
 
 ## Graceful Halt and Resume
@@ -1205,7 +1205,7 @@ The executor checks for this file before starting each new task and after comple
 ### 2. User Message (For Interactive Sessions)
 
 If a user sends "STOP" during an interactive `/execute` session, the orchestrator should:
-1. Call `python3 scripts/state.py halt user_message`
+1. Call `tasker state halt user_message`
 2. Allow current task to complete
 3. Exit gracefully
 
@@ -1215,10 +1215,10 @@ To resume after a halt:
 
 ```bash
 # Check current halt status
-python3 scripts/state.py halt-status
+tasker state halt-status
 
 # Clear halt and resume
-python3 scripts/state.py resume
+tasker state resume
 
 # Then run /execute again
 ```
@@ -1232,19 +1232,19 @@ The resume command:
 
 ```bash
 # Request halt (called by orchestrator when user sends STOP)
-python3 scripts/state.py halt [reason]
+tasker state halt [reason]
 
 # Check if halted (exit code 1 = halted, 0 = ok)
-python3 scripts/state.py check-halt
+tasker state check-halt
 
 # Confirm halt completed (after executor stops)
-python3 scripts/state.py confirm-halt
+tasker state confirm-halt
 
 # Show detailed halt status
-python3 scripts/state.py halt-status [--format json]
+tasker state halt-status [--format json]
 
 # Clear halt and resume
-python3 scripts/state.py resume
+tasker state resume
 ```
 
 ## Subagent Spawn
@@ -1283,12 +1283,12 @@ You are responsible for updating state and persisting results. Do NOT rely on th
 
 ### On Success:
 1. Track all files you created/modified
-2. Call: `python3 scripts/state.py complete-task [TASK_ID] --created file1 file2 --modified file3`
+2. Call: `tasker state complete-task [TASK_ID] --created file1 file2 --modified file3`
 3. Write result file: `{PLANNING_DIR}/bundles/[TASK_ID]-result.json` (see schema below)
 4. Return ONLY this line: `[TASK_ID]: SUCCESS`
 
 ### On Failure:
-1. Call: `python3 scripts/state.py fail-task [TASK_ID] "error message" --category <cat> --retryable`
+1. Call: `tasker state fail-task [TASK_ID] "error message" --category <cat> --retryable`
 2. Write result file with error details
 3. Return ONLY this line: `[TASK_ID]: FAILED - <one-line reason>`
 
@@ -1387,8 +1387,8 @@ The task-executor uses this for:
 
 Generate bundles with:
 ```bash
-python3 scripts/bundle.py generate T001       # Single task
-python3 scripts/bundle.py generate-ready      # All ready tasks
+tasker bundle generate T001       # Single task
+tasker bundle generate-ready      # All ready tasks
 ```
 
 ## Execute Options
@@ -1405,7 +1405,7 @@ python3 scripts/bundle.py generate-ready      # All ready tasks
 After all tasks complete successfully, run the compliance check to verify the implementation matches the spec:
 
 ```bash
-python3 scripts/compliance-check.py all \
+tasker compliance-check all \
     --spec $PLANNING_DIR/inputs/spec.md \
     --target $TARGET_DIR
 ```
@@ -1442,7 +1442,7 @@ If compliance check finds critical gaps:
 3. **For fixable gaps**, create ad-hoc tasks:
    ```bash
    # Example: Missing database constraint
-   python3 scripts/state.py create-task \
+   tasker state create-task \
        --name "Add hook_run_unique constraint" \
        --type constraint \
        --files "alembic/versions/xxx_add_constraint.py"
@@ -1460,7 +1460,7 @@ After all tasks complete, generate the execution coverage report:
 
 ```bash
 # Generate execute phase coverage report with verification evidence
-python3 scripts/fsm-validate.py execute-coverage-report \
+tasker fsm validate execute-coverage-report \
     {PLANNING_DIR}/artifacts/fsm/index.json \
     {PLANNING_DIR}/bundles \
     --output {PLANNING_DIR}/artifacts/fsm-coverage.execute.json
@@ -1480,7 +1480,7 @@ After execution completes (all tasks done or halted), archive execution artifact
 
 ```bash
 # Archive execution artifacts
-python3 scripts/archive.py execution {project_name}
+tasker archive execution {project_name}
 ```
 
 This creates:
@@ -1502,19 +1502,19 @@ The archive preserves:
 
 ```bash
 # Archive planning artifacts
-python3 scripts/archive.py planning {project_name}
+tasker archive planning {project_name}
 
 # Archive execution artifacts
-python3 scripts/archive.py execution {project_name}
+tasker archive execution {project_name}
 
 # List all archives
-python3 scripts/archive.py list
+tasker archive list
 
 # List archives for specific project
-python3 scripts/archive.py list --project {project_name}
+tasker archive list --project {project_name}
 
 # Restore planning state from archive
-python3 scripts/archive.py restore {archive_id} --project {project_name}
+tasker archive restore {archive_id} --project {project_name}
 ```
 
 ---
@@ -1523,47 +1523,47 @@ python3 scripts/archive.py restore {archive_id} --project {project_name}
 
 ```bash
 # General
-python3 scripts/state.py status          # Current phase, task counts
-python3 scripts/state.py advance         # Try to advance phase
+tasker state status          # Current phase, task counts
+tasker state advance         # Try to advance phase
 
 # Planning
-python3 scripts/state.py init <dir>      # Initialize new plan
-python3 scripts/state.py validate <art>  # Validate artifact
-python3 scripts/state.py validate-tasks <verdict> [summary] [--issues ...]
+tasker state init <dir>      # Initialize new plan
+tasker state validate <art>  # Validate artifact
+tasker state validate-tasks <verdict> [summary] [--issues ...]
                                          # Register task validation result
 
 # Execution
-python3 scripts/state.py ready-tasks     # List ready tasks
-python3 scripts/state.py start-task <id> # Mark running
-python3 scripts/state.py complete-task <id>  # Mark done
-python3 scripts/state.py fail-task <id> <e>  # Mark failed
-python3 scripts/state.py load-tasks      # Reload from files
+tasker state ready-tasks     # List ready tasks
+tasker state start-task <id> # Mark running
+tasker state complete-task <id>  # Mark done
+tasker state fail-task <id> <e>  # Mark failed
+tasker state load-tasks      # Reload from files
 
 # Halt / Resume
-python3 scripts/state.py halt [reason]   # Request graceful halt
-python3 scripts/state.py check-halt      # Check if halted (exit 1 = halted)
-python3 scripts/state.py confirm-halt    # Confirm halt completed
-python3 scripts/state.py halt-status     # Show halt status
-python3 scripts/state.py resume          # Clear halt, resume execution
+tasker state halt [reason]   # Request graceful halt
+tasker state check-halt      # Check if halted (exit 1 = halted)
+tasker state confirm-halt    # Confirm halt completed
+tasker state halt-status     # Show halt status
+tasker state resume          # Clear halt, resume execution
 
 # Checkpoint (Crash Recovery)
-python3 scripts/state.py checkpoint create <t1> [t2 ...]  # Create batch checkpoint
-python3 scripts/state.py checkpoint update <id> <status>  # Update task (success|failed)
-python3 scripts/state.py checkpoint complete              # Mark batch done
-python3 scripts/state.py checkpoint status                # Show current checkpoint
-python3 scripts/state.py checkpoint recover               # Recover orphaned tasks
-python3 scripts/state.py checkpoint clear                 # Remove checkpoint
+tasker state checkpoint create <t1> [t2 ...]  # Create batch checkpoint
+tasker state checkpoint update <id> <status>  # Update task (success|failed)
+tasker state checkpoint complete              # Mark batch done
+tasker state checkpoint status                # Show current checkpoint
+tasker state checkpoint recover               # Recover orphaned tasks
+tasker state checkpoint clear                 # Remove checkpoint
 
 # Bundles
-python3 scripts/bundle.py generate <id>   # Generate bundle for task
-python3 scripts/bundle.py generate-ready  # Generate all ready bundles
-python3 scripts/bundle.py validate <id>   # Validate bundle against schema
-python3 scripts/bundle.py validate-integrity <id>  # Check deps + checksums
-python3 scripts/bundle.py list            # List existing bundles
-python3 scripts/bundle.py clean           # Remove all bundles
+tasker bundle generate <id>   # Generate bundle for task
+tasker bundle generate-ready  # Generate all ready bundles
+tasker bundle validate <id>   # Validate bundle against schema
+tasker bundle validate-integrity <id>  # Check deps + checksums
+tasker bundle list            # List existing bundles
+tasker bundle clean           # Remove all bundles
 
 # Observability
-python3 scripts/state.py log-tokens <s> <i> <o> <c>  # Log usage
+tasker state log-tokens <s> <i> <o> <c>  # Log usage
 ```
 
 ---

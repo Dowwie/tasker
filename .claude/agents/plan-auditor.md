@@ -94,7 +94,7 @@ Update existing task files with:
 Create summary:
 ```bash
 echo "Phase assignments complete"
-cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks  # Reload with new phases
+cd {PLANNING_DIR}/.. && tasker state load-tasks  # Reload with new phases
 ```
 
 ## Checklist
@@ -105,4 +105,4 @@ Before declaring done:
 - [ ] No circular dependencies
 - [ ] Steel thread tasks identified
 - [ ] Backward pass validates (deps in earlier phases)
-- [ ] Run: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks` (verify success)
+- [ ] Run: `cd {PLANNING_DIR}/.. && tasker state load-tasks` (verify success)

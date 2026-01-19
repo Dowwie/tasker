@@ -102,7 +102,7 @@ The `spec-review.py`, `spec-generate.py`, and `spec-session.py` scripts handle s
 - Session state format unchanged
 
 ### 5. Port Utility Scripts
-Port remaining Python scripts: bundle.py, archive.py, dashboard.py, status.py, evaluate.py, compliance-check.py, install_work_command.py.
+Port remaining Python scripts: bundle.py, archive.py, dashboard.py, status.py, evaluate.py, compliance-check.py.
 
 1. Port bundle generation (task execution bundles)
 2. Port archive functionality

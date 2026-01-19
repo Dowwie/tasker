@@ -2,10 +2,10 @@
 description: Generate an evaluation report showing how well tasker performed the current job
 ---
 
-Run the evaluate script to generate a comprehensive performance report:
+Run the evaluate command to generate a comprehensive performance report:
 
 ```bash
-python3 scripts/evaluate.py
+tasker evaluate
 ```
 
 If the user requests JSON output, use `--format json`. If they request just metrics without the full report, use `--metrics-only`.

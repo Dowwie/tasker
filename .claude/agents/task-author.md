@@ -23,7 +23,7 @@ You MUST write individual JSON files to `{PLANNING_DIR}/tasks/`:
 1. You MUST use the Write tool to save each file. Do NOT just output JSON to the conversation.
 2. You MUST use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.
 3. You MUST verify files exist after writing by running: `ls -la {PLANNING_DIR}/tasks/` (should show T001.json, etc.)
-4. You MUST run load-tasks: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks`
+4. You MUST run load-tasks: `cd {PLANNING_DIR}/.. && tasker state load-tasks`
 
 If no task files exist after Write, you have FAILED. Try again.**
 
@@ -35,7 +35,7 @@ If no task files exist after Write, you have FAILED. Try again.**
 
 2. **After creating ALL tasks**, register them:
    ```bash
-   cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks
+   cd {PLANNING_DIR}/.. && tasker state load-tasks
    ```
 
 3. **If load-tasks fails**: Read the error, fix the offending JSON files, run again
@@ -183,4 +183,4 @@ Before declaring done:
 - [ ] Every acceptance criterion has verification command
 - [ ] Dependencies are explicit
 - [ ] **Files written** using Write tool to `{PLANNING_DIR}/tasks/T*.json` (absolute paths!)
-- [ ] Run: `cd {PLANNING_DIR}/.. && python3 scripts/state.py load-tasks` to register (and verify success)
+- [ ] Run: `cd {PLANNING_DIR}/.. && tasker state load-tasks` to register (and verify success)

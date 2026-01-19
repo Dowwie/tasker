@@ -68,7 +68,11 @@ from typing import NoReturn
 # Commands supported by the Go binary
 GO_SUPPORTED_COMMANDS = {
     "init", "status", "start-task", "complete-task", "fail-task",
-    "retry-task", "skip-task", "ready-tasks"
+    "retry-task", "skip-task", "ready-tasks", "advance", "load-tasks",
+    "validate", "validate-tasks", "halt", "check-halt", "resume",
+    "halt-status", "metrics", "planning-metrics", "failure-metrics",
+    "log-tokens", "record-verification", "record-calibration",
+    "calibration-score", "checkpoint"
 }
 
 
@@ -111,6 +115,22 @@ def _translate_args_to_go(args: list[str]) -> list[str]:
         "ready-tasks": ["state", "ready"],
         "init": ["state", "init"],
         "status": ["state", "status"],
+        "advance": ["state", "advance"],
+        "load-tasks": ["state", "load-tasks"],
+        "validate": ["state", "validate"],
+        "validate-tasks": ["state", "validate-tasks"],
+        "halt": ["state", "halt"],
+        "check-halt": ["state", "check-halt"],
+        "resume": ["state", "resume"],
+        "halt-status": ["state", "halt-status"],
+        "metrics": ["state", "metrics"],
+        "planning-metrics": ["state", "planning-metrics"],
+        "failure-metrics": ["state", "failure-metrics"],
+        "log-tokens": ["state", "log-tokens"],
+        "record-verification": ["state", "record-verification"],
+        "record-calibration": ["state", "record-calibration"],
+        "calibration-score": ["state", "calibration-score"],
+        "checkpoint": ["state", "checkpoint"],
     }
 
     if cmd in translations:

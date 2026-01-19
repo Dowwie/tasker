@@ -40,7 +40,7 @@ You MUST produce two artifacts:
 Run the weakness detection and checklist verification:
 
 ```bash
-python3 scripts/spec-review.py analyze {PLANNING_DIR}/inputs/spec.md > {PLANNING_DIR}/artifacts/spec-review.json
+tasker spec review analyze {PLANNING_DIR}/inputs/spec.md > {PLANNING_DIR}/artifacts/spec-review.json
 ```
 
 This outputs JSON with:
@@ -54,7 +54,7 @@ This outputs JSON with:
 View the completeness checklist:
 
 ```bash
-python3 scripts/spec-review.py checklist {PLANNING_DIR}
+tasker spec review checklist {PLANNING_DIR}
 ```
 
 This shows which spec areas are complete, partial, or missing.
@@ -64,7 +64,7 @@ This shows which spec areas are complete, partial, or missing.
 List unresolved critical items:
 
 ```bash
-python3 scripts/spec-review.py unresolved {PLANNING_DIR}
+tasker spec review unresolved {PLANNING_DIR}
 ```
 
 Categorize by severity:
@@ -149,19 +149,19 @@ Use the add-resolution command to persist each resolution:
 
 ```bash
 # Record that DDL constraint is mandatory
-python3 scripts/spec-review.py add-resolution {PLANNING_DIR} W1-001 mandatory --notes "DB-level constraint required"
+tasker spec review add-resolution {PLANNING_DIR} W1-001 mandatory --notes "DB-level constraint required"
 
 # Record that a checklist gap is not applicable
-python3 scripts/spec-review.py add-resolution {PLANNING_DIR} CK-C7.1 not_applicable --notes "Internal service, no auth needed"
+tasker spec review add-resolution {PLANNING_DIR} CK-C7.1 not_applicable --notes "Internal service, no auth needed"
 
 # Record clarification from user
-python3 scripts/spec-review.py add-resolution {PLANNING_DIR} W6-001 clarified --notes "Section 11.1 is authoritative, cancelled status removed"
+tasker spec review add-resolution {PLANNING_DIR} W6-001 clarified --notes "Section 11.1 is authoritative, cancelled status removed"
 
 # Record ambiguity clarification with specific value
-python3 scripts/spec-review.py add-resolution {PLANNING_DIR} W7-003 clarified --notes "Retry count: 3 attempts with exponential backoff (1s, 2s, 4s)"
+tasker spec review add-resolution {PLANNING_DIR} W7-003 clarified --notes "Retry count: 3 attempts with exponential backoff (1s, 2s, 4s)"
 
 # Record that ambiguous term is not a hard requirement
-python3 scripts/spec-review.py add-resolution {PLANNING_DIR} W7-005 optional --notes "Caching is optional optimization, not required"
+tasker spec review add-resolution {PLANNING_DIR} W7-005 optional --notes "Caching is optional optimization, not required"
 ```
 
 Resolution types:
@@ -197,7 +197,7 @@ Ready to proceed to capability extraction (Phase 1).
 Run status check:
 
 ```bash
-python3 scripts/spec-review.py status {PLANNING_DIR}
+tasker spec review status {PLANNING_DIR}
 ```
 
 - If **BLOCKED**: Critical weaknesses remain. Do NOT proceed.
@@ -238,7 +238,7 @@ python3 scripts/spec-review.py status {PLANNING_DIR}
 ### 1. Run Analysis
 
 ```bash
-$ python3 scripts/spec-review.py analyze /path/to/planning/inputs/spec.md
+$ tasker spec review analyze /path/to/planning/inputs/spec.md
 {
   "version": "1.0",
   "weaknesses": [
@@ -333,5 +333,5 @@ When spec review is complete and ready to proceed:
 
 1. Verify `spec-review.json` exists and is valid
 2. Verify `spec-resolutions.json` exists if any critical weaknesses were found
-3. Run `python3 scripts/spec-review.py status {PLANNING_DIR}` - must return exit code 0
+3. Run `tasker spec review status {PLANNING_DIR}` - must return exit code 0
 4. Report: "Phase 0 complete. Spec review passed. Ready for capability extraction."
