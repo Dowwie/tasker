@@ -13,11 +13,8 @@ var (
 
 var RootCmd = &cobra.Command{
 	Use:   "tasker",
-	Short: "Task decomposition and execution management",
-	Long: `Tasker is a CLI for managing task decomposition workflows.
-
-It provides commands for state management, task lifecycle operations,
-and planning validation.`,
+	Short: "Agentic Engineering CLI",
+	Long: `Tasker CLI manages the deterministic capabilities associated with Tasker's agentic development pipeline.  It is not intended for manual usage.`,
 }
 
 func init() {

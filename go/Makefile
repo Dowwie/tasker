@@ -1,4 +1,4 @@
-.PHONY: build test lint clean cross-compile help
+.PHONY: build build-all test lint clean cross-compile help
 
 BINARY_NAME := tasker
 BUILD_DIR := ./bin
@@ -10,7 +10,7 @@ BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 LDFLAGS := -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)"
 
-PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64
+PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64
 
 help:
 	@echo "Available targets:"
@@ -23,6 +23,13 @@ help:
 build:
 	@mkdir -p $(BUILD_DIR)
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
+
+build-all:
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -trimpath -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(CMD_PATH)
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -trimpath -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 $(CMD_PATH)
+	CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build $(LDFLAGS) -trimpath -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(CMD_PATH)
+	CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build $(LDFLAGS) -trimpath -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 $(CMD_PATH)
 
 test:
 	go test -json -race -cover -coverprofile=coverage.out ./... | tparse -progress
