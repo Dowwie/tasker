@@ -2,13 +2,12 @@
   "name": "tasker",
   "version": "0.1.0",
   "description": "Spec-Driven Development: specifications compiled into executable, verifiable behavior",
-  "author": "Dowwie",
+  "author": {
+    "name": "Dowwie",
+    "url": "https://github.com/Dowwie"
+  },
   "homepage": "https://github.com/Dowwie/tasker",
   "repository": "https://github.com/Dowwie/tasker",
   "license": "MIT",
-  "keywords": ["spec-driven-development", "workflow", "agents", "planning", "execution"],
-  "commands": ["./commands/"],
-  "agents": ["./agents/"],
-  "skills": ["./skills/"],
-  "hooks": "./hooks/hooks.json"
+  "keywords": ["spec-driven-development", "workflow", "agents", "planning", "execution"]
 }
