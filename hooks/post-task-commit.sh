@@ -14,7 +14,14 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TASKER_BIN="${TASKER_BINARY:-$SCRIPT_DIR/../../go/bin/tasker}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
+# Get tasker binary path (fast if already installed)
+if [[ -z "${TASKER_BINARY:-}" ]]; then
+    TASKER_BIN=$("$PLUGIN_ROOT/scripts/ensure-tasker.sh" 2>/dev/null) || exit 0
+else
+    TASKER_BIN="$TASKER_BINARY"
+fi
 
 # Determine mode based on arguments
 if [[ $# -ge 3 ]]; then
