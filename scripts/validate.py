@@ -15,7 +15,6 @@ Usage:
     validate.py steel-thread             Validate steel thread path
     validate.py verification-commands    Check verification command syntax
     validate.py calibration              Compute verifier calibration metrics
-    validate.py rollback <task_id>       Validate rollback integrity
     validate.py all                      Run all validations
 
 Planning Gates:
@@ -40,7 +39,19 @@ from pathlib import Path
 # SHIM LAYER - Forward to Go binary if available
 # =============================================================================
 
-GO_SUPPORTED_COMMANDS = {"dag", "steel-thread", "gates"}
+GO_SUPPORTED_COMMANDS = {
+    "dag",
+    "steel-thread",
+    "gates",
+    "spec-coverage",
+    "phase-leakage",
+    "dependency-existence",
+    "acceptance-criteria",
+    "planning-gates",
+    "verification-commands",
+    "all",
+    "refactor-priority",
+}
 
 
 def _find_go_binary() -> str | None:
@@ -77,6 +88,14 @@ def _translate_args_to_go(args: list[str]) -> list[str]:
         "dag": ["validate", "dag"],
         "steel-thread": ["validate", "steel-thread"],
         "gates": ["validate", "gates"],
+        "spec-coverage": ["validate", "spec-coverage"],
+        "phase-leakage": ["validate", "phase-leakage"],
+        "dependency-existence": ["validate", "dependency-existence"],
+        "acceptance-criteria": ["validate", "acceptance-criteria"],
+        "planning-gates": ["validate", "planning-gates"],
+        "verification-commands": ["validate", "verification-commands"],
+        "all": ["validate", "all"],
+        "refactor-priority": ["validate", "refactor-priority"],
     }
 
     if cmd in translations:
@@ -410,75 +429,6 @@ def get_calibration_report(state: dict) -> str:
             lines.append(f"  {fn['task_id']}: {fn['verdict']}")
 
     return "\n".join(lines)
-
-
-# =============================================================================
-# ROLLBACK INTEGRITY VALIDATION
-# =============================================================================
-
-
-def prepare_rollback_checksums(
-    target_dir: Path, files_to_modify: list[str]
-) -> dict[str, str]:
-    """Compute checksums for files before modification.
-
-    Args:
-        target_dir: Base directory of target project
-        files_to_modify: List of relative file paths
-
-    Returns:
-        Dict mapping file path to checksum (empty string for new files)
-    """
-    checksums = {}
-    for file_path in files_to_modify:
-        full_path = target_dir / file_path
-        checksums[file_path] = file_checksum(full_path)
-    return checksums
-
-
-def verify_rollback_integrity(
-    target_dir: Path,
-    original_checksums: dict[str, str],
-    files_created: list[str],
-    files_modified: list[str],
-) -> tuple[bool, list[str]]:
-    """Verify rollback restored files to original state.
-
-    Args:
-        target_dir: Base directory of target project
-        original_checksums: Checksums before task execution
-        files_created: Files that should have been deleted
-        files_modified: Files that should have been restored
-
-    Returns:
-        (success, issues) tuple
-    """
-    issues = []
-
-    # Check created files were deleted
-    for file_path in files_created:
-        full_path = target_dir / file_path
-        if full_path.exists():
-            issues.append(f"Created file not deleted: {file_path}")
-
-    # Check modified files were restored
-    for file_path in files_modified:
-        full_path = target_dir / file_path
-        original = original_checksums.get(file_path, "")
-
-        if not original:
-            # File didn't exist before, should not exist now
-            if full_path.exists():
-                issues.append(f"File should not exist after rollback: {file_path}")
-        else:
-            current = file_checksum(full_path)
-            if current != original:
-                issues.append(
-                    f"File not restored to original: {file_path} "
-                    f"(expected {original[:8]}..., got {current[:8]}...)"
-                )
-
-    return len(issues) == 0, issues
 
 
 # =============================================================================
@@ -1109,20 +1059,6 @@ def main() -> None:
     elif cmd == "calibration":
         report = get_calibration_report(state)
         print(report)
-
-    elif cmd == "rollback":
-        if len(sys.argv) < 3:
-            print("Usage: validate.py rollback <task_id>")
-            sys.exit(1)
-        task_id = sys.argv[2]
-        task = state.get("tasks", {}).get(task_id)
-        if not task:
-            print(f"Task not found: {task_id}")
-            sys.exit(1)
-        # This would need to be called with stored checksums
-        print("Rollback validation requires pre-stored checksums.")
-        print("Use prepare_rollback_checksums() before execution and")
-        print("verify_rollback_integrity() after rollback.")
 
     elif cmd == "all":
         results = run_all_validations(state)

@@ -237,7 +237,7 @@ Started: 2026-01-18
 **Requirements Discovered:**
 - REQ-034: Port all shell scripts to Go subcommands
 - REQ-035: Complete inventory of scripts to port:
-  - Python: state.py, validate.py, bundle.py, archive.py, dashboard.py, status.py, evaluate.py, compliance-check.py, spec-review.py, spec-generate.py, spec-session.py, fsm-compiler.py, fsm-mermaid.py, fsm-validate.py
+  - Python: state.py, validate.py, bundle.py, archive.py, dashboard.py, status.py, evaluate.py, spec-review.py, spec-generate.py, spec-session.py, fsm-compiler.py, fsm-mermaid.py, fsm-validate.py
   - Shell: ensure-git.sh, init-planning-dirs.sh, log-activity.sh
   - TUI module: scripts/tui/ (entire package)
 

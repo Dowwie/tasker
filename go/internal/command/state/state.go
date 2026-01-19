@@ -3,11 +3,16 @@ package state
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/dgordon/tasker/internal/command"
 	statelib "github.com/dgordon/tasker/internal/state"
 	"github.com/spf13/cobra"
 )
+
+func nowISO() string {
+	return time.Now().UTC().Format(time.RFC3339Nano)
+}
 
 // getPlanningDirFunc is a function variable for dependency injection in tests
 var getPlanningDirFunc = command.GetPlanningDir
@@ -183,6 +188,26 @@ var taskSkipCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Skipped task %s\n", taskID)
+		return nil
+	},
+}
+
+var taskCommitCmd = &cobra.Command{
+	Use:   "commit <task-id>",
+	Short: "Commit task files to git",
+	Long:  `Commits files created/modified by a completed task to git.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		taskID := args[0]
+		planningDir := getPlanningDirFunc()
+		sm := statelib.NewStateManager(planningDir)
+
+		msg, err := statelib.CommitTask(sm, taskID)
+		if err != nil {
+			return fmt.Errorf("failed to commit task: %w", err)
+		}
+
+		fmt.Printf("Task %s: %s\n", taskID, msg)
 		return nil
 	},
 }
@@ -363,6 +388,64 @@ var resumeCmd = &cobra.Command{
 		}
 
 		fmt.Println("Execution resumed")
+		return nil
+	},
+}
+
+var confirmHaltCmd = &cobra.Command{
+	Use:   "confirm-halt",
+	Short: "Confirm halt completed",
+	Long:  `Confirms that the halt has completed and all tasks have stopped.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		planningDir := getPlanningDirFunc()
+		sm := statelib.NewStateManager(planningDir)
+
+		runningTasks, err := sm.ConfirmHalt()
+		if err != nil {
+			return fmt.Errorf("failed to confirm halt: %w", err)
+		}
+
+		if len(runningTasks) > 0 {
+			fmt.Printf("Halt confirmed. Running tasks: %v\n", runningTasks)
+		} else {
+			fmt.Println("Halt confirmed. No running tasks.")
+		}
+		return nil
+	},
+}
+
+var setPhaseCmd = &cobra.Command{
+	Use:   "set-phase <phase>",
+	Short: "Set current phase",
+	Long:  `Manually sets the current workflow phase. Use with caution.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		phase := args[0]
+		planningDir := getPlanningDirFunc()
+		sm := statelib.NewStateManager(planningDir)
+
+		state, err := sm.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load state: %w", err)
+		}
+
+		oldPhase := state.Phase.Current
+		state.Phase.Current = phase
+
+		state.Events = append(state.Events, statelib.Event{
+			Timestamp: nowISO(),
+			Type:      "phase_set",
+			Details: map[string]interface{}{
+				"from": oldPhase,
+				"to":   phase,
+			},
+		})
+
+		if err := sm.Save(state); err != nil {
+			return fmt.Errorf("failed to save state: %w", err)
+		}
+
+		fmt.Printf("Phase set to: %s (was: %s)\n", phase, oldPhase)
 		return nil
 	},
 }
@@ -877,6 +960,7 @@ func init() {
 	taskCmd.AddCommand(taskFailCmd)
 	taskCmd.AddCommand(taskRetryCmd)
 	taskCmd.AddCommand(taskSkipCmd)
+	taskCmd.AddCommand(taskCommitCmd)
 
 	stateCmd.AddCommand(initCmd)
 	stateCmd.AddCommand(statusCmd)
@@ -887,8 +971,10 @@ func init() {
 	stateCmd.AddCommand(loadTasksCmd)
 	stateCmd.AddCommand(haltCmd)
 	stateCmd.AddCommand(checkHaltCmd)
+	stateCmd.AddCommand(confirmHaltCmd)
 	stateCmd.AddCommand(resumeCmd)
 	stateCmd.AddCommand(haltStatusCmd)
+	stateCmd.AddCommand(setPhaseCmd)
 	stateCmd.AddCommand(metricsCmd)
 	stateCmd.AddCommand(planningMetricsCmd)
 	stateCmd.AddCommand(failureMetricsCmd)

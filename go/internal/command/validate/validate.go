@@ -148,6 +148,429 @@ var steelThreadCmd = &cobra.Command{
 	},
 }
 
+var specCoverageThreshold float64
+
+var specCoverageCmd = &cobra.Command{
+	Use:   "spec-coverage",
+	Short: "Check spec requirement coverage",
+	Long:  `Validates that tasks cover the required percentage of spec behaviors.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		planningDir := getPlanningDirFunc()
+
+		tasks, err := validate.LoadTaskDefinitions(planningDir)
+		if err != nil {
+			return fmt.Errorf("failed to load tasks: %w", err)
+		}
+
+		capMap, err := validate.LoadCapabilityMap(planningDir)
+		if err != nil {
+			fmt.Printf("Warning: %v\n", err)
+			fmt.Println("Spec coverage validation skipped (no capability map)")
+			return nil
+		}
+
+		result := validate.CheckSpecCoverage(tasks, capMap, specCoverageThreshold)
+
+		fmt.Println("Spec Coverage Report")
+		fmt.Println(strings.Repeat("=", 40))
+		fmt.Printf("Coverage: %.1f%%\n", result.Ratio*100)
+		fmt.Printf("Threshold: %.1f%%\n", result.Threshold*100)
+		fmt.Printf("Covered: %d/%d behaviors\n", result.CoveredBehaviors, result.TotalBehaviors)
+
+		if len(result.UncoveredBehaviors) > 0 {
+			fmt.Println("\nUncovered behaviors:")
+			for _, b := range result.UncoveredBehaviors {
+				fmt.Printf("  - %s\n", b)
+			}
+		}
+
+		if len(result.CoverageByDomain) > 0 {
+			fmt.Println("\nCoverage by domain:")
+			for domain, coverage := range result.CoverageByDomain {
+				fmt.Printf("  %s: %.1f%%\n", domain, coverage*100)
+			}
+		}
+
+		if result.Passed {
+			fmt.Println("\nSpec coverage: PASS")
+			return nil
+		}
+
+		fmt.Println("\nSpec coverage: FAIL")
+		return fmt.Errorf("spec coverage %.1f%% below threshold %.1f%%", result.Ratio*100, result.Threshold*100)
+	},
+}
+
+var phaseLeakageCmd = &cobra.Command{
+	Use:   "phase-leakage",
+	Short: "Detect Phase 2+ content in Phase 1 tasks",
+	Long:  `Validates that Phase 1 tasks don't contain content that belongs in later phases.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		planningDir := getPlanningDirFunc()
+
+		tasks, err := validate.LoadTaskDefinitions(planningDir)
+		if err != nil {
+			return fmt.Errorf("failed to load tasks: %w", err)
+		}
+
+		result := validate.DetectPhaseLeakage(tasks, 1, nil)
+
+		if result.Passed {
+			fmt.Println("No phase leakage detected")
+			return nil
+		}
+
+		fmt.Println("Phase leakage violations:")
+		for _, v := range result.Violations {
+			fmt.Printf("  %s: %s\n", v.TaskID, v.Behavior)
+			fmt.Printf("    Evidence: %s\n", v.Evidence)
+		}
+
+		return fmt.Errorf("phase leakage detected: %d violation(s)", len(result.Violations))
+	},
+}
+
+var dependencyExistenceCmd = &cobra.Command{
+	Use:   "dependency-existence",
+	Short: "Verify all task dependencies exist",
+	Long:  `Validates that all declared task dependencies reference existing tasks.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		planningDir := getPlanningDirFunc()
+
+		tasks, err := loadTasksForValidation(planningDir)
+		if err != nil {
+			return fmt.Errorf("failed to load tasks: %w", err)
+		}
+
+		missingErrs := validate.CheckDependencyExistence(tasks)
+
+		if len(missingErrs) == 0 {
+			fmt.Println("All dependencies exist")
+			return nil
+		}
+
+		fmt.Println("Missing dependency violations:")
+		for _, e := range missingErrs {
+			fmt.Printf("  %s: depends on non-existent %v\n", e.TaskID, e.MissingDeps)
+		}
+
+		return fmt.Errorf("missing dependencies: %d task(s) reference non-existent dependencies", len(missingErrs))
+	},
+}
+
+var acceptanceCriteriaCmd = &cobra.Command{
+	Use:   "acceptance-criteria",
+	Short: "Check acceptance criteria quality",
+	Long:  `Validates that acceptance criteria are specific, measurable, and have valid verification commands.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		planningDir := getPlanningDirFunc()
+
+		tasks, err := validate.LoadTaskDefinitions(planningDir)
+		if err != nil {
+			return fmt.Errorf("failed to load tasks: %w", err)
+		}
+
+		result := validate.ValidateAcceptanceCriteria(tasks)
+
+		if result.Passed {
+			fmt.Println("All acceptance criteria meet quality standards")
+			return nil
+		}
+
+		fmt.Println("Acceptance criteria quality issues:")
+		for _, issue := range result.Issues {
+			if issue.CriterionIndex >= 0 {
+				fmt.Printf("  %s criterion %d: %s\n", issue.TaskID, issue.CriterionIndex, issue.Issue)
+			} else {
+				fmt.Printf("  %s: %s\n", issue.TaskID, issue.Issue)
+			}
+		}
+
+		return fmt.Errorf("acceptance criteria quality issues: %d problem(s)", len(result.Issues))
+	},
+}
+
+var planningGatesThreshold float64
+
+var verificationCommandsCmd = &cobra.Command{
+	Use:   "verification-commands",
+	Short: "Validate verification command syntax",
+	Long:  `Validates that verification commands in acceptance criteria are parseable and use recognized tools.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		planningDir := getPlanningDirFunc()
+
+		tasks, err := validate.LoadTaskDefinitions(planningDir)
+		if err != nil {
+			return fmt.Errorf("failed to load tasks: %w", err)
+		}
+
+		result := validate.ValidateAcceptanceCriteria(tasks)
+
+		verificationIssues := []validate.ACQualityIssue{}
+		for _, issue := range result.Issues {
+			if strings.Contains(issue.Issue, "verification") || strings.Contains(issue.Issue, "Verification") {
+				verificationIssues = append(verificationIssues, issue)
+			}
+		}
+
+		if len(verificationIssues) == 0 {
+			fmt.Println("All verification commands are valid")
+			return nil
+		}
+
+		fmt.Println("Verification command issues:")
+		for _, issue := range verificationIssues {
+			if issue.CriterionIndex >= 0 {
+				fmt.Printf("  %s criterion %d: %s\n", issue.TaskID, issue.CriterionIndex, issue.Issue)
+			} else {
+				fmt.Printf("  %s: %s\n", issue.TaskID, issue.Issue)
+			}
+		}
+
+		return fmt.Errorf("verification command issues: %d problem(s)", len(verificationIssues))
+	},
+}
+
+var allCmd = &cobra.Command{
+	Use:   "all",
+	Short: "Run all validations",
+	Long:  `Runs all validation checks: DAG, steel thread, spec coverage, phase leakage, dependency existence, and acceptance criteria.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		planningDir := getPlanningDirFunc()
+
+		fmt.Println("Running all validations...")
+		fmt.Println(strings.Repeat("=", 60))
+		fmt.Println()
+
+		allPassed := true
+
+		tasks, err := loadTasksForValidation(planningDir)
+		if err != nil {
+			fmt.Printf("DAG Validation: SKIP (failed to load tasks: %v)\n", err)
+		} else {
+			dagResult := validate.ValidateDAG(tasks)
+			if dagResult.Valid {
+				fmt.Println("DAG Validation: PASS")
+			} else {
+				fmt.Println("DAG Validation: FAIL")
+				for _, e := range dagResult.Errors {
+					fmt.Printf("  - %s\n", e.Error())
+				}
+				allPassed = false
+			}
+		}
+		fmt.Println()
+
+		tasks2, _ := loadTasksForValidation(planningDir)
+		steelThreadTasks := make([]string, 0)
+		for _, task := range tasks2 {
+			if task.SteelThread {
+				steelThreadTasks = append(steelThreadTasks, task.ID)
+			}
+		}
+		if len(steelThreadTasks) == 0 {
+			fmt.Println("Steel Thread Validation: SKIP (no steel thread tasks)")
+		} else {
+			stErr := validate.ValidateSteelThread(tasks2)
+			if stErr == nil {
+				fmt.Println("Steel Thread Validation: PASS")
+			} else {
+				fmt.Println("Steel Thread Validation: FAIL")
+				fmt.Printf("  - %s\n", stErr.Message)
+				allPassed = false
+			}
+		}
+		fmt.Println()
+
+		result, err := validate.RunAllGates(planningDir, 1, 0.9)
+		if err != nil {
+			fmt.Printf("Planning Gates: ERROR (%v)\n", err)
+		} else {
+			for _, gate := range result.Gates {
+				status := "PASS"
+				if !gate.Passed {
+					status = "FAIL"
+					allPassed = false
+				}
+				gateName := strings.ReplaceAll(gate.Name, "_", " ")
+				fmt.Printf("%s: %s\n", gateName, status)
+			}
+		}
+		fmt.Println()
+
+		fmt.Println(strings.Repeat("-", 60))
+		if allPassed {
+			fmt.Println("All validations PASSED")
+			return nil
+		}
+
+		fmt.Println("Some validations FAILED")
+		return fmt.Errorf("validation failed")
+	},
+}
+
+var refactorPriorityCmd = &cobra.Command{
+	Use:   "refactor-priority",
+	Short: "Show refactor override resolution",
+	Long:  `Shows how refactor tasks override original spec requirements.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		planningDir := getPlanningDirFunc()
+		tasksDir := filepath.Join(planningDir, "tasks")
+
+		entries, err := os.ReadDir(tasksDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("No tasks directory found")
+				return nil
+			}
+			return fmt.Errorf("failed to read tasks directory: %w", err)
+		}
+
+		type override struct {
+			TaskID     string   `json:"task_id"`
+			Supersedes []string `json:"supersedes"`
+			Directive  string   `json:"directive"`
+		}
+
+		var overrides []override
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+				continue
+			}
+
+			taskPath := filepath.Join(tasksDir, entry.Name())
+			data, err := os.ReadFile(taskPath)
+			if err != nil {
+				continue
+			}
+
+			var task map[string]interface{}
+			if err := json.Unmarshal(data, &task); err != nil {
+				continue
+			}
+
+			taskType, _ := task["task_type"].(string)
+			if taskType != "refactor" {
+				continue
+			}
+
+			taskID, _ := task["id"].(string)
+			refactorCtx, ok := task["refactor_context"].(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			var supersedes []string
+			if sections, ok := refactorCtx["original_spec_sections"].([]interface{}); ok {
+				for _, s := range sections {
+					if str, ok := s.(string); ok {
+						supersedes = append(supersedes, str)
+					}
+				}
+			}
+
+			directive, _ := refactorCtx["refactor_directive"].(string)
+
+			overrides = append(overrides, override{
+				TaskID:     taskID,
+				Supersedes: supersedes,
+				Directive:  directive,
+			})
+		}
+
+		fmt.Println("Refactor Priority Resolution")
+		fmt.Println(strings.Repeat("=", 40))
+		fmt.Printf("Refactor overrides: %d\n", len(overrides))
+
+		if len(overrides) > 0 {
+			fmt.Println("\nOverrides:")
+			for _, o := range overrides {
+				fmt.Printf("  %s: supersedes %v\n", o.TaskID, o.Supersedes)
+				if o.Directive != "" {
+					directive := o.Directive
+					if len(directive) > 60 {
+						directive = directive[:60] + "..."
+					}
+					fmt.Printf("    Directive: %s\n", directive)
+				}
+			}
+		}
+
+		return nil
+	},
+}
+
+var planningGatesCmd = &cobra.Command{
+	Use:   "planning-gates",
+	Short: "Run all planning validation gates",
+	Long:  `Runs all planning validation gates: spec coverage, phase leakage, dependency existence, and acceptance criteria.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		planningDir := getPlanningDirFunc()
+
+		result, err := validate.RunAllGates(planningDir, 1, planningGatesThreshold)
+		if err != nil {
+			return fmt.Errorf("failed to run planning gates: %w", err)
+		}
+
+		fmt.Println("Planning Gates Report")
+		fmt.Println(strings.Repeat("=", 40))
+		fmt.Println()
+
+		if result.SpecCoverage != nil {
+			status := "FAIL"
+			if result.SpecCoverage.Passed {
+				status = "PASS"
+			}
+			fmt.Printf("Spec Coverage: %s\n", status)
+			fmt.Printf("  Coverage: %.1f%%\n", result.SpecCoverage.Ratio*100)
+		}
+		fmt.Println()
+
+		if result.PhaseLeakage != nil {
+			status := "FAIL"
+			if result.PhaseLeakage.Passed {
+				status = "PASS"
+			}
+			fmt.Printf("Phase Leakage: %s\n", status)
+			if len(result.PhaseLeakage.Violations) > 0 {
+				fmt.Printf("  Violations: %d\n", len(result.PhaseLeakage.Violations))
+			}
+		}
+		fmt.Println()
+
+		if result.ACValidation != nil {
+			status := "FAIL"
+			if result.ACValidation.Passed {
+				status = "PASS"
+			}
+			fmt.Printf("Acceptance Criteria: %s\n", status)
+			if len(result.ACValidation.Issues) > 0 {
+				fmt.Printf("  Issues: %d\n", len(result.ACValidation.Issues))
+			}
+		}
+		fmt.Println()
+
+		fmt.Println(strings.Repeat("-", 40))
+		if result.Passed {
+			fmt.Println("All planning gates PASSED")
+			return nil
+		}
+
+		fmt.Println("Planning gates BLOCKED:")
+		for _, gate := range result.Gates {
+			if !gate.Passed {
+				fmt.Printf("  - %s", gate.Name)
+				if gate.Error != "" {
+					fmt.Printf(": %s", gate.Error)
+				}
+				fmt.Println()
+			}
+		}
+
+		return fmt.Errorf("planning gates failed")
+	},
+}
+
 type taskDefinition struct {
 	ID          string   `json:"id"`
 	DependsOn   []string `json:"depends_on,omitempty"`
@@ -211,9 +634,20 @@ func filterSteelThread(tasks map[string]validate.Task) map[string]validate.Task 
 }
 
 func init() {
+	specCoverageCmd.Flags().Float64Var(&specCoverageThreshold, "threshold", 0.9, "Minimum coverage threshold (0.0-1.0)")
+	planningGatesCmd.Flags().Float64Var(&planningGatesThreshold, "threshold", 0.9, "Minimum spec coverage threshold (0.0-1.0)")
+
 	validateCmd.AddCommand(dagCmd)
 	validateCmd.AddCommand(gatesCmd)
 	validateCmd.AddCommand(steelThreadCmd)
+	validateCmd.AddCommand(specCoverageCmd)
+	validateCmd.AddCommand(phaseLeakageCmd)
+	validateCmd.AddCommand(dependencyExistenceCmd)
+	validateCmd.AddCommand(acceptanceCriteriaCmd)
+	validateCmd.AddCommand(planningGatesCmd)
+	validateCmd.AddCommand(verificationCommandsCmd)
+	validateCmd.AddCommand(allCmd)
+	validateCmd.AddCommand(refactorPriorityCmd)
 
 	command.RootCmd.AddCommand(validateCmd)
 }

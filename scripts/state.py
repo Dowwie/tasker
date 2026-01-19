@@ -37,10 +37,6 @@ Usage:
                                           Compute spec requirement coverage by tasks
     state.py failure-metrics [--format text|json]
                                           Show failure classification breakdown
-    state.py prepare-rollback <task_id> <file1> [file2 ...]
-                                          Prepare rollback data before task execution
-    state.py verify-rollback <task_id> [--created f1] [--modified f2]
-                                          Verify rollback restored files correctly
     state.py record-calibration <task_id> <outcome> [notes]
                                           Record verifier calibration data
     state.py calibration-score            Show verifier calibration metrics
@@ -72,7 +68,7 @@ GO_SUPPORTED_COMMANDS = {
     "validate", "validate-tasks", "halt", "check-halt", "resume",
     "halt-status", "metrics", "planning-metrics", "failure-metrics",
     "log-tokens", "record-verification", "record-calibration",
-    "calibration-score", "checkpoint"
+    "calibration-score", "checkpoint", "commit-task"
 }
 
 
@@ -112,6 +108,7 @@ def _translate_args_to_go(args: list[str]) -> list[str]:
         "fail-task": ["state", "task", "fail"],
         "retry-task": ["state", "task", "retry"],
         "skip-task": ["state", "task", "skip"],
+        "commit-task": ["state", "task", "commit"],
         "ready-tasks": ["state", "ready"],
         "init": ["state", "init"],
         "status": ["state", "status"],
@@ -939,120 +936,6 @@ def record_verification(
             })
 
     return True, f"Verification recorded for {task_id}: {verdict} ({recommendation})"
-
-
-def prepare_rollback(state: dict, task_id: str, files_to_modify: list[str]) -> dict:
-    """Prepare rollback data before task execution.
-
-    Computes checksums for existing files that will be modified,
-    enabling restoration if the task fails.
-
-    Args:
-        state: Current state dict
-        task_id: Task being executed
-        files_to_modify: List of relative file paths that may be modified
-
-    Returns:
-        Dict with rollback data (file checksums, timestamps)
-    """
-    target_dir = Path(state.get("target_dir", "."))
-
-    rollback_data = {
-        "task_id": task_id,
-        "prepared_at": now_iso(),
-        "target_dir": str(target_dir),
-        "file_checksums": {},
-        "file_existed": {},
-    }
-
-    for file_path in files_to_modify:
-        full_path = target_dir / file_path
-        if full_path.exists():
-            rollback_data["file_checksums"][file_path] = hashlib.sha256(
-                full_path.read_bytes()
-            ).hexdigest()
-            rollback_data["file_existed"][file_path] = True
-        else:
-            rollback_data["file_checksums"][file_path] = ""
-            rollback_data["file_existed"][file_path] = False
-
-    # Store in state for this task
-    if task_id in state["tasks"]:
-        state["tasks"][task_id]["rollback_data"] = rollback_data
-
-    add_event(state, "rollback_prepared", task_id=task_id, details={
-        "file_count": len(files_to_modify),
-    })
-
-    return rollback_data
-
-
-def verify_rollback(
-    state: dict,
-    task_id: str,
-    files_created: list[str],
-    files_modified: list[str],
-) -> tuple[bool, list[str]]:
-    """Verify rollback restored files to original state.
-
-    Args:
-        state: Current state dict
-        task_id: Task that was rolled back
-        files_created: Files that should have been deleted
-        files_modified: Files that should have been restored
-
-    Returns:
-        (success, issues) tuple
-    """
-    if task_id not in state["tasks"]:
-        return False, [f"Task not found: {task_id}"]
-
-    task = state["tasks"][task_id]
-    rollback_data = task.get("rollback_data", {})
-
-    if not rollback_data:
-        return False, ["No rollback data found for task"]
-
-    target_dir = Path(rollback_data.get("target_dir", state.get("target_dir", ".")))
-    original_checksums = rollback_data.get("file_checksums", {})
-    file_existed = rollback_data.get("file_existed", {})
-
-    issues = []
-
-    # Check created files were deleted
-    for file_path in files_created:
-        full_path = target_dir / file_path
-        if full_path.exists():
-            issues.append(f"Created file not deleted: {file_path}")
-
-    # Check modified files were restored
-    for file_path in files_modified:
-        full_path = target_dir / file_path
-        original = original_checksums.get(file_path, "")
-        existed = file_existed.get(file_path, False)
-
-        if not existed:
-            # File didn't exist before, should not exist now
-            if full_path.exists():
-                issues.append(f"File should not exist after rollback: {file_path}")
-        else:
-            if not full_path.exists():
-                issues.append(f"File should exist after rollback: {file_path}")
-            else:
-                current = hashlib.sha256(full_path.read_bytes()).hexdigest()
-                if current != original:
-                    issues.append(
-                        f"File not restored to original: {file_path} "
-                        f"(expected {original[:8]}..., got {current[:8]}...)"
-                    )
-
-    success = len(issues) == 0
-    add_event(state, "rollback_verified", task_id=task_id, details={
-        "success": success,
-        "issue_count": len(issues),
-    })
-
-    return success, issues
 
 
 def record_calibration(
@@ -2074,52 +1957,6 @@ def main():
             print(f"Phase count:                {metrics['phase_count']}")
             print(f"Phase compression:          {metrics['phase_compression']:.2f}x")
             print(f"Steel thread coverage:     {metrics['steel_thread_coverage']:.1%}")
-
-    elif cmd == "prepare-rollback":
-        if len(sys.argv) < 4:
-            print("Usage: state.py prepare-rollback <task_id> <file1> [file2 ...]")
-            sys.exit(1)
-        state = load_state()
-        if not state:
-            print("No state file.")
-            sys.exit(1)
-        task_id = sys.argv[2]
-        files = sys.argv[3:]
-        prepare_rollback(state, task_id, files)
-        save_state(state)
-        print(f"Rollback prepared for {len(files)} file(s)")
-
-    elif cmd == "verify-rollback":
-        if len(sys.argv) < 3:
-            print("Usage: state.py verify-rollback <task_id> [--created f1 f2] [--modified f3 f4]")
-            sys.exit(1)
-        state = load_state()
-        if not state:
-            print("No state file.")
-            sys.exit(1)
-
-        task_id = sys.argv[2]
-        files_created = []
-        files_modified = []
-        args = sys.argv[3:]
-        current_list = None
-        for arg in args:
-            if arg == "--created":
-                current_list = files_created
-            elif arg == "--modified":
-                current_list = files_modified
-            elif current_list is not None:
-                current_list.append(arg)
-
-        success, issues = verify_rollback(state, task_id, files_created, files_modified)
-        save_state(state)
-        if success:
-            print("Rollback verified successfully")
-        else:
-            print("Rollback verification failed:")
-            for issue in issues:
-                print(f"  - {issue}")
-        sys.exit(0 if success else 1)
 
     elif cmd == "record-calibration":
         if len(sys.argv) < 4:

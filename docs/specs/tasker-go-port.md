@@ -25,7 +25,7 @@ The `state.py` script is the single source of truth for all state changes. This 
 
 1. Create Go project structure following Terraform conventions
 2. Implement state.json read/write with file locking
-3. Port all state.py subcommands: init, status, advance, validate, validate-tasks, load-tasks, ready-tasks, start-task, complete-task, commit-task, fail-task, retry-task, skip-task, log-tokens, record-verification, metrics, planning-metrics, spec-coverage, failure-metrics, prepare-rollback, verify-rollback, record-calibration, calibration-score, halt, check-halt, resume, halt-status
+3. Port all state.py subcommands: init, status, advance, validate, validate-tasks, load-tasks, ready-tasks, start-task, complete-task, commit-task, fail-task, retry-task, skip-task, log-tokens, record-verification, metrics, planning-metrics, spec-coverage, failure-metrics, record-calibration, calibration-score, halt, check-halt, resume, halt-status
 4. Implement JSON schema validation using Go library
 5. Test output compatibility with Python version
 
@@ -102,14 +102,13 @@ The `spec-review.py`, `spec-generate.py`, and `spec-session.py` scripts handle s
 - Session state format unchanged
 
 ### 5. Port Utility Scripts
-Port remaining Python scripts: bundle.py, archive.py, dashboard.py, status.py, evaluate.py, compliance-check.py.
+Port remaining Python scripts: bundle.py, archive.py, dashboard.py, status.py, evaluate.py.
 
 1. Port bundle generation (task execution bundles)
 2. Port archive functionality
 3. Port dashboard/status display
 4. Port evaluation metrics
-5. Port compliance checks
-6. Test each for output compatibility
+5. Test each for output compatibility
 
 **Variants:**
 - Bundle generate-ready processes all ready tasks
@@ -238,8 +237,8 @@ Validate Go binary produces identical output to Python.
 tasker <command> [subcommand] [flags] [args]
 
 Commands:
-  state       State management (init, status, advance, validate, validate-tasks, load-tasks, ready-tasks, start-task, complete-task, commit-task, fail-task, retry-task, skip-task, log-tokens, record-verification, metrics, planning-metrics, spec-coverage, failure-metrics, prepare-rollback, verify-rollback, record-calibration, calibration-score, halt, check-halt, resume, halt-status)
-  validate    Validation (dag, steel-thread, verification-commands, calibration, rollback, all, spec-coverage, phase-leakage, dependency-existence, acceptance-criteria, planning-gates, refactor-priority)
+  state       State management (init, status, advance, validate, validate-tasks, load-tasks, ready-tasks, start-task, complete-task, commit-task, fail-task, retry-task, skip-task, log-tokens, record-verification, metrics, planning-metrics, spec-coverage, failure-metrics, record-calibration, calibration-score, halt, check-halt, resume, halt-status)
+  validate    Validation (dag, steel-thread, verification-commands, calibration, all, spec-coverage, phase-leakage, dependency-existence, acceptance-criteria, planning-gates, refactor-priority)
   fsm         FSM tools (compile, mermaid, validate)
   spec        Spec tools (review, generate, session)
   bundle      Bundle management (generate, validate, list, clean)

@@ -229,14 +229,6 @@
           ]
         },
         {
-          "id": "C19",
-          "name": "Compliance",
-          "discovery_ref": "compliance-check.py analysis",
-          "behaviors": [
-            {"id": "B59", "name": "CheckCompliance", "type": "process", "description": "Run compliance checks"}
-          ]
-        },
-        {
           "id": "C20",
           "name": "Git Utilities",
           "discovery_ref": "Round 12: ensure-git.sh",

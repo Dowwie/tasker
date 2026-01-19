@@ -192,8 +192,8 @@ The system must be efficient.
 		}
 
 		for _, w := range result.Review.Weaknesses {
-			if !strings.HasPrefix(w.ID, "W") {
-				t.Errorf("weakness ID %s doesn't start with W", w.ID)
+			if !strings.HasPrefix(w.ID, "W") && !strings.HasPrefix(w.ID, "CK-") {
+				t.Errorf("weakness ID %s doesn't start with W or CK-", w.ID)
 			}
 			if !strings.Contains(w.ID, "-") {
 				t.Errorf("weakness ID %s doesn't contain hyphen", w.ID)
@@ -558,6 +558,98 @@ func TestCategoryIndex(t *testing.T) {
 	t.Run("returns correct index for known categories", func(t *testing.T) {
 		if categoryIndex(CategoryNonBehavioral) != 1 {
 			t.Error("expected non_behavioral to have index 1")
+		}
+	})
+}
+
+func TestDetectContradictions(t *testing.T) {
+	t.Run("detects conflicting default values", func(t *testing.T) {
+		// Pattern captures first word of line as the "entity" being described
+		content := `# Config Spec
+TIMEOUT defaults to 30 seconds.
+TIMEOUT defaults to 60 seconds.
+`
+		weaknesses := detectContradictions(content)
+
+		if len(weaknesses) == 0 {
+			t.Error("expected to detect conflicting default values")
+			return
+		}
+
+		found := false
+		for _, w := range weaknesses {
+			if w.Category == CategoryContradiction && w.Severity == SeverityCritical {
+				found = true
+				if !strings.Contains(strings.ToLower(w.Description), "timeout") {
+					t.Errorf("expected description to mention 'timeout', got: %s", w.Description)
+				}
+				if !strings.HasPrefix(w.ID, "W6-") {
+					t.Errorf("expected ID to start with W6-, got: %s", w.ID)
+				}
+			}
+		}
+
+		if !found {
+			t.Error("expected to find a critical contradiction weakness")
+		}
+	})
+
+	t.Run("ignores consistent default values", func(t *testing.T) {
+		// Both lines use "defaults to 30" - same value, no contradiction
+		content := `# Config Spec
+TIMEOUT defaults to 30 seconds.
+TIMEOUT defaults to 30 (configurable).
+`
+		weaknesses := detectContradictions(content)
+
+		// Should not find any contradictions since both values are "30"
+		for _, w := range weaknesses {
+			if w.Category == CategoryContradiction && strings.Contains(strings.ToLower(w.Description), "timeout") {
+				t.Error("should not flag consistent default values as contradictions")
+			}
+		}
+	})
+
+	t.Run("detects multiple conflicting variables", func(t *testing.T) {
+		content := `# Config Spec
+TIMEOUT defaults to 30 seconds.
+TIMEOUT defaults to 60 seconds.
+RETRIES default to 3.
+RETRIES defaults to 5.
+`
+		weaknesses := detectContradictions(content)
+
+		if len(weaknesses) < 2 {
+			t.Errorf("expected at least 2 contradictions, got %d", len(weaknesses))
+		}
+	})
+
+	t.Run("integration with AnalyzeSpec", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		specContent := `# Config Spec
+TIMEOUT defaults to 30 seconds.
+TIMEOUT defaults to 60 seconds.
+`
+		specPath := filepath.Join(tmpDir, "spec-contradictions.md")
+		if err := os.WriteFile(specPath, []byte(specContent), 0644); err != nil {
+			t.Fatalf("failed to create spec file: %v", err)
+		}
+
+		result, err := AnalyzeSpec(specPath)
+		if err != nil {
+			t.Fatalf("AnalyzeSpec failed: %v", err)
+		}
+
+		found := false
+		for _, w := range result.Review.Weaknesses {
+			if w.Category == CategoryContradiction {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			t.Error("expected AnalyzeSpec to include contradiction detection")
 		}
 	})
 }

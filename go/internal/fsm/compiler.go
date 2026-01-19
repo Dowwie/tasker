@@ -72,11 +72,54 @@ type TransitionsFile struct {
 }
 
 type MachineEntry struct {
-	ID            string            `json:"id"`
-	Name          string            `json:"name"`
-	Level         string            `json:"level"`
-	TriggerReason string            `json:"trigger_reason,omitempty"`
-	Files         map[string]string `json:"files"`
+	ID              string            `json:"id"`
+	Name            string            `json:"name"`
+	Level           string            `json:"level"`
+	TriggerReason   string            `json:"trigger_reason,omitempty"`
+	Files           map[string]string `json:"files,omitempty"`
+	StatesFile      string            `json:"states_file,omitempty"`
+	TransitionsFile string            `json:"transitions_file,omitempty"`
+	Description     string            `json:"description,omitempty"`
+}
+
+// GetStatesFile returns the states file path, checking both formats
+func (m *MachineEntry) GetStatesFile() string {
+	if m.Files != nil {
+		if f, ok := m.Files["states"]; ok {
+			return f
+		}
+	}
+	return m.StatesFile
+}
+
+// GetTransitionsFile returns the transitions file path, checking both formats
+func (m *MachineEntry) GetTransitionsFile() string {
+	if m.Files != nil {
+		if f, ok := m.Files["transitions"]; ok {
+			return f
+		}
+	}
+	return m.TransitionsFile
+}
+
+// GetDiagramFile returns the diagram file path
+func (m *MachineEntry) GetDiagramFile() string {
+	if m.Files != nil {
+		if f, ok := m.Files["diagram"]; ok {
+			return f
+		}
+	}
+	return ""
+}
+
+// GetNotesFile returns the notes file path
+func (m *MachineEntry) GetNotesFile() string {
+	if m.Files != nil {
+		if f, ok := m.Files["notes"]; ok {
+			return f
+		}
+	}
+	return ""
 }
 
 type IndexFile struct {

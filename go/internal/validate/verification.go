@@ -1,11 +1,7 @@
 package validate
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -36,20 +32,6 @@ type VerificationResult struct {
 	Quality        *VerificationQuality    `json:"quality,omitempty"`
 	Tests          *VerificationTests      `json:"tests,omitempty"`
 	VerifiedAt     string                  `json:"verified_at"`
-}
-
-type RollbackData struct {
-	TaskID        string            `json:"task_id"`
-	PreparedAt    string            `json:"prepared_at"`
-	TargetDir     string            `json:"target_dir"`
-	FileChecksums map[string]string `json:"file_checksums"`
-	FileExisted   map[string]bool   `json:"file_existed"`
-}
-
-type RollbackValidation struct {
-	Valid       bool     `json:"valid"`
-	Issues      []string `json:"issues,omitempty"`
-	ValidatedAt string   `json:"validated_at"`
 }
 
 type CalibrationEntry struct {
@@ -126,143 +108,6 @@ func RecordVerification(
 	}
 
 	return result, nil
-}
-
-func PrepareRollback(taskID string, targetDir string, filesToModify []string) (*RollbackData, error) {
-	if taskID == "" {
-		return nil, fmt.Errorf("task ID is required")
-	}
-
-	if targetDir == "" {
-		return nil, fmt.Errorf("target directory is required")
-	}
-
-	rollback := &RollbackData{
-		TaskID:        taskID,
-		PreparedAt:    time.Now().UTC().Format(time.RFC3339Nano),
-		TargetDir:     targetDir,
-		FileChecksums: make(map[string]string),
-		FileExisted:   make(map[string]bool),
-	}
-
-	for _, filePath := range filesToModify {
-		fullPath := filepath.Join(targetDir, filePath)
-
-		info, err := os.Stat(fullPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				rollback.FileChecksums[filePath] = ""
-				rollback.FileExisted[filePath] = false
-				continue
-			}
-			return nil, fmt.Errorf("failed to stat file %s: %w", filePath, err)
-		}
-
-		if info.IsDir() {
-			return nil, fmt.Errorf("path is a directory, not a file: %s", filePath)
-		}
-
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
-		}
-
-		hash := sha256.Sum256(data)
-		rollback.FileChecksums[filePath] = hex.EncodeToString(hash[:])
-		rollback.FileExisted[filePath] = true
-	}
-
-	return rollback, nil
-}
-
-func ValidateRollback(
-	rollback *RollbackData,
-	filesCreated []string,
-	filesModified []string,
-) *RollbackValidation {
-	validation := &RollbackValidation{
-		Valid:       true,
-		Issues:      []string{},
-		ValidatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-	}
-
-	if rollback == nil {
-		validation.Valid = false
-		validation.Issues = append(validation.Issues, "no rollback data provided")
-		return validation
-	}
-
-	targetDir := rollback.TargetDir
-	if targetDir == "" {
-		validation.Valid = false
-		validation.Issues = append(validation.Issues, "rollback data missing target directory")
-		return validation
-	}
-
-	for _, filePath := range filesCreated {
-		fullPath := filepath.Join(targetDir, filePath)
-		if _, err := os.Stat(fullPath); err == nil {
-			validation.Valid = false
-			validation.Issues = append(validation.Issues,
-				fmt.Sprintf("created file not deleted: %s", filePath))
-		}
-	}
-
-	for _, filePath := range filesModified {
-		fullPath := filepath.Join(targetDir, filePath)
-		originalChecksum := rollback.FileChecksums[filePath]
-		existed := rollback.FileExisted[filePath]
-
-		if !existed {
-			if _, err := os.Stat(fullPath); err == nil {
-				validation.Valid = false
-				validation.Issues = append(validation.Issues,
-					fmt.Sprintf("file should not exist after rollback: %s", filePath))
-			}
-			continue
-		}
-
-		info, err := os.Stat(fullPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				validation.Valid = false
-				validation.Issues = append(validation.Issues,
-					fmt.Sprintf("file should exist after rollback: %s", filePath))
-			} else {
-				validation.Valid = false
-				validation.Issues = append(validation.Issues,
-					fmt.Sprintf("failed to check file %s: %s", filePath, err.Error()))
-			}
-			continue
-		}
-
-		if info.IsDir() {
-			validation.Valid = false
-			validation.Issues = append(validation.Issues,
-				fmt.Sprintf("path is a directory after rollback: %s", filePath))
-			continue
-		}
-
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			validation.Valid = false
-			validation.Issues = append(validation.Issues,
-				fmt.Sprintf("failed to read file %s: %s", filePath, err.Error()))
-			continue
-		}
-
-		hash := sha256.Sum256(data)
-		currentChecksum := hex.EncodeToString(hash[:])
-
-		if currentChecksum != originalChecksum {
-			validation.Valid = false
-			validation.Issues = append(validation.Issues,
-				fmt.Sprintf("file not restored to original: %s (expected %s..., got %s...)",
-					filePath, originalChecksum[:8], currentChecksum[:8]))
-		}
-	}
-
-	return validation
 }
 
 func NewCalibrationData() *CalibrationData {

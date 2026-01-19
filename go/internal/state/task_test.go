@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -763,6 +764,85 @@ func TestSkipTaskBlockedStatus(t *testing.T) {
 
 	if loaded.Tasks["T001"].Status != "skipped" {
 		t.Error("blocked task should be skippable")
+	}
+}
+
+func TestCommitTaskNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	sm := NewStateManager(tmpDir)
+
+	state := &State{
+		Version:   "2.0",
+		Phase:     PhaseState{Current: "executing"},
+		TargetDir: tmpDir,
+		CreatedAt: "2026-01-18T10:00:00Z",
+		Tasks:     map[string]Task{},
+		Execution: Execution{},
+	}
+	if err := sm.Save(state); err != nil {
+		t.Fatalf("failed to save initial state: %v", err)
+	}
+
+	_, err := CommitTask(sm, "T001")
+	if err == nil {
+		t.Error("expected error for non-existent task")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' error, got: %v", err)
+	}
+}
+
+func TestCommitTaskNotComplete(t *testing.T) {
+	tmpDir := t.TempDir()
+	sm := NewStateManager(tmpDir)
+
+	state := &State{
+		Version:   "2.0",
+		Phase:     PhaseState{Current: "executing"},
+		TargetDir: tmpDir,
+		CreatedAt: "2026-01-18T10:00:00Z",
+		Tasks: map[string]Task{
+			"T001": {ID: "T001", Status: "running", Phase: 1},
+		},
+		Execution: Execution{},
+	}
+	if err := sm.Save(state); err != nil {
+		t.Fatalf("failed to save initial state: %v", err)
+	}
+
+	_, err := CommitTask(sm, "T001")
+	if err == nil {
+		t.Error("expected error for non-complete task")
+	}
+	if !strings.Contains(err.Error(), "is running") {
+		t.Errorf("expected status error, got: %v", err)
+	}
+}
+
+func TestCommitTaskNoFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	sm := NewStateManager(tmpDir)
+
+	state := &State{
+		Version:   "2.0",
+		Phase:     PhaseState{Current: "executing"},
+		TargetDir: tmpDir,
+		CreatedAt: "2026-01-18T10:00:00Z",
+		Tasks: map[string]Task{
+			"T001": {ID: "T001", Status: "complete", Phase: 1},
+		},
+		Execution: Execution{},
+	}
+	if err := sm.Save(state); err != nil {
+		t.Fatalf("failed to save initial state: %v", err)
+	}
+
+	_, err := CommitTask(sm, "T001")
+	if err == nil {
+		t.Error("expected error for task with no files")
+	}
+	if !strings.Contains(err.Error(), "no files to commit") {
+		t.Errorf("expected 'no files to commit' error, got: %v", err)
 	}
 }
 

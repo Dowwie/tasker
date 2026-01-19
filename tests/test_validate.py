@@ -13,11 +13,9 @@ from validate import (
     build_dependency_graph,
     compute_calibration_metrics,
     detect_cycles,
-    prepare_rollback_checksums,
     validate_all_verification_commands,
     validate_dag,
     validate_steel_thread,
-    verify_rollback_integrity,
 )
 
 
@@ -319,100 +317,6 @@ class TestComputeCalibrationMetrics:
         assert metrics["verdict_distribution"]["PASS"] == 1
         assert metrics["verdict_distribution"]["CONDITIONAL"] == 1
         assert metrics["verdict_distribution"]["FAIL"] == 1
-
-
-class TestRollbackIntegrity:
-    """Tests for rollback integrity functions."""
-
-    def test_prepare_checksums(self, tmp_path: Path) -> None:
-        """Test preparing checksums before modification."""
-        # Create test files
-        file1 = tmp_path / "src" / "file1.py"
-        file1.parent.mkdir(parents=True)
-        file1.write_text("original content 1")
-
-        file2 = tmp_path / "src" / "file2.py"
-        file2.write_text("original content 2")
-
-        checksums = prepare_rollback_checksums(
-            tmp_path, ["src/file1.py", "src/file2.py", "src/new.py"]
-        )
-
-        assert "src/file1.py" in checksums
-        assert "src/file2.py" in checksums
-        assert len(checksums["src/file1.py"]) == 64  # SHA256 hex
-        assert checksums["src/new.py"] == ""  # New file doesn't exist
-
-    def test_verify_rollback_success(self, tmp_path: Path) -> None:
-        """Test successful rollback verification."""
-        # Create original file
-        file1 = tmp_path / "src" / "file1.py"
-        file1.parent.mkdir(parents=True)
-        file1.write_text("original content")
-
-        # Get original checksum
-        original_checksums = prepare_rollback_checksums(tmp_path, ["src/file1.py"])
-
-        # Simulate task execution that creates a new file
-        new_file = tmp_path / "src" / "new.py"
-        new_file.write_text("new content")
-
-        # Simulate rollback: delete created file
-        new_file.unlink()
-
-        # Verify rollback
-        success, issues = verify_rollback_integrity(
-            tmp_path,
-            original_checksums,
-            files_created=["src/new.py"],
-            files_modified=["src/file1.py"],
-        )
-
-        assert success is True
-        assert len(issues) == 0
-
-    def test_verify_rollback_file_not_deleted(self, tmp_path: Path) -> None:
-        """Test rollback failure when created file not deleted."""
-        file1 = tmp_path / "src" / "file1.py"
-        file1.parent.mkdir(parents=True)
-        file1.write_text("original")
-
-        original_checksums = prepare_rollback_checksums(tmp_path, ["src/file1.py"])
-
-        # Create new file and don't delete it
-        new_file = tmp_path / "src" / "new.py"
-        new_file.write_text("new content")
-
-        success, issues = verify_rollback_integrity(
-            tmp_path,
-            original_checksums,
-            files_created=["src/new.py"],
-            files_modified=[],
-        )
-
-        assert success is False
-        assert any("not deleted" in i for i in issues)
-
-    def test_verify_rollback_file_not_restored(self, tmp_path: Path) -> None:
-        """Test rollback failure when modified file not restored."""
-        file1 = tmp_path / "src" / "file1.py"
-        file1.parent.mkdir(parents=True)
-        file1.write_text("original content")
-
-        original_checksums = prepare_rollback_checksums(tmp_path, ["src/file1.py"])
-
-        # Modify the file and don't restore it
-        file1.write_text("modified content")
-
-        success, issues = verify_rollback_integrity(
-            tmp_path,
-            original_checksums,
-            files_created=[],
-            files_modified=["src/file1.py"],
-        )
-
-        assert success is False
-        assert any("not restored" in i for i in issues)
 
 
 class TestValidateAllVerificationCommands:

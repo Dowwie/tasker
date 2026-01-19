@@ -266,7 +266,7 @@ func TestGenerateMermaid(t *testing.T) {
 		},
 	}
 
-	result := generateMermaid("Test Machine", states, transitions)
+	result := fsmlib.GenerateMermaid("Test Machine", states, transitions)
 
 	if !strings.Contains(result, "stateDiagram-v2") {
 		t.Error("expected mermaid state diagram header")
@@ -299,7 +299,7 @@ func TestGenerateMermaid_LongTrigger(t *testing.T) {
 		},
 	}
 
-	result := generateMermaid("Test", states, transitions)
+	result := fsmlib.GenerateMermaid("Test", states, transitions)
 
 	if strings.Contains(result, "truncated") {
 		t.Error("expected long trigger to be truncated")

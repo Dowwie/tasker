@@ -44,7 +44,7 @@ The orchestrator ONLY:
 - Queries state via `tasker state`
 - Dispatches agents based on mode/phase
 - Handles user interaction
-- **Ensures commits happen** via `scripts/commit-task.sh` (defense in depth)
+- **Ensures commits happen** via `.claude/hooks/post-task-commit.sh` (defense in depth)
 
 ---
 
@@ -787,7 +787,7 @@ Before advancing from `definition` to `validation` phase, the system automatical
 If any gate fails, phase advancement is blocked:
 ```
 Planning gates failed: Spec coverage 75.0% below threshold 90.0%; Acceptance criteria quality issues: 3 problem(s)
-Run 'tasker validate planning-gates' for details
+Run 'tasker validate gates' for details
 ```
 
 Results are stored in `state.json → artifacts.validation_results` for observability.
@@ -957,7 +957,6 @@ Bash: ./scripts/ensure-git.sh "$TARGET_DIR"
 
 **Why this is required:**
 - Enables automatic commit hooks to track changes per task
-- Supports rollback capability if tasks fail
 - Provides audit trail of all implementation changes
 - Required for the post-task-commit hook to function
 
@@ -991,9 +990,9 @@ Options:
 
 To retry orphaned tasks:
 ```bash
-tasker state retry-task T019
-tasker state retry-task T011
-tasker state retry-task T006
+tasker state task retry T019
+tasker state task retry T011
+tasker state task retry T006
 tasker state checkpoint clear
 ```
 
@@ -1014,18 +1013,28 @@ while true; do
     if [ $? -ne 0 ]; then
         echo "Halt requested. Stopping gracefully."
         tasker state checkpoint complete
+
+        # Generate evaluation report even on halt
+        tasker evaluate --output $PLANNING_DIR/reports/evaluation-report.txt
+        tasker evaluate --format json --output $PLANNING_DIR/reports/evaluation-report.json
+
         tasker state confirm-halt
         break
     fi
 
     # 1. Get ready tasks
-    READY=$(tasker state ready-tasks)
+    READY=$(tasker state ready)
 
     if [ -z "$READY" ]; then
         tasker state advance
         if [ $? -eq 0 ]; then
             echo "All tasks complete!"
             tasker state checkpoint clear
+
+            # Generate evaluation report (MANDATORY)
+            tasker evaluate --output $PLANNING_DIR/reports/evaluation-report.txt
+            tasker evaluate --format json --output $PLANNING_DIR/reports/evaluation-report.json
+
             break
         else
             echo "No ready tasks. Check for blockers."
@@ -1057,7 +1066,7 @@ while true; do
         else
             # CRITICAL: Missing dependencies or validation failure
             ./scripts/log-activity.sh ERROR orchestrator validation "$TASK_ID: Bundle integrity FAILED"
-            tasker state fail-task $TASK_ID "Bundle integrity validation failed" --category dependency
+            tasker state task fail $TASK_ID "Bundle integrity validation failed" --category dependency
             # Task will be skipped from this batch
         fi
     done
@@ -1074,7 +1083,7 @@ while true; do
 
     # 5. Mark all tasks as started
     for TASK_ID in ${BATCH_ARRAY[@]}; do
-        tasker state start-task $TASK_ID
+        tasker state task start $TASK_ID
     done
 
     # 6. SPAWN EXECUTORS IN PARALLEL
@@ -1103,6 +1112,11 @@ while true; do
     tasker state check-halt
     if [ $? -ne 0 ]; then
         echo "Halt requested after batch. Stopping gracefully."
+
+        # Generate evaluation report even on halt
+        tasker evaluate --output $PLANNING_DIR/reports/evaluation-report.txt
+        tasker evaluate --format json --output $PLANNING_DIR/reports/evaluation-report.json
+
         tasker state confirm-halt
         break
     fi
@@ -1142,7 +1156,7 @@ Configured in `.claude/settings.local.json`:
    - Reads `target_dir` from `state.json`
    - Calls the commit script if task succeeded
 
-2. **Script** (`scripts/commit-task.sh`) - Does the actual commit work
+2. **Script** (`.claude/hooks/post-task-commit.sh`) - Does the actual commit work
    - Reads `bundles/<task_id>-result.json` for file list
    - Checks if files have uncommitted changes
    - If uncommitted: stages and commits with message `<task_id>: <task_name>`
@@ -1152,7 +1166,7 @@ Configured in `.claude/settings.local.json`:
 ### Manual Usage
 
 ```bash
-./scripts/commit-task.sh <task_id> <target_dir> <planning_dir>
+./.claude/hooks/post-task-commit.sh <task_id> <target_dir> <planning_dir>
 ```
 
 **Why hook-based (not orchestrator-called):**
@@ -1283,12 +1297,12 @@ You are responsible for updating state and persisting results. Do NOT rely on th
 
 ### On Success:
 1. Track all files you created/modified
-2. Call: `tasker state complete-task [TASK_ID] --created file1 file2 --modified file3`
+2. Call: `tasker state task complete [TASK_ID] --created file1 file2 --modified file3`
 3. Write result file: `{PLANNING_DIR}/bundles/[TASK_ID]-result.json` (see schema below)
 4. Return ONLY this line: `[TASK_ID]: SUCCESS`
 
 ### On Failure:
-1. Call: `tasker state fail-task [TASK_ID] "error message" --category <cat> --retryable`
+1. Call: `tasker state task fail [TASK_ID] "error message" --category <cat> --retryable`
 2. Write result file with error details
 3. Return ONLY this line: `[TASK_ID]: FAILED - <one-line reason>`
 
@@ -1336,7 +1350,6 @@ The subagent:
 - Has NO memory of previous tasks
 - Gets full context budget
 - Reads ONE file (the bundle) for complete context
-- Tracks files for rollback
 - **Calls state.py directly** to mark completion
 - **Writes result file** for observability
 - Returns **minimal status line** (not full report)
@@ -1400,60 +1413,6 @@ tasker bundle generate-ready      # All ready tasks
 | `/execute --batch` | All ready tasks, no prompts |
 | `/execute --parallel 3` | Up to 3 tasks simultaneously |
 
-## Post-Execution Compliance Check (Optional)
-
-After all tasks complete successfully, run the compliance check to verify the implementation matches the spec:
-
-```bash
-tasker compliance-check all \
-    --spec $PLANNING_DIR/inputs/spec.md \
-    --target $TARGET_DIR
-```
-
-This checks four categories:
-- **V1: Schema Compliance** - DDL elements exist (tables, constraints, indexes)
-- **V2: Config Compliance** - Env vars wired to Pydantic fields
-- **V3: API Compliance** - Endpoints exist with correct methods
-- **V4: Observability** - OTel spans and metrics registered
-
-### Compliance Results
-
-The check outputs a JSON summary and detailed report:
-```json
-{
-  "summary": {
-    "total_gaps": 5,
-    "by_severity": {"critical": 1, "warning": 2, "info": 2},
-    "compliant": false
-  }
-}
-```
-
-### Handling Gaps
-
-If compliance check finds critical gaps:
-
-1. **Display gaps to user** with suggested fixes
-2. **Ask user how to proceed**:
-   - Fix gaps (create new tasks or manual fixes)
-   - Accept gaps (document as known limitations)
-   - Investigate (may be false positives)
-
-3. **For fixable gaps**, create ad-hoc tasks:
-   ```bash
-   # Example: Missing database constraint
-   tasker state create-task \
-       --name "Add hook_run_unique constraint" \
-       --type constraint \
-       --files "alembic/versions/xxx_add_constraint.py"
-   ```
-
-4. **Save compliance report** for documentation:
-   ```bash
-   # Report is saved to:
-   $PLANNING_DIR/reports/compliance-report.json
-   ```
-
 ## FSM Coverage Report (After Execution Completes)
 
 After all tasks complete, generate the execution coverage report:
@@ -1473,6 +1432,29 @@ This report includes:
 - Pointers to tasks and acceptance criteria that provide evidence
 
 Use this report for post-execution compliance auditing.
+
+## Evaluation Report (After Completion)
+
+**MANDATORY**: After all tasks complete (or execution halts), generate the evaluation report:
+
+```bash
+tasker evaluate --output {PLANNING_DIR}/reports/evaluation-report.txt
+tasker evaluate --format json --output {PLANNING_DIR}/reports/evaluation-report.json
+```
+
+Display the report to the user. The report includes:
+- Planning quality (verdict from task-plan-verifier)
+- Execution summary (completed/failed/blocked/skipped counts)
+- First-attempt success rate (measures spec quality)
+- Verification breakdown (criteria pass/partial/fail, code quality)
+- Cost analysis (total tokens, total cost, per-task cost)
+- Failure analysis (which tasks failed and why)
+- Improvement patterns (common issues for process improvement)
+
+For metrics-only summary:
+```bash
+tasker evaluate --metrics-only
+```
 
 ## Archive Execution Artifacts (After Completion)
 
@@ -1533,10 +1515,10 @@ tasker state validate-tasks <verdict> [summary] [--issues ...]
                                          # Register task validation result
 
 # Execution
-tasker state ready-tasks     # List ready tasks
-tasker state start-task <id> # Mark running
-tasker state complete-task <id>  # Mark done
-tasker state fail-task <id> <e>  # Mark failed
+tasker state ready     # List ready tasks
+tasker state task start <id> # Mark running
+tasker state task complete <id>  # Mark done
+tasker state task fail <id> <e>  # Mark failed
 tasker state load-tasks      # Reload from files
 
 # Halt / Resume

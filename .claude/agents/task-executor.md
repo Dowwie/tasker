@@ -6,7 +6,7 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 
 # Task Executor (v2)
 
-Execute ONE task from a self-contained bundle. Track all changes for potential rollback.
+Execute ONE task from a self-contained bundle.
 
 **Self-Completion Protocol:** This executor updates state.py directly and writes detailed results to `bundles/{task_id}-result.json`. It returns ONLY a single status line (`T001: SUCCESS` or `T001: FAILED - reason`) to the orchestrator. This minimizes orchestrator context usage.
 
@@ -53,22 +53,7 @@ The bundle contains:
 cd {PLANNING_DIR}/.. && tasker state start-task T001
 ```
 
-### 3. Track Changes
-
-Before modifying anything, record state for rollback:
-
-```bash
-mkdir -p /tmp/rollback-T001
-
-# For files being modified (action: "modify")
-for file in <files_to_modify>; do
-  if [ -f "$TARGET_DIR/$file" ]; then
-    cp "$TARGET_DIR/$file" "/tmp/rollback-T001/$(basename $file).bak"
-  fi
-done
-```
-
-### 4. Implement
+### 3. Implement
 
 Use the bundle to guide implementation:
 
@@ -118,7 +103,7 @@ MODIFIED_FILES = []
 CREATED_FILES.append("src/auth/validator.py")
 ```
 
-### 5. Documentation
+### 4. Documentation
 
 After implementation, create documentation artifacts:
 
@@ -191,7 +176,7 @@ If README.md was modified:
 MODIFIED_FILES.append("README.md")
 ```
 
-### 6. Verify Acceptance Criteria
+### 5. Verify Acceptance Criteria
 
 **Spawn the `task-verifier` subagent** to verify in a clean context:
 
@@ -211,8 +196,8 @@ The verifier:
 - Includes structured JSON block for programmatic parsing
 
 **Wait for verifier response.** Parse the result:
-- If `**Verdict:** PASS` and `Recommendation: PROCEED` → continue to step 8
-- If `**Verdict:** FAIL` or `Recommendation: BLOCK` → rollback (step 8 failure path)
+- If `**Verdict:** PASS` and `Recommendation: PROCEED` → continue to step 7
+- If `**Verdict:** FAIL` or `Recommendation: BLOCK` → fail task (step 7 failure path)
 
 **Extract and persist verification data:**
 
@@ -230,7 +215,7 @@ cd {PLANNING_DIR}/.. && tasker state record-verification T001 \
   --tests '{"coverage": "PASS", "assertions": "PASS", "edge_cases": "PARTIAL"}'
 ```
 
-### 7. Complete or Rollback (Self-Completion Protocol)
+### 6. Complete or Fail (Self-Completion Protocol)
 
 **CRITICAL:** You are responsible for updating state directly. Do NOT return a full report to the orchestrator.
 
@@ -247,34 +232,20 @@ cd {PLANNING_DIR}/.. && tasker state complete-task T001 \
 # 2. Commit changes to git
 cd {PLANNING_DIR}/.. && tasker state commit-task T001
 
-# 3. Write result file for observability (see step 8)
-
-# 4. Clean up rollback files
-rm -rf /tmp/rollback-T001
+# 3. Write result file for observability (see step 7)
 ```
 
 **If criteria fail:**
 ```bash
-# 1. Rollback created files
-for file in $CREATED_FILES; do
-  rm -f "$TARGET_DIR/$file"
-done
-
-# 2. Restore modified files
-for bak in /tmp/rollback-T001/*.bak; do
-  original=$(basename "$bak" .bak)
-  # Restore to original location
-done
-
-# 3. Update state directly
+# 1. Update state directly
 cd {PLANNING_DIR}/.. && tasker state fail-task T001 \
   "Acceptance criteria failed: <details>" \
   --category test --retryable
 
-# 4. Write result file with error details (see step 8)
+# 2. Write result file with error details (see step 7)
 ```
 
-### 8. Write Result File and Return Minimal Status
+### 7. Write Result File and Return Minimal Status
 
 **CRITICAL:** Write detailed results to file. Return ONLY a single status line.
 
@@ -351,10 +322,9 @@ This executor runs in an **isolated subagent context**:
 | Scenario | Action |
 |----------|--------|
 | Bundle not found | Report and exit |
-| File creation fails | Rollback and fail task |
-| Verifier returns BLOCK | Rollback and fail task |
-| Verifier spawn fails | Rollback and fail task |
-| Crash mid-execution | Rollback files remain for manual recovery |
+| File creation fails | Fail task |
+| Verifier returns BLOCK | Fail task |
+| Verifier spawn fails | Fail task |
 
 **Note:** Dependency file validation is performed by the orchestrator before spawning this executor (via `bundle.py validate_bundle_dependencies`).
 

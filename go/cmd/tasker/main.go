@@ -4,7 +4,9 @@ import (
 	"fmt"
 
 	"github.com/dgordon/tasker/internal/command"
+	_ "github.com/dgordon/tasker/internal/command/archive"
 	_ "github.com/dgordon/tasker/internal/command/bundle"
+	_ "github.com/dgordon/tasker/internal/command/evaluate"
 	_ "github.com/dgordon/tasker/internal/command/fsm"
 	_ "github.com/dgordon/tasker/internal/command/hook"
 	_ "github.com/dgordon/tasker/internal/command/spec"

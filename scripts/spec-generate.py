@@ -369,50 +369,6 @@ def cmd_adr(args):
     return str(output_path)
 
 
-def cmd_update_session(args):
-    """Update session with spec content fields."""
-    session = load_session()
-    if not session:
-        print("Error: No active session.")
-        sys.exit(1)
-
-    field = args.field
-    value = args.value
-
-    if field == "goal":
-        if "scope" not in session:
-            session["scope"] = {}
-        session["scope"]["goal"] = value
-    elif field == "non_goals":
-        if "scope" not in session:
-            session["scope"] = {}
-        if "non_goals" not in session["scope"]:
-            session["scope"]["non_goals"] = []
-        session["scope"]["non_goals"].append(value)
-    elif field == "done_means":
-        if "scope" not in session:
-            session["scope"] = {}
-        if "done_means" not in session["scope"]:
-            session["scope"]["done_means"] = []
-        session["scope"]["done_means"].append(value)
-    elif field == "workflows":
-        session["workflows"] = value
-    elif field == "invariants":
-        if "invariants" not in session:
-            session["invariants"] = []
-        session["invariants"].append(value)
-    elif field == "interfaces":
-        session["interfaces"] = value
-    elif field == "architecture":
-        session["architecture"] = value
-    else:
-        print(f"Unknown field: {field}")
-        sys.exit(1)
-
-    Path(SESSION_FILE).write_text(json.dumps(session, indent=2))
-    print(f"Updated {field}")
-
-
 def main():
     parser = argparse.ArgumentParser(description="Spec and ADR Generator")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
@@ -434,18 +390,12 @@ def main():
     adr_parser.add_argument("--related", nargs="*", help="Related ADR numbers (e.g., '0002' '0003')")
     adr_parser.add_argument("--force", action="store_true", help="Overwrite existing file")
 
-    update_parser = subparsers.add_parser("update", help="Update session field")
-    update_parser.add_argument("field", choices=["goal", "non_goals", "done_means", "workflows", "invariants", "interfaces", "architecture"])
-    update_parser.add_argument("value", help="Value to set/append")
-
     args = parser.parse_args()
 
     if args.command == "spec":
         cmd_spec(args)
     elif args.command == "adr":
         cmd_adr(args)
-    elif args.command == "update":
-        cmd_update_session(args)
     else:
         parser.print_help()
 

@@ -33,7 +33,6 @@ from state import (
     load_tasks_from_dir,
     log_tokens,
     now_iso,
-    prepare_rollback,
     record_calibration,
     record_verification,
     register_artifact,
@@ -42,7 +41,6 @@ from state import (
     start_task,
     update_spec_coverage,
     validate_json,
-    verify_rollback,
 )
 
 
@@ -1439,105 +1437,6 @@ class TestVerificationEnforcement:
         assert state["tasks"]["T002"]["status"] == "blocked"
         assert state["tasks"]["T003"]["status"] == "blocked"
         assert "T001" in state["tasks"]["T002"]["error"]
-
-
-class TestRollback:
-    """Tests for rollback preparation and verification."""
-
-    def test_prepare_rollback_new_file(self, temp_state_env: Path, tmp_path: Path) -> None:
-        """Test preparing rollback for a new file (doesn't exist yet)."""
-        import state as state_module
-
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-        state = init_state(str(target_dir))
-        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
-
-        rollback_data = prepare_rollback(state, "T001", ["new_file.py"])
-
-        assert rollback_data["file_existed"]["new_file.py"] is False
-        assert rollback_data["file_checksums"]["new_file.py"] == ""
-        assert "rollback_data" in state["tasks"]["T001"]
-
-    def test_prepare_rollback_existing_file(self, temp_state_env: Path, tmp_path: Path) -> None:
-        """Test preparing rollback for existing file."""
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-        existing_file = target_dir / "existing.py"
-        existing_file.write_text("original content")
-
-        state = init_state(str(target_dir))
-        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
-
-        rollback_data = prepare_rollback(state, "T001", ["existing.py"])
-
-        assert rollback_data["file_existed"]["existing.py"] is True
-        assert rollback_data["file_checksums"]["existing.py"] != ""
-
-    def test_verify_rollback_success(self, temp_state_env: Path, tmp_path: Path) -> None:
-        """Test successful rollback verification."""
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-        existing_file = target_dir / "existing.py"
-        existing_file.write_text("original content")
-
-        state = init_state(str(target_dir))
-        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
-
-        # Prepare rollback
-        prepare_rollback(state, "T001", ["existing.py"])
-
-        # Simulate task execution modifying file
-        existing_file.write_text("modified content")
-
-        # Simulate rollback (restore original)
-        existing_file.write_text("original content")
-
-        success, issues = verify_rollback(state, "T001", [], ["existing.py"])
-
-        assert success is True
-        assert issues == []
-
-    def test_verify_rollback_file_not_restored(self, temp_state_env: Path, tmp_path: Path) -> None:
-        """Test rollback verification when file wasn't restored."""
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-        existing_file = target_dir / "existing.py"
-        existing_file.write_text("original content")
-
-        state = init_state(str(target_dir))
-        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
-
-        prepare_rollback(state, "T001", ["existing.py"])
-
-        # Modify file but don't restore
-        existing_file.write_text("modified content")
-
-        success, issues = verify_rollback(state, "T001", [], ["existing.py"])
-
-        assert success is False
-        assert len(issues) == 1
-        assert "not restored" in issues[0]
-
-    def test_verify_rollback_created_file_not_deleted(self, temp_state_env: Path, tmp_path: Path) -> None:
-        """Test rollback verification when created file wasn't deleted."""
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-
-        state = init_state(str(target_dir))
-        state["tasks"] = {"T001": {"id": "T001", "status": "running", "depends_on": []}}
-
-        prepare_rollback(state, "T001", ["new_file.py"])
-
-        # Create the file during task execution
-        (target_dir / "new_file.py").write_text("new content")
-
-        # Don't delete it during rollback
-        success, issues = verify_rollback(state, "T001", ["new_file.py"], [])
-
-        assert success is False
-        assert len(issues) == 1
-        assert "not deleted" in issues[0]
 
 
 class TestCalibration:

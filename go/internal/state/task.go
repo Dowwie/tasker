@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -398,6 +399,83 @@ func SkipTask(sm *StateManager, taskID, reason string) error {
 	}
 
 	return nil
+}
+
+// CommitTask commits files changed by a completed task to git.
+func CommitTask(sm *StateManager, taskID string) (string, error) {
+	state, err := sm.Load()
+	if err != nil {
+		return "", fmt.Errorf("failed to load state: %w", err)
+	}
+
+	task, exists := state.Tasks[taskID]
+	if !exists {
+		return "", fmt.Errorf("task %s not found", taskID)
+	}
+
+	if task.Status != "complete" {
+		return "", fmt.Errorf("task %s is %s, can only commit complete tasks", taskID, task.Status)
+	}
+
+	allFiles := append(task.FilesCreated, task.FilesModified...)
+	if len(allFiles) == 0 {
+		return "", fmt.Errorf("no files to commit for task %s", taskID)
+	}
+
+	targetDir := state.TargetDir
+	if targetDir == "" {
+		targetDir = "."
+	}
+
+	// Stage files that exist
+	stagedFiles := []string{}
+	for _, f := range allFiles {
+		filePath := filepath.Join(targetDir, f)
+		if _, err := os.Stat(filePath); err == nil {
+			cmd := exec.Command("git", "add", filePath)
+			cmd.Dir = targetDir
+			if output, err := cmd.CombinedOutput(); err != nil {
+				return "", fmt.Errorf("git add failed for %s: %s", f, string(output))
+			}
+			stagedFiles = append(stagedFiles, f)
+		}
+	}
+
+	if len(stagedFiles) == 0 {
+		return "no files to commit (all files missing)", nil
+	}
+
+	// Build commit message
+	commitMsg := fmt.Sprintf("%s: %s", taskID, task.Name)
+
+	// Commit
+	cmd := exec.Command("git", "commit", "-m", commitMsg)
+	cmd.Dir = targetDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		outputStr := string(output)
+		if strings.Contains(outputStr, "nothing to commit") {
+			return "no changes to commit", nil
+		}
+		return "", fmt.Errorf("git commit failed: %s", outputStr)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	state.Events = append(state.Events, Event{
+		Timestamp: now,
+		Type:      "task_committed",
+		TaskID:    taskID,
+		Details: map[string]interface{}{
+			"files":      stagedFiles,
+			"commit_msg": commitMsg,
+		},
+	})
+
+	if err := sm.Save(state); err != nil {
+		return "", fmt.Errorf("failed to save state: %w", err)
+	}
+
+	return fmt.Sprintf("committed %d file(s)", len(stagedFiles)), nil
 }
 
 func removeFromSlice(slice []string, item string) []string {

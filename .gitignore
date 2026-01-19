@@ -12,6 +12,3 @@ __pycache__/
 
 # OS
 .DS_Store
-
-# Rollback files
-/tmp/rollback-*/

@@ -661,6 +661,45 @@ Write ADRs to `{TARGET}/docs/adrs/ADR-####-<slug>.md`:
 | Invariants stated | At least one invariant |
 | FSM compiled | Steel Thread FSM compiled with I1-I5 passing |
 
+## Spec Completeness Check (Checklist C1-C11)
+
+Run the checklist verification against the current spec draft:
+
+```bash
+tasker spec checklist /tmp/claude/spec-draft.md
+```
+
+This verifies the spec contains all expected sections:
+
+| Category | Critical Items (must pass) |
+|----------|---------------------------|
+| C2: Data Model | Tables defined, fields typed, constraints stated |
+| C3: API | Endpoints listed, request/response schemas, auth requirements |
+| C4: Behavior | Observable behaviors, business rules |
+| C7: Security | Authentication mechanism, authorization rules |
+
+### Handling Checklist Gaps
+
+For **critical missing items** (marked with *):
+
+1. If the spec SHOULD have this content → return to Phase 2 (Clarify) to gather requirements
+2. If the spec legitimately doesn't need this → document as N/A with rationale
+
+Example checklist failure:
+```
+## Gate FAILED - Incomplete Spec
+
+Checklist verification found critical gaps:
+
+- [✗] C2.4*: Constraints stated (UNIQUE, CHECK, FK)?
+  → Data model section exists but no constraints defined
+
+- [✗] C3.2*: Request schemas defined?
+  → API endpoints listed but request bodies not specified
+
+Action: Return to Phase 2 to clarify data constraints and API request formats.
+```
+
 ## Gate Failure
 
 If gate fails:
@@ -678,8 +717,12 @@ Cannot proceed. The following must be resolved:
    - How should rate limiting work across tenants?
    - What is the retry policy for failed webhooks?
 
-2. **Missing:**
+2. **Missing Sections:**
    - Interfaces section not present
+
+3. **Checklist Gaps (Critical):**
+   - C2.4: No database constraints defined
+   - C3.2: API request schemas missing
 ```
 
 ---
@@ -705,7 +748,7 @@ EOF
 ### Step 2: Run Weakness Detection
 
 ```bash
-tasker spec review analyze /tmp/claude/spec-draft.md
+tasker spec review /tmp/claude/spec-draft.md
 ```
 
 This detects:
@@ -715,7 +758,18 @@ This detects:
 - **W4: Missing acceptance criteria** - Qualitative terms without metrics
 - **W5: Fragmented requirements** - Cross-references needing consolidation
 - **W6: Contradictions** - Conflicting statements
-- **W7: Ambiguity** - Vague quantifiers, undefined scope, weasel words
+- **W7: Ambiguity** - Vague quantifiers, undefined scope, weak requirements, passive voice
+- **CK-*: Checklist gaps** - Critical missing content from C1-C11 categories
+
+W7 Ambiguity patterns include:
+- Vague quantifiers ("some", "many", "several")
+- Undefined scope ("etc.", "and so on")
+- Vague conditionals ("if applicable", "when appropriate")
+- Weak requirements ("may", "might", "could")
+- Passive voice hiding actor ("is handled", "will be processed")
+- Vague timing ("quickly", "soon", "eventually")
+- Subjective qualifiers ("reasonable", "appropriate")
+- Unquantified limits ("large", "fast", "slow")
 
 ### Step 3: Handle Critical Weaknesses
 
@@ -751,11 +805,11 @@ For **CRITICAL** weaknesses (W1, W6, W7 with weak requirements), engage user:
 
 #### W7: Ambiguity
 
-Use the auto-generated clarifying question from `suggested_resolution`:
+Each W7 weakness includes a clarifying question. Use AskUserQuestion with the auto-generated question:
 
 ```json
 {
-  "question": "{suggested_resolution}",
+  "question": "{weakness.question or weakness.suggested_resolution}",
   "header": "Clarify",
   "options": [
     {"label": "Specify value", "description": "I'll provide a specific value/definition"},
@@ -765,19 +819,56 @@ Use the auto-generated clarifying question from `suggested_resolution`:
 }
 ```
 
-### Step 4: Update Spec with Resolutions
+Example clarifying questions by ambiguity type:
+- Vague quantifier: "How many specifically? Provide a number or range."
+- Weak requirement: "Is this required or optional? If optional, under what conditions?"
+- Vague timing: "What is the specific timing? (e.g., <100ms, every 5 minutes)"
+- Passive voice: "What component/system performs this action?"
+
+#### CK-*: Checklist Gaps
+
+For critical checklist gaps that weren't caught in Phase 6 Gate:
+
+```json
+{
+  "question": "The spec is missing {checklist_item}. Should this be added?",
+  "header": "Missing Content",
+  "options": [
+    {"label": "Add it", "description": "I'll provide the missing information"},
+    {"label": "N/A", "description": "This spec doesn't need this (document why)"},
+    {"label": "Defer", "description": "Address in a follow-up spec"}
+  ]
+}
+```
+
+### Step 4: Record and Apply Resolutions
 
 For each resolved weakness:
-1. Update the spec content to address the issue
-2. If W1 resolved as "mandatory", add explicit behavioral statement
-3. If W6 resolved, remove contradictory statement
-4. If W7 resolved, replace ambiguous language with specific terms
+
+1. **Record the resolution** for downstream consumers (logic-architect):
+```bash
+tasker spec add-resolution {weakness_id} {resolution_type} \
+    --response "{user_response}" \
+    --notes "{context}"
+```
+
+Resolution types:
+- `mandatory` - MUST be implemented as specified (W1 DDL requirements)
+- `clarified` - User provided specific value/definition (W7 ambiguity)
+- `not_applicable` - Doesn't apply to this spec (checklist gaps)
+- `defer` - Address in follow-up work
+
+2. **Update the spec content** to address the issue:
+   - If W1 resolved as "mandatory", add explicit behavioral statement
+   - If W6 resolved, remove contradictory statement
+   - If W7 resolved, replace ambiguous language with specific terms
+   - If CK-* resolved as "not_applicable", document rationale
 
 ### Step 5: Re-run Until Clean
 
 ```bash
 # Re-run analysis
-tasker spec review analyze /tmp/claude/spec-draft.md
+tasker spec review /tmp/claude/spec-draft.md
 ```
 
 **Continue until:**
@@ -789,15 +880,21 @@ tasker spec review analyze /tmp/claude/spec-draft.md
 Save the final review results:
 
 ```bash
-tasker spec review analyze /tmp/claude/spec-draft.md > .claude/spec-review.json
+tasker spec review /tmp/claude/spec-draft.md > .claude/spec-review.json
 ```
 
 ## Spec Review Gate
 
 | Check | Requirement |
 |-------|-------------|
-| No critical weaknesses | All W1, W6, critical W7 resolved |
+| No critical weaknesses | All W1, W6, critical W7, CK-* resolved or accepted |
+| Resolutions recorded | `spec-resolutions.json` contains all resolution decisions |
 | Review file saved | `.claude/spec-review.json` exists |
+
+Check resolution status:
+```bash
+tasker spec unresolved
+```
 
 If critical weaknesses remain unresolved, **STOP** and ask user to resolve.
 
@@ -887,13 +984,13 @@ Export FSM artifacts to `{TARGET}/docs/state-machines/<slug>/`:
 
 ```bash
 # Compile FSM from capability map and spec
-tasker fsm compile from-capability-map \
+tasker fsm from-capability-map \
     {TARGET}/docs/specs/<slug>.capabilities.json \
     {TARGET}/docs/specs/<slug>.md \
     --output-dir {TARGET}/docs/state-machines/<slug>
 
 # Generate Mermaid diagrams and notes
-tasker fsm mermaid generate-all {TARGET}/docs/state-machines/<slug>
+tasker fsm mermaid {TARGET}/docs/state-machines/<slug>
 
 # Validate FSM artifacts (I1-I5 invariants)
 tasker fsm validate validate {TARGET}/docs/state-machines/<slug>
@@ -901,7 +998,7 @@ tasker fsm validate validate {TARGET}/docs/state-machines/<slug>
 
 Validate against schemas:
 ```bash
-tasker validate fsm --dir {TARGET}/docs/state-machines/<slug>
+tasker fsm validate {TARGET}/docs/state-machines/<slug>
 ```
 
 ### 6. ADR Files (0..N)

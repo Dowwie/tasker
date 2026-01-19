@@ -576,7 +576,6 @@ Files to create:
 
 Port from Python:
 - `scripts/archive.py`
-- `scripts/compliance-check.py`
 - Metrics from state.py
 
 Deliverable: All remaining commands working
@@ -625,7 +624,6 @@ Actions:
 | `spec-session.py` | `internal/spec/` | P2 - Important |
 | `spec-generate.py` | `internal/spec/` | P2 - Important |
 | `archive.py` | `internal/archive/` | P3 - Nice to have |
-| `compliance-check.py` | `internal/validate/` | P2 - Important |
 | `status.py` | Merged into state | P0 - Core |
 | `dashboard.py` | Separate TUI (optional) | P4 - Optional |
 | `evaluate.py` | `internal/metrics/` | P3 - Nice to have |

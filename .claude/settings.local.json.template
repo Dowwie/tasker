@@ -18,7 +18,7 @@
       "matcher": "",
       "hooks": [{
         "type": "command",
-        "command": "python3 {{PROJECT_ROOT}}/.claude/hooks/subagent_stop.py"
+        "command": "{{PROJECT_ROOT}}/.claude/hooks/subagent_stop.sh"
       }]
     }]
   }

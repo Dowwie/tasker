@@ -214,16 +214,14 @@ The task-executor is **self-completing**: it updates state directly rather than 
 
 1. Load bundle from `bundles/{task_id}-bundle.json`
 2. Mark started via `tasker state start-task`
-3. Track changes for rollback
-4. Implement behaviors in specified files
-5. Create documentation: `docs/{task_id}-spec.md` (mandatory)
-6. Spawn task-verifier subagent
-7. If all criteria pass:
+3. Implement behaviors in specified files
+4. Create documentation: `docs/{task_id}-spec.md` (mandatory)
+5. Spawn task-verifier subagent
+6. If all criteria pass:
    - Call `tasker state complete-task`
    - Commit to git
    - Write result file
-8. If criteria fail:
-   - Rollback files
+7. If criteria fail:
    - Call `tasker state fail-task`
 
 ### Task Verifier
@@ -527,9 +525,9 @@ Commands must return exit code 0 on success.
 
 | Failure | Recovery |
 |---------|----------|
-| Acceptance criteria fail | Automatic rollback, task marked failed |
+| Acceptance criteria fail | Task marked failed |
 | Executor crashes | Checkpoint recovery on restart |
-| Verifier returns BLOCK | Automatic rollback, user can retry |
+| Verifier returns BLOCK | Task marked failed, user can retry |
 
 ```bash
 # Retry a failed task

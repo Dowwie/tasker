@@ -238,10 +238,15 @@ var validateCmd = &cobra.Command{
 	},
 }
 
+var (
+	mermaidOutputDir string
+	mermaidNotes     bool
+)
+
 var mermaidCmd = &cobra.Command{
 	Use:   "mermaid <fsm-dir>",
-	Short: "Generate Mermaid diagram from FSM",
-	Long:  `Generates a Mermaid state diagram from FSM artifacts.`,
+	Short: "Generate Mermaid diagrams and notes from FSM",
+	Long:  `Generates Mermaid state diagrams (.mmd) and optional notes (.notes.md) from FSM artifacts.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fsmDir := args[0]
@@ -257,11 +262,23 @@ var mermaidCmd = &cobra.Command{
 			return errors.Internal("failed to parse index.json", err)
 		}
 
-		for _, machine := range index.Machines {
-			statesFile, hasStates := machine.Files["states"]
-			transFile, hasTrans := machine.Files["transitions"]
+		outDir := mermaidOutputDir
+		if outDir == "" {
+			outDir = fsmDir
+		}
 
-			if !hasStates || !hasTrans {
+		if err := os.MkdirAll(outDir, 0755); err != nil {
+			return errors.Internal("failed to create output directory", err)
+		}
+
+		var generated []string
+
+		for i := range index.Machines {
+			machine := &index.Machines[i]
+			statesFile := machine.GetStatesFile()
+			transFile := machine.GetTransitionsFile()
+
+			if statesFile == "" || transFile == "" {
 				continue
 			}
 
@@ -287,52 +304,308 @@ var mermaidCmd = &cobra.Command{
 				return errors.Internal("failed to parse transitions file", err)
 			}
 
-			mermaid := generateMermaid(machine.Name, &statesFileData, &transFileData)
-			fmt.Println(mermaid)
+			mermaid := fsmlib.GenerateMermaid(machine.Name, &statesFileData, &transFileData)
+
+			diagramFile := machine.GetDiagramFile()
+			if diagramFile == "" {
+				diagramFile = machine.ID + ".mmd"
+			}
+			diagramPath := filepath.Join(outDir, diagramFile)
+			if err := os.WriteFile(diagramPath, []byte(mermaid), 0644); err != nil {
+				return errors.Internal("failed to write diagram file", err)
+			}
+			generated = append(generated, diagramPath)
+
+			if mermaidNotes {
+				notes := fsmlib.GenerateNotes(machine.Name, &statesFileData, &transFileData)
+
+				notesFile := machine.GetNotesFile()
+				if notesFile == "" {
+					notesFile = machine.ID + ".notes.md"
+				}
+				notesPath := filepath.Join(outDir, notesFile)
+				if err := os.WriteFile(notesPath, []byte(notes), 0644); err != nil {
+					return errors.Internal("failed to write notes file", err)
+				}
+				generated = append(generated, notesPath)
+			}
+		}
+
+		result := map[string]interface{}{
+			"status":    "success",
+			"generated": generated,
+		}
+		output, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(output))
+
+		return nil
+	},
+}
+
+var (
+	coverageOutput      string
+	steelThreadThresh   float64
+	nonSteelThreadThresh float64
+)
+
+var coverageReportCmd = &cobra.Command{
+	Use:   "coverage-report <fsm-dir> <tasks-dir>",
+	Short: "Generate FSM coverage report",
+	Long:  `Generates a report showing which FSM transitions are covered by tasks.`,
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fsmDir := args[0]
+		tasksDir := args[1]
+
+		indexPath := filepath.Join(fsmDir, "index.json")
+		indexData, err := os.ReadFile(indexPath)
+		if err != nil {
+			return errors.IOReadFailed(indexPath, err)
+		}
+
+		var index fsmlib.IndexFile
+		if err := json.Unmarshal(indexData, &index); err != nil {
+			return errors.Internal("failed to parse index.json", err)
+		}
+
+		tasksCoverage, err := extractTaskCoverage(tasksDir)
+		if err != nil {
+			return err
+		}
+
+		result, err := fsmlib.CheckTaskCoverage(&index, fsmDir, tasksCoverage, steelThreadThresh, nonSteelThreadThresh)
+		if err != nil {
+			return err
+		}
+
+		output, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return err
+		}
+
+		if coverageOutput != "" {
+			if err := os.MkdirAll(filepath.Dir(coverageOutput), 0755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(coverageOutput, output, 0644); err != nil {
+				return err
+			}
+			fmt.Printf("Coverage report written to: %s\n", coverageOutput)
+		} else {
+			fmt.Println(string(output))
+		}
+
+		if !result.Passed {
+			return errors.ValidationFailed("FSM coverage below threshold")
+		}
+		return nil
+	},
+}
+
+var taskCoverageCmd = &cobra.Command{
+	Use:   "task-coverage <fsm-dir> <tasks-dir>",
+	Short: "Validate task coverage of FSM transitions",
+	Long:  `Validates that tasks adequately cover FSM transitions.`,
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fsmDir := args[0]
+		tasksDir := args[1]
+
+		indexPath := filepath.Join(fsmDir, "index.json")
+		indexData, err := os.ReadFile(indexPath)
+		if err != nil {
+			return errors.IOReadFailed(indexPath, err)
+		}
+
+		var index fsmlib.IndexFile
+		if err := json.Unmarshal(indexData, &index); err != nil {
+			return errors.Internal("failed to parse index.json", err)
+		}
+
+		tasksCoverage, err := extractTaskCoverage(tasksDir)
+		if err != nil {
+			return err
+		}
+
+		result, err := fsmlib.CheckTaskCoverage(&index, fsmDir, tasksCoverage, steelThreadThresh, nonSteelThreadThresh)
+		if err != nil {
+			return err
+		}
+
+		if result.Passed {
+			fmt.Println("Task coverage validation PASSED")
+			if result.SteelThreadCoverage != nil {
+				fmt.Printf("Steel thread coverage: %.1f%%\n", result.SteelThreadCoverage.CoveragePercent)
+			}
+			if result.NonSteelCoverage != nil {
+				fmt.Printf("Non-steel thread coverage: %.1f%%\n", result.NonSteelCoverage.CoveragePercent)
+			}
+		} else {
+			fmt.Println("Task coverage validation FAILED")
+			for _, issue := range result.Issues {
+				fmt.Printf("  - %s: %s\n", issue.Invariant, issue.Message)
+			}
+			return errors.ValidationFailed("Task coverage validation failed")
+		}
+		return nil
+	},
+}
+
+var executeCoverageReportCmd = &cobra.Command{
+	Use:   "execute-coverage-report <fsm-dir> <bundles-dir>",
+	Short: "Generate execution coverage report",
+	Long:  `Generates a report showing FSM transition coverage from execution bundles.`,
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fsmDir := args[0]
+		bundlesDir := args[1]
+
+		indexPath := filepath.Join(fsmDir, "index.json")
+		indexData, err := os.ReadFile(indexPath)
+		if err != nil {
+			return errors.IOReadFailed(indexPath, err)
+		}
+
+		var index fsmlib.IndexFile
+		if err := json.Unmarshal(indexData, &index); err != nil {
+			return errors.Internal("failed to parse index.json", err)
+		}
+
+		tasksCoverage, err := extractBundleCoverage(bundlesDir)
+		if err != nil {
+			return err
+		}
+
+		result, err := fsmlib.CheckTaskCoverage(&index, fsmDir, tasksCoverage, steelThreadThresh, nonSteelThreadThresh)
+		if err != nil {
+			return err
+		}
+
+		output, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return err
+		}
+
+		if coverageOutput != "" {
+			if err := os.MkdirAll(filepath.Dir(coverageOutput), 0755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(coverageOutput, output, 0644); err != nil {
+				return err
+			}
+			fmt.Printf("Execution coverage report written to: %s\n", coverageOutput)
+		} else {
+			fmt.Println(string(output))
 		}
 
 		return nil
 	},
 }
 
-func generateMermaid(machineName string, states *fsmlib.StatesFile, transitions *fsmlib.TransitionsFile) string {
-	var sb strings.Builder
+func extractTaskCoverage(tasksDir string) ([]fsmlib.TaskTransitionCoverage, error) {
+	var result []fsmlib.TaskTransitionCoverage
 
-	sb.WriteString("stateDiagram-v2\n")
-	sb.WriteString(fmt.Sprintf("    title %s\n\n", machineName))
-
-	stateMap := make(map[string]fsmlib.State)
-	for _, s := range states.States {
-		stateMap[s.ID] = s
+	entries, err := os.ReadDir(tasksDir)
+	if err != nil {
+		return nil, errors.IOReadFailed(tasksDir, err)
 	}
 
-	for _, s := range states.States {
-		safeName := strings.ReplaceAll(s.Name, "\"", "'")
-		switch s.Type {
-		case "initial":
-			sb.WriteString(fmt.Sprintf("    [*] --> %s\n", s.ID))
-			sb.WriteString(fmt.Sprintf("    %s: %s\n", s.ID, safeName))
-		case "success":
-			sb.WriteString(fmt.Sprintf("    %s --> [*]\n", s.ID))
-			sb.WriteString(fmt.Sprintf("    %s: %s\n", s.ID, safeName))
-		case "failure":
-			sb.WriteString(fmt.Sprintf("    %s: %s [FAILURE]\n", s.ID, safeName))
-		default:
-			sb.WriteString(fmt.Sprintf("    %s: %s\n", s.ID, safeName))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		taskPath := filepath.Join(tasksDir, entry.Name())
+		data, err := os.ReadFile(taskPath)
+		if err != nil {
+			continue
+		}
+
+		var task map[string]interface{}
+		if err := json.Unmarshal(data, &task); err != nil {
+			continue
+		}
+
+		taskID, _ := task["id"].(string)
+		if taskID == "" {
+			continue
+		}
+
+		var transitions []string
+		if fsm, ok := task["state_machine"].(map[string]interface{}); ok {
+			if trans, ok := fsm["transitions"].([]interface{}); ok {
+				for _, t := range trans {
+					if tStr, ok := t.(string); ok {
+						transitions = append(transitions, tStr)
+					}
+				}
+			}
+		}
+
+		if len(transitions) > 0 {
+			result = append(result, fsmlib.TaskTransitionCoverage{
+				TaskID:             taskID,
+				TransitionsCovered: transitions,
+			})
 		}
 	}
 
-	sb.WriteString("\n")
+	return result, nil
+}
 
-	for _, t := range transitions.Transitions {
-		safeTrigger := strings.ReplaceAll(t.Trigger, "\"", "'")
-		if len(safeTrigger) > 30 {
-			safeTrigger = safeTrigger[:27] + "..."
-		}
-		sb.WriteString(fmt.Sprintf("    %s --> %s: %s\n", t.FromState, t.ToState, safeTrigger))
+func extractBundleCoverage(bundlesDir string) ([]fsmlib.TaskTransitionCoverage, error) {
+	var result []fsmlib.TaskTransitionCoverage
+
+	entries, err := os.ReadDir(bundlesDir)
+	if err != nil {
+		return nil, errors.IOReadFailed(bundlesDir, err)
 	}
 
-	return sb.String()
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, "-bundle.json") {
+			continue
+		}
+
+		bundlePath := filepath.Join(bundlesDir, name)
+		data, err := os.ReadFile(bundlePath)
+		if err != nil {
+			continue
+		}
+
+		var bundle map[string]interface{}
+		if err := json.Unmarshal(data, &bundle); err != nil {
+			continue
+		}
+
+		taskID, _ := bundle["task_id"].(string)
+		if taskID == "" {
+			continue
+		}
+
+		var transitions []string
+		if fsm, ok := bundle["state_machine"].(map[string]interface{}); ok {
+			if trans, ok := fsm["transitions"].([]interface{}); ok {
+				for _, t := range trans {
+					if tStr, ok := t.(string); ok {
+						transitions = append(transitions, tStr)
+					}
+				}
+			}
+		}
+
+		if len(transitions) > 0 {
+			result = append(result, fsmlib.TaskTransitionCoverage{
+				TaskID:             taskID,
+				TransitionsCovered: transitions,
+			})
+		}
+	}
+
+	return result, nil
 }
 
 func init() {
@@ -342,10 +615,27 @@ func init() {
 	fromCapMapCmd.Flags().StringVar(&outputDir, "output-dir", "", "Output directory (default: planning-dir/fsm)")
 	fromCapMapCmd.Flags().StringVar(&slug, "slug", "", "Spec slug (default: derived from filename)")
 
+	coverageReportCmd.Flags().StringVar(&coverageOutput, "output", "", "Output file for coverage report")
+	coverageReportCmd.Flags().Float64Var(&steelThreadThresh, "steel-threshold", 1.0, "Steel thread coverage threshold (0-1)")
+	coverageReportCmd.Flags().Float64Var(&nonSteelThreadThresh, "non-steel-threshold", 0.9, "Non-steel thread coverage threshold (0-1)")
+
+	taskCoverageCmd.Flags().Float64Var(&steelThreadThresh, "steel-threshold", 1.0, "Steel thread coverage threshold (0-1)")
+	taskCoverageCmd.Flags().Float64Var(&nonSteelThreadThresh, "non-steel-threshold", 0.9, "Non-steel thread coverage threshold (0-1)")
+
+	executeCoverageReportCmd.Flags().StringVar(&coverageOutput, "output", "", "Output file for coverage report")
+	executeCoverageReportCmd.Flags().Float64Var(&steelThreadThresh, "steel-threshold", 1.0, "Steel thread coverage threshold (0-1)")
+	executeCoverageReportCmd.Flags().Float64Var(&nonSteelThreadThresh, "non-steel-threshold", 0.9, "Non-steel thread coverage threshold (0-1)")
+
+	mermaidCmd.Flags().StringVar(&mermaidOutputDir, "output-dir", "", "Output directory (default: same as fsm-dir)")
+	mermaidCmd.Flags().BoolVar(&mermaidNotes, "notes", true, "Generate notes markdown files")
+
 	fsmCmd.AddCommand(compileCmd)
 	fsmCmd.AddCommand(fromCapMapCmd)
 	fsmCmd.AddCommand(validateCmd)
 	fsmCmd.AddCommand(mermaidCmd)
+	fsmCmd.AddCommand(coverageReportCmd)
+	fsmCmd.AddCommand(taskCoverageCmd)
+	fsmCmd.AddCommand(executeCoverageReportCmd)
 
 	command.RootCmd.AddCommand(fsmCmd)
 }
