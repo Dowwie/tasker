@@ -45,3 +45,19 @@ Like a borrow checker, it enforces semantic safety:
 - Undeclared state transitions and logic drift fail early
 
 Every artifact is traceable back to a specific requirement.
+
+
+
+## Graceful Interrupt Workflow
+
+Often, you want to pause Tasker development and resume later, and you can gracefully do so:
+- to stop (from any terminal): ```tasker stop```
+- to resume: ```tasker resume```
+
+Then run any tasker command again in Claude Code to pick up from where you left off.
+
+
+*Prerequisite: tasker must be in PATH (installed via install.sh to ~/.local/bin/tasker)*
+
+
+

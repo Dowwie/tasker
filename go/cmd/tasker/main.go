@@ -11,6 +11,7 @@ import (
 	_ "github.com/dgordon/tasker/internal/command/hook"
 	_ "github.com/dgordon/tasker/internal/command/spec"
 	_ "github.com/dgordon/tasker/internal/command/state"
+	_ "github.com/dgordon/tasker/internal/command/stop"
 	_ "github.com/dgordon/tasker/internal/command/transform"
 	_ "github.com/dgordon/tasker/internal/command/tui"
 	_ "github.com/dgordon/tasker/internal/command/validate"
