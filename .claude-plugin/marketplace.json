@@ -1,15 +1,19 @@
 {
   "name": "tasker-marketplace",
-  "description": "Local marketplace for tasker plugin development",
   "owner": {
     "name": "Dowwie"
   },
   "plugins": [
     {
       "name": "tasker",
-      "source": "./claude-plugin",
+      "source": "./",
       "description": "Spec-Driven Development: specifications compiled into executable, verifiable behavior",
-      "version": "0.1.0"
+      "keywords": ["spec-driven-development", "workflow", "agents", "planning", "execution"],
+      "skills": ["./skills/specify"]
     }
-  ]
+  ],
+  "metadata": {
+    "description": "Local marketplace for tasker plugin development",
+    "version": "0.1.0"
+  }
 }

@@ -42,10 +42,88 @@ After completion, artifacts are archived to `archive/{project}/` for post-hoc an
 ## MANDATORY: Phase Order
 
 ```
-Scope → Clarification Loop (Discovery) → Synthesis → Architecture Sketch → Decisions/ADRs → Gate → Spec Review → Export
+Initialization → Scope → Clarification Loop (Discovery) → Synthesis → Architecture Sketch → Decisions/ADRs → Gate → Spec Review → Export
 ```
 
 **NEVER skip or reorder these phases.**
+
+---
+
+# Phase 0 — Initialization
+
+## Goal
+Establish project context and session state before specification work begins.
+
+## Step 1: Ask User Intent First
+
+**ALWAYS ask the user first** what they want to do. Do not assume or auto-discover.
+
+Ask using AskUserQuestion:
+```
+What would you like to do?
+```
+Options:
+- **New specification** — Start a new spec from scratch
+- **Continue existing spec** — Resume work on an existing spec file
+- **Resume session** — Continue an interrupted specification session
+
+## Step 2: Gather Path Based on Intent
+
+### If "New specification":
+Ask for target directory path. Default to current directory if user doesn't specify.
+
+### If "Continue existing spec":
+Ask user to provide the spec file path.
+
+### If "Resume session":
+Read `.claude/spec-session.json` and resume from saved phase.
+If no session exists, inform user and offer to start fresh.
+
+## Step 3: Confirm Target Directory
+
+Based on user input, confirm the target directory:
+
+- **Current directory is the target** → Use CWD as TARGET_DIR
+- **User specifies different path** → Validate path exists, use as TARGET_DIR
+- **New project in different location** → Validate parent exists, use as TARGET_DIR
+
+**Validation:**
+```bash
+TARGET_DIR="<resolved-path>"
+if [ ! -d "$TARGET_DIR" ]; then
+    # For new projects, check parent exists
+    PARENT=$(dirname "$TARGET_DIR")
+    [ -d "$PARENT" ] || echo "Error: Parent directory does not exist"
+fi
+```
+
+## Step 4: Initialize Session State
+
+Create or update `.claude/spec-session.json`:
+
+```json
+{
+  "target_dir": "<absolute-path>",
+  "project_type": "new|existing",
+  "spec_slug": "<slug>",
+  "spec_path": "<target>/docs/specs/<slug>.md",
+  "phase": "initialization",
+  "started_at": "<timestamp>",
+  "resumed_from": null
+}
+```
+
+**For existing projects**, store discovered project context in session state for later reference during Synthesis phase.
+
+## Output
+
+- Session state initialized in `.claude/spec-session.json`
+- Project context captured (for existing projects)
+- Clear path forward: resume existing spec OR start new spec
+
+## Proceed to Phase 1
+
+After initialization completes, advance to Phase 1 (Scope).
 
 ---
 
