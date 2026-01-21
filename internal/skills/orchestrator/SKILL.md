@@ -25,7 +25,7 @@ The full workflow from requirements to implementation:
 | Skill | Purpose | Input | Output |
 |-------|---------|-------|--------|
 | `/specify` | Design vision & capabilities | User requirements | `{TARGET}/docs/specs/<slug>.md` + `.capabilities.json` + ADRs |
-| `/plan` | DAG construction (files → tasks) | Spec + capability map | Task DAG in `project-planning/tasks/` |
+| `/plan` | DAG construction (files → tasks) | Spec + capability map | Task DAG in `.tasker/tasks/` |
 | `/execute` | Implementation | Task DAG | Working code |
 
 **Entry points:**
@@ -48,27 +48,32 @@ The orchestrator ONLY:
 
 ---
 
-## Directory Initialization (MANDATORY FIRST STEP)
+## Directory Initialization (After target_dir is known)
 
-**CRITICAL:** Before ANY other operation in `/plan` or `/execute` mode, the orchestrator MUST initialize the complete directory structure. This is the ONLY place where directories are created - sub-agents assume directories already exist.
+**CRITICAL:** After obtaining target_dir from the user, the orchestrator MUST initialize the `.tasker/` directory structure. This is the ONLY place where directories are created - sub-agents assume directories already exist.
 
-### Setup (Run at start of any /plan or /execute session)
+### Setup (Run after target_dir is confirmed)
 
-Run the initialization script:
+Initialize the `.tasker/` directory structure:
 
 ```bash
-./scripts/init-planning-dirs.sh
+TASKER_DIR="$TARGET_DIR/.tasker"
+mkdir -p "$TASKER_DIR"/{artifacts,inputs,tasks,reports,bundles,logs}
 ```
 
 This creates:
-- `project-planning/artifacts/` - For capability-map.json, physical-map.json
-- `project-planning/inputs/` - For spec.md
-- `project-planning/tasks/` - For T001.json, T002.json, etc.
-- `project-planning/reports/` - For task-validation-report.md
-- `project-planning/bundles/` - For execution bundles
-- `.claude/logs/` - For activity logging
+- `$TARGET_DIR/.tasker/artifacts/` - For capability-map.json, physical-map.json
+- `$TARGET_DIR/.tasker/inputs/` - For spec.md
+- `$TARGET_DIR/.tasker/tasks/` - For T001.json, T002.json, etc.
+- `$TARGET_DIR/.tasker/reports/` - For task-validation-report.md
+- `$TARGET_DIR/.tasker/bundles/` - For execution bundles
+- `$TARGET_DIR/.tasker/logs/` - For activity logging
 
-The script outputs the `PLANNING_DIR` absolute path which you must capture and pass to all sub-agents.
+Set TASKER_DIR as the working directory for all operations:
+```bash
+TASKER_DIR="$TARGET_DIR/.tasker"
+echo "TASKER_DIR: $TASKER_DIR"
+```
 
 **Why centralized initialization?**
 1. **Reliability**: Sub-agents run in isolated contexts and directory creation has been unreliable
@@ -126,16 +131,19 @@ Replace $AGENT_NAME with your agent name (e.g., logic-architect, task-executor).
 
 ## CRITICAL: Path Management
 
-**PLANNING_DIR must be an absolute path.** Sub-agents run in isolated contexts and cannot resolve relative paths correctly.
+**TASKER_DIR must be an absolute path.** Sub-agents run in isolated contexts and cannot resolve relative paths correctly.
 
-At the start of any planning session, compute and store:
+After obtaining target_dir from user, compute and store:
 ```bash
-# Get absolute path to project-planning directory
-PLANNING_DIR="$(pwd)/project-planning"
-echo "PLANNING_DIR: $PLANNING_DIR"
+# Get absolute path to .tasker directory within target project
+TARGET_DIR="<user-provided-absolute-path>"
+TASKER_DIR="$TARGET_DIR/.tasker"
+echo "TASKER_DIR: $TASKER_DIR"
 ```
 
-This `PLANNING_DIR` value (e.g., `/Users/foo/tasker/project-planning`) MUST be passed to every sub-agent spawn. Do NOT use relative paths like `project-planning/` in spawn prompts.
+This `TASKER_DIR` value (e.g., `/Users/foo/my-project/.tasker`) MUST be passed to every sub-agent spawn. Do NOT use relative paths like `.tasker/` in spawn prompts.
+
+**NOTE:** Throughout this document, `TASKER_DIR` replaces the old `PLANNING_DIR` variable. They serve the same purpose.
 
 ---
 
@@ -143,41 +151,145 @@ This `PLANNING_DIR` value (e.g., `/Users/foo/tasker/project-planning`) MUST be p
 
 Triggered by `/plan`. Runs phases 0-6 (spec review through ready).
 
-## MANDATORY: Proactive Discovery Phase
+## MANDATORY FIRST STEP: Ask for Target Project Directory
 
-**BEFORE asking the user anything**, you MUST perform automatic discovery. This phase gathers ALL context needed for planning.
+**ALWAYS ask for target_dir FIRST before anything else.** No guessing, no inference from CWD.
 
-### Step 1: Search for Existing Specifications
+### Step 1: Ask for Target Directory
+
+Use AskUserQuestion to ask:
+```
+What is the target project directory?
+```
+Free-form text input. User must provide an absolute or relative path.
+
+**Validation:**
 ```bash
-# Search for spec files in target project's docs/specs/ (from /specify workflow)
-# and in project-planning for raw specs
-echo "=== Specs from /specify workflow ==="
-find . -path "*/docs/specs/*.md" -not -path "*project-planning*" 2>/dev/null | head -10
+TARGET_DIR="<user-provided-path>"
+# Convert to absolute path
+TARGET_DIR=$(cd "$TARGET_DIR" 2>/dev/null && pwd || echo "$TARGET_DIR")
 
-echo "=== Specs in project-planning ==="
-find project-planning -name "*.md" -o -name "*.txt" 2>/dev/null | head -10
+if [ ! -d "$TARGET_DIR" ]; then
+    # For new projects, check parent exists
+    PARENT=$(dirname "$TARGET_DIR")
+    if [ -d "$PARENT" ]; then
+        echo "Directory will be created: $TARGET_DIR"
+        mkdir -p "$TARGET_DIR"
+    else
+        echo "Error: Parent directory does not exist: $PARENT"
+        # Re-ask for target_dir
+    fi
+fi
 ```
 
-**Note:** If user hasn't developed a spec yet, suggest running `/specify` first to create a high-quality spec packet interactively.
+### Step 2: Check for Existing Session and Initialize
 
-### Step 2: Gather Initial Inputs
+After target_dir is confirmed, check for existing `.tasker/` state:
 
-Present spec discovery results and gather basic inputs:
+```bash
+TASKER_DIR="$TARGET_DIR/.tasker"
+if [ -f "$TASKER_DIR/state.json" ]; then
+    echo "Found existing tasker session at $TASKER_DIR"
+    echo "Resuming from saved state..."
+    # Read phase from state.json and resume
+    tasker state status
+else
+    echo "No existing session. Initializing..."
+    # Initialize directory structure (see Directory Initialization below)
+fi
+```
+
+### Step 3: Detect Specs (Automatic)
+
+**Specs are REQUIRED for /plan to proceed.** Check `$TARGET_DIR/docs/specs/` for specs from /specify:
+
+```bash
+SPEC_DIR="$TARGET_DIR/docs/specs"
+
+# Find spec files (from /specify workflow)
+SPEC_FILES=$(find "$SPEC_DIR" -maxdepth 1 -name "*.md" 2>/dev/null)
+CAP_MAPS=$(find "$SPEC_DIR" -maxdepth 1 -name "*.capabilities.json" 2>/dev/null)
+
+if [ -n "$SPEC_FILES" ]; then
+    echo "=== Specs found ==="
+    echo "$SPEC_FILES"
+
+    # Use the first spec (or only spec)
+    SPEC_PATH=$(echo "$SPEC_FILES" | head -1)
+    SPEC_SLUG=$(basename "$SPEC_PATH" .md)
+
+    # Check for matching capability map
+    CAP_MAP="$SPEC_DIR/${SPEC_SLUG}.capabilities.json"
+    if [ -f "$CAP_MAP" ]; then
+        echo "Capability map found: $CAP_MAP"
+        echo "Can skip logic-architect phase"
+    fi
+else
+    echo "No specs found in $SPEC_DIR"
+    # BLOCK - see below
+fi
+```
+
+### If spec found:
+
+Proceed to Step 4. No user question needed.
+
+### If NO spec found — BLOCK and offer /specify:
+
+**/plan CANNOT proceed without specs.** Present this to the user:
 
 ```markdown
-## Planning Discovery
+## Specs Required
 
-**Existing specs found:** [list what you found, or "none"]
+Planning requires a specification to decompose into tasks. Without a spec, there's nothing to plan.
 
-I need a few details to proceed:
+**Would you like to create a spec now using `/specify`?**
 
-1. **Specification** - Use an existing spec above, paste requirements, or provide a file path
-2. **Target Directory** - Where will the code be written?
-3. **Project Type** - Is this a **new project** or **enhancing an existing project**?
-4. **Tech Stack** (optional) - Any specific requirements? (e.g., "Python with FastAPI")
+The `/specify` workflow will guide you through:
+1. Defining goals and scope
+2. Clarifying requirements through structured questions
+3. Extracting capabilities and behaviors
+4. Producing a spec ready for `/plan`
 ```
 
-### Step 3: Existing Project Analysis (MANDATORY for existing projects)
+Ask using AskUserQuestion:
+```
+Would you like to run /specify to create a spec now?
+```
+Options:
+- **Yes, start /specify** — Begin the specification workflow
+- **No, I'll provide a spec later** — Exit /plan for now
+
+**If user chooses "Yes, start /specify":**
+1. Invoke the `tasker:specify` skill with the already-collected `target_dir`
+2. Pass context: `TARGET_DIR` is already known, skip Step 1 of /specify
+3. After /specify completes, automatically return to /plan
+
+**If user chooses "No":**
+Exit gracefully with message: "Run `/plan` again when you have a spec ready, or use `/specify` to create one."
+
+### Step 4: Detect Project Type (Automatic)
+
+**Do not ask the user** — infer project type from target directory:
+
+```bash
+# Check if target directory has source code
+SOURCE_FILES=$(find "$TARGET_DIR" \( -name "*.py" -o -name "*.ts" -o -name "*.js" -o -name "*.go" -o -name "*.rs" -o -name "*.java" \) \
+    -not -path "*node_modules*" -not -path "*__pycache__*" -not -path "*.venv*" -not -path "*/.git/*" 2>/dev/null | head -5)
+
+if [ -n "$SOURCE_FILES" ]; then
+    PROJECT_TYPE="existing"
+    echo "Detected existing project with source files"
+else
+    PROJECT_TYPE="new"
+    echo "New project (no existing source files)"
+fi
+```
+
+- **Existing project** → Proceed to Step 5 (project analysis)
+- **New project** → Skip to Step 6 (tech stack)
+
+### Step 5: Existing Project Analysis (if PROJECT_TYPE=existing)
 
 **If enhancing an existing project**, you MUST analyze the target directory **BEFORE proceeding to ingestion**. This analysis is CRITICAL - sub-agents cannot see the codebase, so you must extract and pass this context to them.
 
@@ -261,7 +373,9 @@ find "$TARGET_DIR" \( -name "*.py" -o -name "*.ts" -o -name "*.js" -o -name "*.g
 Proceed with planning? (y/n)
 ```
 
-### Step 4: Store Discovery Context
+**Tech stack comes from the spec.** A well-developed spec (from /specify) includes tech stack requirements. Do not ask for tech stack separately — read it from the spec.
+
+### Step 6: Store Discovery Context
 
 **CRITICAL:** You must retain this analysis for passing to sub-agents. Store it as a structured context block:
 
@@ -291,7 +405,7 @@ This `PROJECT_CONTEXT` MUST be included in every sub-agent spawn prompt (logic-a
 First, check if the spec already exists (directory was created during initialization):
 
 ```bash
-if [ -f "$PLANNING_DIR/inputs/spec.md" ]; then
+if [ -f "$TASKER_DIR/inputs/spec.md" ]; then
     echo "Spec found, proceeding to planning..."
 fi
 ```
@@ -300,8 +414,8 @@ fi
 
 **If spec doesn't exist**, ask user for specification, then:
 
-- **User provides a file path** → `cp /path/to/spec "$PLANNING_DIR/inputs/spec.md"`
-- **User pastes content** → Write it to `$PLANNING_DIR/inputs/spec.md`
+- **User provides a file path** → `cp /path/to/spec "$TASKER_DIR/inputs/spec.md"`
+- **User pastes content** → Write it to `$TASKER_DIR/inputs/spec.md`
 
 **Important:** Store the spec exactly as provided - no transformation, summarization, or normalization.
 
@@ -324,18 +438,18 @@ if [ -f "$CAPABILITY_MAP" ]; then
     echo "Copying artifacts and skipping to physical phase..."
 
     # Copy artifacts to planning directory
-    cp "$CAPABILITY_MAP" "$PLANNING_DIR/artifacts/capability-map.json"
-    [ -f "$SPEC_REVIEW" ] && cp "$SPEC_REVIEW" "$PLANNING_DIR/artifacts/spec-review.json"
+    cp "$CAPABILITY_MAP" "$TASKER_DIR/artifacts/capability-map.json"
+    [ -f "$SPEC_REVIEW" ] && cp "$SPEC_REVIEW" "$TASKER_DIR/artifacts/spec-review.json"
 
     # Check for FSM artifacts from /specify workflow
     FSM_DIR="${SPEC_DIR}/../fsm/${SPEC_SLUG}"
     if [ -d "$FSM_DIR" ]; then
         echo "FSM artifacts found from /specify workflow: $FSM_DIR"
-        mkdir -p "$PLANNING_DIR/artifacts/fsm"
-        cp -r "$FSM_DIR"/* "$PLANNING_DIR/artifacts/fsm/"
+        mkdir -p "$TASKER_DIR/artifacts/fsm"
+        cp -r "$FSM_DIR"/* "$TASKER_DIR/artifacts/fsm/"
 
         # Validate FSM artifacts
-        tasker fsm validate validate "$PLANNING_DIR/artifacts/fsm"
+        tasker fsm validate validate "$TASKER_DIR/artifacts/fsm"
         if [ $? -ne 0 ]; then
             echo "WARNING: FSM validation failed. Review artifacts before proceeding."
         fi
@@ -354,7 +468,7 @@ fi
 
 ```bash
 # Initialize if no state exists
-if [ ! -f "$PLANNING_DIR/state.json" ]; then
+if [ ! -f "$TASKER_DIR/state.json" ]; then
     tasker state init "$TARGET_DIR"
 fi
 
@@ -403,23 +517,23 @@ while phase not in ["ready", "executing", "complete"]:
 
 **MANDATORY STEP:** After each agent completes, you MUST verify its output file exists before attempting validation.
 
-Note: `$PLANNING_DIR` below refers to the absolute path you passed to the agent (e.g., `/Users/foo/tasker/project-planning`).
+Note: `$TASKER_DIR` below refers to the absolute path you passed to the agent (e.g., `/Users/foo/my-project/.tasker`).
 
 ```bash
 # After logic-architect completes:
-if [ ! -f $PLANNING_DIR/artifacts/capability-map.json ]; then
+if [ ! -f $TASKER_DIR/artifacts/capability-map.json ]; then
     echo "ERROR: capability-map.json not written. Agent must retry."
     # Re-spawn the agent with explicit reminder to use Write tool
 fi
 
 # After physical-architect completes:
-if [ ! -f $PLANNING_DIR/artifacts/physical-map.json ]; then
+if [ ! -f $TASKER_DIR/artifacts/physical-map.json ]; then
     echo "ERROR: physical-map.json not written. Agent must retry."
     # Re-spawn the agent with explicit reminder to use Write tool
 fi
 
 # After task-author completes:
-task_count=$(ls $PLANNING_DIR/tasks/*.json 2>/dev/null | wc -l)
+task_count=$(ls $TASKER_DIR/tasks/*.json 2>/dev/null | wc -l)
 if [ "$task_count" -eq 0 ]; then
     echo "ERROR: No task files written. Agent must retry."
     # Re-spawn the agent with explicit reminder to use Write tool
@@ -429,9 +543,9 @@ fi
 **Why this matters:** Sub-agents may fail silently (e.g., output JSON to conversation instead of writing to file, or write to wrong directory). The orchestrator MUST verify files exist at the correct absolute path before calling `state.py validate`, otherwise validation will fail with "Artifact not found" which is confusing.
 
 **Recovery procedure:** If file doesn't exist:
-1. Check if directory exists: `ls -la $PLANNING_DIR/artifacts/`
+1. Check if directory exists: `ls -la $TASKER_DIR/artifacts/`
 2. Re-spawn the agent with this explicit reminder:
-   > "IMPORTANT: You must use the Write tool to save the file to the absolute path {PLANNING_DIR}/artifacts/. Simply outputting JSON to the conversation is NOT sufficient. Do NOT use relative paths like project-planning/."
+   > "IMPORTANT: You must use the Write tool to save the file to the absolute path {TASKER_DIR}/artifacts/. Simply outputting JSON to the conversation is NOT sufficient. Do NOT use relative paths like .tasker/."
 
 ## Agent Spawn Templates
 
@@ -456,21 +570,21 @@ Log your activity using the logging script:
 
 ## Context
 
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
 
 ## Your Task
 
 1. Run weakness detection:
-   tasker spec review analyze {PLANNING_DIR}/inputs/spec.md
+   tasker spec review analyze {TASKER_DIR}/inputs/spec.md
 
-2. Save results to {PLANNING_DIR}/artifacts/spec-review.json
+2. Save results to {TASKER_DIR}/artifacts/spec-review.json
 
 3. For CRITICAL weaknesses (W1: Non-behavioral, W6: Contradictions):
    - Use AskUserQuestion tool to engage user for resolution
-   - Record resolutions to {PLANNING_DIR}/artifacts/spec-resolutions.json
+   - Record resolutions to {TASKER_DIR}/artifacts/spec-resolutions.json
 
 4. Check status:
-   tasker spec review status {PLANNING_DIR}
+   tasker spec review status {TASKER_DIR}
 
 CRITICAL WEAKNESS CATEGORIES:
 - W1: Non-behavioral (DDL/schema not stated as behavior) - Ask: "Should DDL be DB-level or app-layer?"
@@ -509,7 +623,7 @@ Log your activity using the logging script:
 
 ## Context
 
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
 Target Directory: {TARGET_DIR}
 Project Type: {new | existing}
 Tech Stack: {user-provided constraints or "none specified"}
@@ -544,28 +658,28 @@ For new projects, state: "New project - no existing patterns to follow"
 
 ## Specification Location
 
-The full specification is in: {PLANNING_DIR}/inputs/spec.md
+The full specification is in: {TASKER_DIR}/inputs/spec.md
 
 Read that file for the complete requirements. The spec has already been stored verbatim.
 
 ## Your Task
 
-1. Read {PLANNING_DIR}/inputs/spec.md
-2. Read {PLANNING_DIR}/artifacts/spec-resolutions.json if it exists
+1. Read {TASKER_DIR}/inputs/spec.md
+2. Read {TASKER_DIR}/artifacts/spec-resolutions.json if it exists
    - Resolutions marked "mandatory" MUST become explicit behaviors
    - Non-behavioral requirements (W1) should be tagged for explicit tasks
    - Cross-cutting concerns (W3) should be flagged for dedicated capabilities
 3. **For existing projects:** Consider how new capabilities integrate with existing structure
 4. Extract capabilities using I.P.S.O. decomposition
 5. Apply phase filtering (Phase 1 only)
-6. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/capability-map.json
-7. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/capability-map.json`
-8. Validate with: `cd {PLANNING_DIR}/.. && tasker state validate capability_map`
+6. **CRITICAL: Use the Write tool** to save to {TASKER_DIR}/artifacts/capability-map.json
+7. **Verify file exists**: `ls -la {TASKER_DIR}/artifacts/capability-map.json`
+8. Validate with: `cd {TASKER_DIR}/.. && tasker state validate capability_map`
 
 IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 1. You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
-2. Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
-3. After Write, you MUST verify: `ls -la {PLANNING_DIR}/artifacts/capability-map.json` - if file doesn't exist, Write again!
+2. Use the TASKER_DIR absolute path provided above. Do NOT use relative paths.
+3. After Write, you MUST verify: `ls -la {TASKER_DIR}/artifacts/capability-map.json` - if file doesn't exist, Write again!
 4. You MUST run validation and confirm it passes.
 5. For existing projects, ensure capabilities don't duplicate what already exists in the codebase.
 
@@ -591,7 +705,7 @@ Log your activity using the logging script:
 
 ## Context
 
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
 Target Directory: {TARGET_DIR}
 Project Type: {new | existing}
 Tech Stack: {user-provided constraints or "infer from capability-map"}
@@ -611,21 +725,21 @@ For new projects, state: "New project - establish sensible conventions"
 
 ## Your Task
 
-1. Read {PLANNING_DIR}/artifacts/capability-map.json
+1. Read {TASKER_DIR}/artifacts/capability-map.json
 2. **For existing projects:** Map behaviors to paths that FIT the existing structure
    - Use existing directories (don't create parallel structures)
    - Follow established naming conventions
    - Integrate with existing modules where appropriate
 3. For new projects: Establish clean, conventional structure
 4. Add cross-cutting concerns and infrastructure
-5. **CRITICAL: Use the Write tool** to save to {PLANNING_DIR}/artifacts/physical-map.json
-6. **Verify file exists**: `ls -la {PLANNING_DIR}/artifacts/physical-map.json`
-7. Validate with: `cd {PLANNING_DIR}/.. && tasker state validate physical_map`
+5. **CRITICAL: Use the Write tool** to save to {TASKER_DIR}/artifacts/physical-map.json
+6. **Verify file exists**: `ls -la {TASKER_DIR}/artifacts/physical-map.json`
+7. Validate with: `cd {TASKER_DIR}/.. && tasker state validate physical_map`
 
 IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 1. You MUST use the Write tool to save the file. Simply outputting JSON to the conversation is NOT sufficient.
-2. Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
-3. After Write, you MUST verify: `ls -la {PLANNING_DIR}/artifacts/physical-map.json` - if file doesn't exist, Write again!
+2. Use the TASKER_DIR absolute path provided above. Do NOT use relative paths.
+3. After Write, you MUST verify: `ls -la {TASKER_DIR}/artifacts/physical-map.json` - if file doesn't exist, Write again!
 4. You MUST run validation and confirm it passes.
 5. For existing projects, respect the established structure - don't fight it.
 
@@ -651,7 +765,7 @@ Log your activity using the logging script:
 
 ## Context
 
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
 Target Directory: {TARGET_DIR}
 Project Type: {new | existing}
 
@@ -670,9 +784,9 @@ Key information for task definitions:
 
 ## Your Task
 
-1. Read {PLANNING_DIR}/artifacts/physical-map.json
-2. Read {PLANNING_DIR}/artifacts/capability-map.json (for behavior details)
-3. **Check for FSM artifacts**: If {PLANNING_DIR}/artifacts/fsm/index.json exists:
+1. Read {TASKER_DIR}/artifacts/physical-map.json
+2. Read {TASKER_DIR}/artifacts/capability-map.json (for behavior details)
+3. **Check for FSM artifacts**: If {TASKER_DIR}/artifacts/fsm/index.json exists:
    - Read the FSM index and transitions files
    - For each task, identify which FSM transitions it covers
    - Add `state_machine` field to task definitions (see FSM Integration below)
@@ -681,13 +795,13 @@ Key information for task definitions:
    - Tests pass with existing test suite
    - Linting passes (ruff, eslint, etc.)
    - New code follows established patterns
-5. **CRITICAL: Use the Write tool** to save each task file to {PLANNING_DIR}/tasks/T001.json, etc.
-6. **Verify files exist**: `ls -la {PLANNING_DIR}/tasks/`
-7. Load tasks with: `cd {PLANNING_DIR}/.. && tasker state load-tasks`
+5. **CRITICAL: Use the Write tool** to save each task file to {TASKER_DIR}/tasks/T001.json, etc.
+6. **Verify files exist**: `ls -la {TASKER_DIR}/tasks/`
+7. Load tasks with: `cd {TASKER_DIR}/.. && tasker state load-tasks`
 
 ## FSM Integration (if FSM artifacts exist)
 
-When FSM artifacts are present at {PLANNING_DIR}/artifacts/fsm/:
+When FSM artifacts are present at {TASKER_DIR}/artifacts/fsm/:
 
 ### Add state_machine field to tasks
 ```json
@@ -727,14 +841,14 @@ After creating tasks, verify FSM transition coverage. **This is a HARD PLANNING 
 ```bash
 # Generate coverage report (for observability)
 tasker fsm validate coverage-report \
-    {PLANNING_DIR}/artifacts/fsm/index.json \
-    {PLANNING_DIR}/tasks \
-    --output {PLANNING_DIR}/artifacts/fsm-coverage.plan.json
+    {TASKER_DIR}/artifacts/fsm/index.json \
+    {TASKER_DIR}/tasks \
+    --output {TASKER_DIR}/artifacts/fsm-coverage.plan.json
 
 # Validate coverage meets thresholds (HARD GATE)
 tasker fsm validate task-coverage \
-    {PLANNING_DIR}/artifacts/fsm/index.json \
-    {PLANNING_DIR}/tasks \
+    {TASKER_DIR}/artifacts/fsm/index.json \
+    {TASKER_DIR}/tasks \
     --steel-threshold 1.0 \
     --other-threshold 0.9
 ```
@@ -752,15 +866,15 @@ tasker fsm validate task-coverage \
 
 IMPORTANT - YOUR TASK IS NOT COMPLETE UNTIL:
 1. You MUST use the Write tool to save each file. Simply outputting JSON to the conversation is NOT sufficient.
-2. Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
-3. After Write, you MUST verify: `ls {PLANNING_DIR}/tasks/*.json | wc -l` - if count is 0, Write again!
+2. Use the TASKER_DIR absolute path provided above. Do NOT use relative paths.
+3. After Write, you MUST verify: `ls {TASKER_DIR}/tasks/*.json | wc -l` - if count is 0, Write again!
 4. You MUST run load-tasks and confirm it succeeds.
 5. For existing projects, tasks must include verification that new code integrates cleanly.
 6. **If FSM artifacts exist**: You MUST run FSM coverage validation:
    ```bash
    tasker fsm validate task-coverage \
-       {PLANNING_DIR}/artifacts/fsm/index.json \
-       {PLANNING_DIR}/tasks
+       {TASKER_DIR}/artifacts/fsm/index.json \
+       {TASKER_DIR}/tasks
    ```
    This is a **HARD GATE** - planning cannot proceed if steel-thread coverage < 100%.
 
@@ -811,10 +925,10 @@ Log your activity using the logging script:
 
 ## Context
 
-PLANNING_DIR: {absolute path to project-planning}
-Spec: {PLANNING_DIR}/inputs/spec.md
-Capability Map: {PLANNING_DIR}/artifacts/capability-map.json
-Tasks Directory: {PLANNING_DIR}/tasks/
+TASKER_DIR: {absolute path to .tasker directory}
+Spec: {TASKER_DIR}/inputs/spec.md
+Capability Map: {TASKER_DIR}/artifacts/capability-map.json
+Tasks Directory: {TASKER_DIR}/tasks/
 User Preferences: ~/.claude/CLAUDE.md (if exists)
 
 ## Required Command
@@ -841,7 +955,7 @@ tasker state advance
 
 If BLOCKED, the orchestrator:
 1. Displays the verifier's summary to user
-2. Points user to full report: `{PLANNING_DIR}/reports/task-validation-report.md`
+2. Points user to full report: `{TASKER_DIR}/reports/task-validation-report.md`
 3. Waits for user to fix task files
 4. Re-runs task-plan-verifier (or user runs `/verify-plan`)
 5. Repeats until READY or READY_WITH_NOTES
@@ -863,21 +977,21 @@ Log your activity using the logging script:
 
 ## Context
 
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
 
 ## Your Task
 
-1. Read {PLANNING_DIR}/tasks/*.json
-2. Read {PLANNING_DIR}/artifacts/capability-map.json (for steel thread flows)
+1. Read {TASKER_DIR}/tasks/*.json
+2. Read {TASKER_DIR}/artifacts/capability-map.json (for steel thread flows)
 3. Build dependency graph
 4. Assign phases (1: foundations, 2: steel thread, 3+: features)
-5. **CRITICAL: Update task files** using Write tool to {PLANNING_DIR}/tasks/T001.json etc.
+5. **CRITICAL: Update task files** using Write tool to {TASKER_DIR}/tasks/T001.json etc.
 6. Validate DAG (no cycles, deps in earlier phases)
-7. Run: cd {PLANNING_DIR}/.. && tasker state load-tasks
+7. Run: cd {TASKER_DIR}/.. && tasker state load-tasks
 
 IMPORTANT:
 - You MUST update task files using the Write tool or jq.
-- Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
+- Use the TASKER_DIR absolute path provided above. Do NOT use relative paths.
 ```
 
 The report file contains:
@@ -932,9 +1046,29 @@ Triggered by `/execute`. Runs task execution phase, followed by optional complia
 
 ## Execute Inputs
 
-Ask user for (or detect from current directory):
-1. **Planning Directory** - Where `project-planning/state.json` lives
-2. **Target Directory** - Where code will be written
+**ALWAYS ask for target_dir FIRST before anything else.** No guessing, no inference from CWD.
+
+Use AskUserQuestion to ask:
+```
+What is the target project directory?
+```
+Free-form text input. User must provide an absolute or relative path.
+
+After target_dir is confirmed:
+```bash
+TARGET_DIR="<user-provided-path>"
+# Convert to absolute path
+TARGET_DIR=$(cd "$TARGET_DIR" 2>/dev/null && pwd)
+
+TASKER_DIR="$TARGET_DIR/.tasker"
+
+# Verify .tasker/ exists and has state
+if [ ! -f "$TASKER_DIR/state.json" ]; then
+    echo "Error: No tasker session found at $TASKER_DIR"
+    echo "Run /plan first to create a task plan."
+    exit 1
+fi
+```
 
 ## Execute Prerequisites
 
@@ -942,9 +1076,6 @@ Ask user for (or detect from current directory):
 # Verify planning is complete
 tasker state status
 # Phase must be: ready, executing, or have tasks
-
-# Verify target directory
-[ -d "$TARGET_DIR" ] || echo "Target directory not found"
 ```
 
 ## Git Repository Initialization (MANDATORY)
@@ -1015,8 +1146,8 @@ while true; do
         tasker state checkpoint complete
 
         # Generate evaluation report even on halt
-        tasker evaluate --output $PLANNING_DIR/reports/evaluation-report.txt
-        tasker evaluate --format json --output $PLANNING_DIR/reports/evaluation-report.json
+        tasker evaluate --output $TASKER_DIR/reports/evaluation-report.txt
+        tasker evaluate --format json --output $TASKER_DIR/reports/evaluation-report.json
 
         tasker state confirm-halt
         break
@@ -1032,8 +1163,8 @@ while true; do
             tasker state checkpoint clear
 
             # Generate evaluation report (MANDATORY)
-            tasker evaluate --output $PLANNING_DIR/reports/evaluation-report.txt
-            tasker evaluate --format json --output $PLANNING_DIR/reports/evaluation-report.json
+            tasker evaluate --output $TASKER_DIR/reports/evaluation-report.txt
+            tasker evaluate --format json --output $TASKER_DIR/reports/evaluation-report.json
 
             break
         else
@@ -1088,7 +1219,7 @@ while true; do
 
     # 6. SPAWN EXECUTORS IN PARALLEL
     # Use Task tool with multiple invocations in single message
-    # Each executor gets: PLANNING_DIR and Bundle path
+    # Each executor gets: TASKER_DIR and Bundle path
     # Each executor returns: "T001: SUCCESS" or "T001: FAILED - reason"
 
     # 7. AS EACH EXECUTOR RETURNS, update checkpoint
@@ -1096,8 +1227,8 @@ while true; do
     # NOTE: Commits are handled automatically by PostToolUse hook (.claude/hooks/post-task-commit.sh)
     for TASK_ID in ${BATCH_ARRAY[@]}; do
         # Executor returned - check result file exists
-        if [ -f "$PLANNING_DIR/bundles/${TASK_ID}-result.json" ]; then
-            STATUS=$(tasker bundle result-info "$PLANNING_DIR/bundles/${TASK_ID}-result.json" | grep "^status:" | cut -d: -f2)
+        if [ -f "$TASKER_DIR/bundles/${TASK_ID}-result.json" ]; then
+            STATUS=$(tasker bundle result-info "$TASKER_DIR/bundles/${TASK_ID}-result.json" | grep "^status:" | cut -d: -f2)
             tasker state checkpoint update $TASK_ID $STATUS
             ./scripts/log-activity.sh INFO orchestrator task-result "$TASK_ID: $STATUS"
         else
@@ -1114,8 +1245,8 @@ while true; do
         echo "Halt requested after batch. Stopping gracefully."
 
         # Generate evaluation report even on halt
-        tasker evaluate --output $PLANNING_DIR/reports/evaluation-report.txt
-        tasker evaluate --format json --output $PLANNING_DIR/reports/evaluation-report.json
+        tasker evaluate --output $TASKER_DIR/reports/evaluation-report.txt
+        tasker evaluate --format json --output $TASKER_DIR/reports/evaluation-report.json
 
         tasker state confirm-halt
         break
@@ -1204,10 +1335,10 @@ The executor supports graceful halt via two mechanisms:
 
 ### 1. STOP File (Recommended for External Control)
 
-Create a `STOP` file in the `project-planning/` directory:
+Create a `STOP` file in the `.tasker/` directory:
 
 ```bash
-touch project-planning/STOP
+touch .tasker/STOP
 ```
 
 The executor checks for this file before starting each new task and after completing each task. When detected:
@@ -1280,8 +1411,8 @@ Log your activity using the logging script:
 ./scripts/log-activity.sh ERROR task-executor error "Error message if any"
 ```
 
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
-Bundle: {PLANNING_DIR}/bundles/[TASK_ID]-bundle.json
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
+Bundle: {TASKER_DIR}/bundles/[TASK_ID]-bundle.json
 
 The bundle contains everything you need:
 - Task definition and acceptance criteria
@@ -1298,7 +1429,7 @@ You are responsible for updating state and persisting results. Do NOT rely on th
 ### On Success:
 1. Track all files you created/modified
 2. Call: `tasker state task complete [TASK_ID] --created file1 file2 --modified file3`
-3. Write result file: `{PLANNING_DIR}/bundles/[TASK_ID]-result.json` (see schema below)
+3. Write result file: `{TASKER_DIR}/bundles/[TASK_ID]-result.json` (see schema below)
 4. Return ONLY this line: `[TASK_ID]: SUCCESS`
 
 ### On Failure:
@@ -1307,7 +1438,7 @@ You are responsible for updating state and persisting results. Do NOT rely on th
 3. Return ONLY this line: `[TASK_ID]: FAILED - <one-line reason>`
 
 ### Result File Schema
-Write to `{PLANNING_DIR}/bundles/[TASK_ID]-result.json`:
+Write to `{TASKER_DIR}/bundles/[TASK_ID]-result.json`:
 ```json
 {
   "version": "1.0",
@@ -1343,7 +1474,7 @@ Write to `{PLANNING_DIR}/bundles/[TASK_ID]-result.json`:
 5. Write detailed result to bundles/[TASK_ID]-result.json
 6. Return ONE LINE status to orchestrator
 
-IMPORTANT: Use the PLANNING_DIR absolute path provided above. Do NOT use relative paths.
+IMPORTANT: Use the TASKER_DIR absolute path provided above. Do NOT use relative paths.
 ```
 
 The subagent:
@@ -1356,7 +1487,7 @@ The subagent:
 
 ## Bundle Contents
 
-The bundle (`{PLANNING_DIR}/bundles/T001-bundle.json`) includes:
+The bundle (`{TASKER_DIR}/bundles/T001-bundle.json`) includes:
 
 | Field | Purpose |
 |-------|---------|
@@ -1420,9 +1551,9 @@ After all tasks complete, generate the execution coverage report:
 ```bash
 # Generate execute phase coverage report with verification evidence
 tasker fsm validate execute-coverage-report \
-    {PLANNING_DIR}/artifacts/fsm/index.json \
-    {PLANNING_DIR}/bundles \
-    --output {PLANNING_DIR}/artifacts/fsm-coverage.execute.json
+    {TASKER_DIR}/artifacts/fsm/index.json \
+    {TASKER_DIR}/bundles \
+    --output {TASKER_DIR}/artifacts/fsm-coverage.execute.json
 ```
 
 This report includes:
@@ -1438,8 +1569,8 @@ Use this report for post-execution compliance auditing.
 **MANDATORY**: After all tasks complete (or execution halts), generate the evaluation report:
 
 ```bash
-tasker evaluate --output {PLANNING_DIR}/reports/evaluation-report.txt
-tasker evaluate --format json --output {PLANNING_DIR}/reports/evaluation-report.json
+tasker evaluate --output {TASKER_DIR}/reports/evaluation-report.txt
+tasker evaluate --format json --output {TASKER_DIR}/reports/evaluation-report.json
 ```
 
 Display the report to the user. The report includes:

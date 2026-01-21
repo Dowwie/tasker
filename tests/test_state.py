@@ -49,7 +49,7 @@ def temp_state_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Set up temporary state environment."""
     import state
 
-    planning_dir = tmp_path / "project-planning"
+    planning_dir = tmp_path / ".tasker"
     planning_dir.mkdir()
     (planning_dir / "tasks").mkdir()
     (planning_dir / "artifacts").mkdir()
@@ -755,7 +755,7 @@ class TestCommitTaskChanges:
         test_file.write_text("# test")
 
         # Setup state environment
-        planning_dir = tmp_path / "project-planning"
+        planning_dir = tmp_path / ".tasker"
         planning_dir.mkdir()
         monkeypatch.setattr(state_module, "PLANNING_DIR", planning_dir)
         monkeypatch.setattr(state_module, "STATE_FILE", planning_dir / "state.json")
@@ -809,7 +809,7 @@ class TestCommitTaskChanges:
         test_file = target_dir / "file.py"
         test_file.write_text("# test")
 
-        planning_dir = tmp_path / "project-planning"
+        planning_dir = tmp_path / ".tasker"
         planning_dir.mkdir()
         monkeypatch.setattr(state_module, "PLANNING_DIR", planning_dir)
         monkeypatch.setattr(state_module, "STATE_FILE", planning_dir / "state.json")

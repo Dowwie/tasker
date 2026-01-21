@@ -16,7 +16,7 @@ func TestStopAndResume(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	planningDir := filepath.Join(tmpDir, "project-planning")
+	planningDir := filepath.Join(tmpDir, ".tasker")
 	if err := os.MkdirAll(planningDir, 0755); err != nil {
 		t.Fatalf("failed to create planning dir: %v", err)
 	}

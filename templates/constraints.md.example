@@ -1,6 +1,6 @@
 # Project Constraints Template
 
-Copy this file to `project-planning/inputs/constraints.md` and customize for your project.
+Copy this file to `$TARGET_DIR/.tasker/inputs/constraints.md` and customize for your project.
 
 ---
 

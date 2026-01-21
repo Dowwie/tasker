@@ -28,7 +28,7 @@ from bundle import (
 @pytest.fixture
 def temp_planning_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create temporary planning directory structure."""
-    planning_dir = tmp_path / "project-planning"
+    planning_dir = tmp_path / ".tasker"
     planning_dir.mkdir()
     (planning_dir / "tasks").mkdir()
     (planning_dir / "artifacts").mkdir()

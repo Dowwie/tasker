@@ -116,11 +116,11 @@ def _try_shim_to_go() -> bool:
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-PLANNING_DIR = PROJECT_ROOT / "project-planning"
-BUNDLES_DIR = PLANNING_DIR / "bundles"
-TASKS_DIR = PLANNING_DIR / "tasks"
-ARTIFACTS_DIR = PLANNING_DIR / "artifacts"
-INPUTS_DIR = PLANNING_DIR / "inputs"
+TASKER_DIR = PROJECT_ROOT / ".tasker"
+BUNDLES_DIR = TASKER_DIR / "bundles"
+TASKS_DIR = TASKER_DIR / "tasks"
+ARTIFACTS_DIR = TASKER_DIR / "artifacts"
+INPUTS_DIR = TASKER_DIR / "inputs"
 SCHEMAS_DIR = PROJECT_ROOT / "schemas"
 
 
@@ -162,7 +162,7 @@ def load_physical_map() -> dict | None:
 
 def load_state() -> dict | None:
     """Load current state."""
-    return load_json(PLANNING_DIR / "state.json")
+    return load_json(TASKER_DIR / "state.json")
 
 
 def load_constraints() -> str | None:

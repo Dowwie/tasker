@@ -18,7 +18,7 @@ var RootCmd = &cobra.Command{
 }
 
 func init() {
-	RootCmd.PersistentFlags().StringVarP(&planningDir, "planning-dir", "p", "project-planning", "Path to planning directory")
+	RootCmd.PersistentFlags().StringVarP(&planningDir, "planning-dir", "p", ".tasker", "Path to tasker working directory (typically $TARGET_DIR/.tasker)")
 }
 
 func GetPlanningDir() string {

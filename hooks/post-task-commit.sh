@@ -28,7 +28,7 @@ if [[ $# -ge 3 ]]; then
     # Manual mode: args provided
     TASK_ID="$1"
     TARGET_DIR="$2"
-    PLANNING_DIR="$3"
+    TASKER_DIR="$3"
 elif [[ $# -eq 0 ]]; then
     # Hook mode: parse from stdin JSON
     INPUT=$(cat)
@@ -46,7 +46,7 @@ elif [[ $# -eq 0 ]]; then
 
     # Get paths from state.json using Go CLI
     TARGET_DIR=$("$TASKER_BIN" state get-field target_dir 2>/dev/null || echo "")
-    PLANNING_DIR="$(pwd)/project-planning"
+    TASKER_DIR="$(pwd)/.tasker"
 else
     echo "Usage: $0 <task_id> <target_dir> <planning_dir>" >&2
     echo "   or: Called as hook with JSON on stdin" >&2
@@ -54,11 +54,11 @@ else
 fi
 
 # Validate inputs
-if [[ -z "$TASK_ID" || -z "$TARGET_DIR" || -z "$PLANNING_DIR" ]]; then
+if [[ -z "$TASK_ID" || -z "$TARGET_DIR" || -z "$TASKER_DIR" ]]; then
     exit 0  # Silent exit for hook mode, missing context
 fi
 
-RESULT_FILE="$PLANNING_DIR/bundles/${TASK_ID}-result.json"
+RESULT_FILE="$TASKER_DIR/bundles/${TASK_ID}-result.json"
 
 if [[ ! -f "$RESULT_FILE" ]]; then
     [[ $# -ge 3 ]] && echo "ERROR: Result file not found: $RESULT_FILE" >&2
@@ -73,7 +73,7 @@ fi
 cd "$TARGET_DIR"
 
 # Extract task name and status from result JSON using Go CLI
-RESULT_INFO=$("$TASKER_BIN" -p "$PLANNING_DIR" bundle result-info "$TASK_ID" 2>/dev/null || echo "$TASK_ID	unknown")
+RESULT_INFO=$("$TASKER_BIN" -p "$TASKER_DIR" bundle result-info "$TASK_ID" 2>/dev/null || echo "$TASK_ID	unknown")
 TASK_NAME=$(echo "$RESULT_INFO" | cut -f1)
 STATUS=$(echo "$RESULT_INFO" | cut -f2)
 
@@ -83,7 +83,7 @@ if [[ "$STATUS" != "success" ]]; then
 fi
 
 # Get files from result (created + modified) using Go CLI
-FILES_JSON=$("$TASKER_BIN" -p "$PLANNING_DIR" bundle result-files "$TASK_ID" 2>/dev/null || echo "")
+FILES_JSON=$("$TASKER_BIN" -p "$TASKER_DIR" bundle result-files "$TASK_ID" 2>/dev/null || echo "")
 
 if [[ -z "$FILES_JSON" ]]; then
     [[ $# -ge 3 ]] && echo "SKIP: No files recorded in result for $TASK_ID"
@@ -123,7 +123,7 @@ COMMIT_SHA=$(git rev-parse HEAD)
 [[ $# -ge 3 ]] && echo "COMMITTED: $COMMIT_SHA - $COMMIT_MSG"
 
 # Update result file with commit info using Go CLI
-"$TASKER_BIN" -p "$PLANNING_DIR" bundle update-git "$TASK_ID" --sha="$COMMIT_SHA" --msg="$COMMIT_MSG" 2>/dev/null || true
+"$TASKER_BIN" -p "$TASKER_DIR" bundle update-git "$TASK_ID" --sha="$COMMIT_SHA" --msg="$COMMIT_MSG" 2>/dev/null || true
 
 [[ $# -ge 3 ]] && echo "OK: Updated $RESULT_FILE with commit info"
 exit 0

@@ -12,22 +12,22 @@ Sequence tasks into phases and validate the dependency graph.
 
 You receive from orchestrator:
 ```
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
 ```
 
-**CRITICAL:** Use the `PLANNING_DIR` absolute path provided. Do NOT use relative paths like `project-planning/`.
+**CRITICAL:** Use the `TASKER_DIR` absolute path provided. Do NOT use relative paths like `.tasker/`.
 
 Files to read (using absolute paths):
-- `{PLANNING_DIR}/tasks/*.json` - Individual task files
-- `{PLANNING_DIR}/artifacts/capability-map.json` - For steel thread flows
+- `{TASKER_DIR}/tasks/*.json` - Individual task files
+- `{TASKER_DIR}/artifacts/capability-map.json` - For steel thread flows
 
 ## Process
 
 ### 1. Build Dependency Graph
 
 ```bash
-# Load all tasks (use absolute PLANNING_DIR path)
-for task in {PLANNING_DIR}/tasks/*.json; do
+# Load all tasks (use absolute TASKER_DIR path)
+for task in {TASKER_DIR}/tasks/*.json; do
   # Extract id, dependencies
 done
 
@@ -65,18 +65,18 @@ For each task, update the `phase` field. Two approaches:
 **Option A: Using Write tool (preferred)**
 1. Read the task file
 2. Update the phase in memory
-3. Write the full JSON back using the Write tool to `{PLANNING_DIR}/tasks/T001.json` (absolute path!)
+3. Write the full JSON back using the Write tool to `{TASKER_DIR}/tasks/T001.json` (absolute path!)
 
 **Option B: Using jq (shell)**
 ```bash
-# Read task, update phase, write back (use absolute PLANNING_DIR path)
-jq '.phase = 2' {PLANNING_DIR}/tasks/T001.json > /tmp/T001.json && \
-  mv /tmp/T001.json {PLANNING_DIR}/tasks/T001.json
+# Read task, update phase, write back (use absolute TASKER_DIR path)
+jq '.phase = 2' {TASKER_DIR}/tasks/T001.json > /tmp/T001.json && \
+  mv /tmp/T001.json {TASKER_DIR}/tasks/T001.json
 ```
 
 **Verify each update:**
 ```bash
-cat {PLANNING_DIR}/tasks/T001.json | jq '.phase'
+cat {TASKER_DIR}/tasks/T001.json | jq '.phase'
 ```
 
 ### 5. Validate
@@ -94,15 +94,15 @@ Update existing task files with:
 Create summary:
 ```bash
 echo "Phase assignments complete"
-cd {PLANNING_DIR}/.. && tasker state load-tasks  # Reload with new phases
+cd {TASKER_DIR}/.. && tasker state load-tasks  # Reload with new phases
 ```
 
 ## Checklist
 
 Before declaring done:
 - [ ] All tasks have phase assigned
-- [ ] **Task files updated** using Write tool or jq to `{PLANNING_DIR}/tasks/` (absolute paths!)
+- [ ] **Task files updated** using Write tool or jq to `{TASKER_DIR}/tasks/` (absolute paths!)
 - [ ] No circular dependencies
 - [ ] Steel thread tasks identified
 - [ ] Backward pass validates (deps in earlier phases)
-- [ ] Run: `cd {PLANNING_DIR}/.. && tasker state load-tasks` (verify success)
+- [ ] Run: `cd {TASKER_DIR}/.. && tasker state load-tasks` (verify success)

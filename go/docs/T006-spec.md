@@ -69,7 +69,7 @@ issues := cfg.ValidateRequired("planning_dir", "schema_dir")
 ```
 
 Environment variables:
-- `TASKER_PLANNING_DIR` - Override planning directory path
+- `TASKER_TASKER_DIR` - Override planning directory path
 - `TASKER_TARGET_DIR` - Override target directory path
 - `TASKER_SCHEMA_DIR` - Override schema directory path
 - `TASKER_LOG_LEVEL` - Set log level (DEBUG, INFO, WARN, ERROR)

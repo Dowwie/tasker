@@ -59,5 +59,5 @@ tasker state validate physical_map
 ## Workflow
 
 1. Run `/plan` - provide spec, target dir, optional constraints
-2. Review generated tasks in `project-planning/tasks/`
+2. Review generated tasks in `$TARGET_DIR/.tasker/tasks/`
 3. Run `/execute` to implement tasks via isolated subagents

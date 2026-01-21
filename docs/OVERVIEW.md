@@ -256,7 +256,7 @@ The task-verifier runs in an **isolated context** (clean from implementation det
 
 ### Single Source of Truth
 
-All workflow state is managed through the `tasker` CLI with persistence to `project-planning/state.json`.
+All workflow state is managed through the `tasker` CLI with persistence to `.tasker/state.json`.
 
 ### State Structure
 
@@ -424,7 +424,7 @@ tasker/
 │   ├── bundle.py              # Shim → tasker bundle
 │   └── validate.py            # Shim → tasker validate
 │
-└── project-planning/          # Generated during workflow
+└── .tasker/          # Generated during workflow
     ├── inputs/spec.md
     ├── artifacts/
     │   ├── capability-map.json
@@ -549,7 +549,7 @@ tasker state resume
 
 ### State File
 
-`project-planning/state.json` is the single source of truth:
+`.tasker/state.json` is the single source of truth:
 - Persisted after every significant operation
 - Enables resumability after crashes
 - Human-readable JSON

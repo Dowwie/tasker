@@ -11,7 +11,7 @@ import (
 func TestArchivePlanning_CreatesTimestampedArchive(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	planningDir := filepath.Join(tmpDir, "project-planning")
+	planningDir := filepath.Join(tmpDir, ".tasker")
 	if err := os.MkdirAll(planningDir, 0755); err != nil {
 		t.Fatalf("failed to create planning dir: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestArchivePlanning_PlanningDirNotFound(t *testing.T) {
 
 func TestArchivePlanning_NoStateFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	planningDir := filepath.Join(tmpDir, "project-planning")
+	planningDir := filepath.Join(tmpDir, ".tasker")
 	if err := os.MkdirAll(planningDir, 0755); err != nil {
 		t.Fatalf("failed to create planning dir: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestArchivePlanning_NoStateFile(t *testing.T) {
 func TestArchivePlanning_EmptyDirectoriesSkipped(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	planningDir := filepath.Join(tmpDir, "project-planning")
+	planningDir := filepath.Join(tmpDir, ".tasker")
 	if err := os.MkdirAll(planningDir, 0755); err != nil {
 		t.Fatalf("failed to create planning dir: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestArchivePlanning_EmptyDirectoriesSkipped(t *testing.T) {
 func TestArchivePlanning_NestedDirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	planningDir := filepath.Join(tmpDir, "project-planning")
+	planningDir := filepath.Join(tmpDir, ".tasker")
 	if err := os.MkdirAll(planningDir, 0755); err != nil {
 		t.Fatalf("failed to create planning dir: %v", err)
 	}

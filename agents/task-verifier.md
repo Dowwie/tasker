@@ -14,20 +14,20 @@ You receive from task-executor:
 ```
 Verify task T001
 
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
-Bundle: {PLANNING_DIR}/bundles/T001-bundle.json
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
+Bundle: {TASKER_DIR}/bundles/T001-bundle.json
 Target: /path/to/target/project
 ```
 
-**CRITICAL:** Use the `PLANNING_DIR` absolute path provided. Do NOT use relative paths like `project-planning/`.
+**CRITICAL:** Use the `TASKER_DIR` absolute path provided. Do NOT use relative paths like `.tasker/`.
 
 ## Protocol
 
 ### 1. Load Context
 
 ```bash
-# Use absolute PLANNING_DIR path from context
-cat {PLANNING_DIR}/bundles/T001-bundle.json
+# Use absolute TASKER_DIR path from context
+cat {TASKER_DIR}/bundles/T001-bundle.json
 ```
 
 Extract:
@@ -105,7 +105,7 @@ For each criterion, evaluate using this rubric:
 
 Check if this is a refactor task:
 ```bash
-cat {PLANNING_DIR}/bundles/T001-bundle.json | jq '.task_type'
+cat {TASKER_DIR}/bundles/T001-bundle.json | jq '.task_type'
 ```
 
 If `task_type == "refactor"`, evaluate these additional dimensions:
@@ -190,7 +190,7 @@ If `task_type == "refactor"`, evaluate these additional dimensions:
 
 Check if FSM context exists:
 ```bash
-cat {PLANNING_DIR}/bundles/T001-bundle.json | jq '.state_machine'
+cat {TASKER_DIR}/bundles/T001-bundle.json | jq '.state_machine'
 ```
 
 If `state_machine` is present, evaluate these dimensions:
@@ -467,7 +467,7 @@ At the very end of your report, include a JSON block for programmatic parsing:
 
 This JSON block enables the executor to persist verification results via:
 ```bash
-cd {PLANNING_DIR}/.. && tasker state record-verification T001 \
+cd {TASKER_DIR}/.. && tasker state record-verification T001 \
   --verdict PASS \
   --recommendation PROCEED \
   --criteria '[...]' \

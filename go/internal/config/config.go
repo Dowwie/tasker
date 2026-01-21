@@ -19,7 +19,10 @@ const (
 )
 
 const (
-	DefaultPlanningDirName = "project-planning"
+	// DefaultTaskerDirName is the working directory for tasker within a target project.
+	// This replaces the old "project-planning" directory. The .tasker/ directory
+	// is created inside the target project directory (e.g., /myproject/.tasker/).
+	DefaultTaskerDirName   = ".tasker"
 	DefaultSchemaDirName   = "schemas"
 )
 
@@ -102,7 +105,7 @@ func (c *Config) ResolvePlanningDir() string {
 		return ""
 	}
 
-	defaultPath := filepath.Join(cwd, DefaultPlanningDirName)
+	defaultPath := filepath.Join(cwd, DefaultTaskerDirName)
 	if _, err := os.Stat(defaultPath); err == nil {
 		return defaultPath
 	}

@@ -9,9 +9,9 @@ Spawn the **task-plan-verifier** agent with:
 ```
 Verify task definitions for planning
 
-Spec: project-planning/inputs/spec.md
-Capability Map: project-planning/artifacts/capability-map.json
-Tasks Directory: project-planning/tasks/
+Spec: .tasker/inputs/spec.md
+Capability Map: .tasker/artifacts/capability-map.json
+Tasks Directory: .tasker/tasks/
 User Preferences: ~/.claude/CLAUDE.md (if exists)
 ```
 

@@ -21,7 +21,10 @@
       }
     },
     
-    "target_dir": { "type": "string" },
+    "target_dir": {
+      "type": "string",
+      "description": "Absolute path to target project directory. The .tasker/ working directory lives here."
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" },
     

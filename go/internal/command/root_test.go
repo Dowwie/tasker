@@ -7,8 +7,8 @@ import (
 func TestGetPlanningDir(t *testing.T) {
 	t.Run("returns default planning dir", func(t *testing.T) {
 		result := GetPlanningDir()
-		if result != "project-planning" {
-			t.Errorf("expected default 'project-planning', got: %s", result)
+		if result != ".tasker" {
+			t.Errorf("expected default '.tasker', got: %s", result)
 		}
 	})
 }

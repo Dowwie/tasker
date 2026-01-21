@@ -11,7 +11,7 @@ func setupTestEnv(t *testing.T) (string, *Generator) {
 	t.Helper()
 
 	tmpDir := t.TempDir()
-	planningDir := filepath.Join(tmpDir, "project-planning")
+	planningDir := filepath.Join(tmpDir, ".tasker")
 	bundlesDir := filepath.Join(planningDir, "bundles")
 	tasksDir := filepath.Join(planningDir, "tasks")
 	artifactsDir := filepath.Join(planningDir, "artifacts")
@@ -776,7 +776,7 @@ func TestLoadConstraintsPatterns(t *testing.T) {
 
 func TestLoadConstraintsNoFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	planningDir := filepath.Join(tmpDir, "project-planning")
+	planningDir := filepath.Join(tmpDir, ".tasker")
 	os.MkdirAll(filepath.Join(planningDir, "inputs"), 0755)
 
 	gen := NewGenerator(planningDir)

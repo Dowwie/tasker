@@ -29,9 +29,9 @@ var planningCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectName := args[0]
-		planningDir := os.Getenv("TASKER_PLANNING_DIR")
+		planningDir := os.Getenv("TASKER_DIR")
 		if planningDir == "" {
-			planningDir = "project-planning"
+			planningDir = ".tasker"
 		}
 
 		if archiveRoot == "" {
@@ -57,9 +57,9 @@ var executionCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectName := args[0]
-		planningDir := os.Getenv("TASKER_PLANNING_DIR")
+		planningDir := os.Getenv("TASKER_DIR")
 		if planningDir == "" {
-			planningDir = "project-planning"
+			planningDir = ".tasker"
 		}
 
 		if archiveRoot == "" {
@@ -83,9 +83,9 @@ var listCmd = &cobra.Command{
 	Short: "List archives",
 	Long:  `Lists all archives, optionally filtered by project name.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		planningDir := os.Getenv("TASKER_PLANNING_DIR")
+		planningDir := os.Getenv("TASKER_DIR")
 		if planningDir == "" {
-			planningDir = "project-planning"
+			planningDir = ".tasker"
 		}
 
 		if archiveRoot == "" {
@@ -127,9 +127,9 @@ var restoreCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		archiveID := args[0]
-		planningDir := os.Getenv("TASKER_PLANNING_DIR")
+		planningDir := os.Getenv("TASKER_DIR")
 		if planningDir == "" {
-			planningDir = "project-planning"
+			planningDir = ".tasker"
 		}
 
 		if archiveRoot == "" {

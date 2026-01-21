@@ -6,34 +6,34 @@
 #   base_dir: Optional. Defaults to current working directory.
 #
 # Creates:
-#   project-planning/artifacts/  - For capability-map.json, physical-map.json
-#   project-planning/inputs/     - For spec.md
-#   project-planning/tasks/      - For T001.json, T002.json, etc.
-#   project-planning/reports/    - For task-validation-report.md
-#   project-planning/bundles/    - For execution bundles
+#   .tasker/artifacts/  - For capability-map.json, physical-map.json
+#   .tasker/inputs/     - For spec.md
+#   .tasker/tasks/      - For T001.json, T002.json, etc.
+#   .tasker/reports/    - For task-validation-report.md
+#   .tasker/bundles/    - For execution bundles
 #   .claude/logs/                - For activity logging
 
 set -euo pipefail
 
 BASE_DIR="${1:-$(pwd)}"
-PLANNING_DIR="$BASE_DIR/project-planning"
+TASKER_DIR="$BASE_DIR/.tasker"
 
 echo "Initializing planning directories..."
 echo "Base directory: $BASE_DIR"
-echo "Planning directory: $PLANNING_DIR"
+echo "Planning directory: $TASKER_DIR"
 
 # Create all required directories
-mkdir -p "$PLANNING_DIR/artifacts"
-mkdir -p "$PLANNING_DIR/inputs"
-mkdir -p "$PLANNING_DIR/tasks"
-mkdir -p "$PLANNING_DIR/reports"
-mkdir -p "$PLANNING_DIR/bundles"
+mkdir -p "$TASKER_DIR/artifacts"
+mkdir -p "$TASKER_DIR/inputs"
+mkdir -p "$TASKER_DIR/tasks"
+mkdir -p "$TASKER_DIR/reports"
+mkdir -p "$TASKER_DIR/bundles"
 mkdir -p "$BASE_DIR/.claude/logs"
 
 # Verify creation
 echo ""
 echo "Directory structure initialized:"
-ls -la "$PLANNING_DIR"
+ls -la "$TASKER_DIR"
 
 echo ""
-echo "PLANNING_DIR=$PLANNING_DIR"
+echo "TASKER_DIR=$TASKER_DIR"

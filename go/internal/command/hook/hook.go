@@ -204,19 +204,19 @@ func parseTranscript(path string) (inputTokens, outputTokens int, err error) {
 }
 
 func findPlanningDir() string {
-	// Check TASKER_PLANNING_DIR env var first
-	if dir := os.Getenv("TASKER_PLANNING_DIR"); dir != "" {
+	// Check TASKER_DIR env var first
+	if dir := os.Getenv("TASKER_DIR"); dir != "" {
 		return dir
 	}
 
-	// Walk up from cwd looking for project-planning directory
+	// Walk up from cwd looking for .tasker directory
 	cwd, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
 
 	for dir := cwd; dir != "/" && dir != "."; dir = filepath.Dir(dir) {
-		candidate := filepath.Join(dir, "project-planning")
+		candidate := filepath.Join(dir, ".tasker")
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
 			return candidate
 		}

@@ -37,7 +37,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-PLANNING_DIR = PROJECT_ROOT / "project-planning"
+TASKER_DIR = PROJECT_ROOT / ".tasker"
 ARCHIVE_DIR = PROJECT_ROOT / "archive"
 
 
@@ -52,11 +52,11 @@ def timestamp_id() -> str:
 
 def archive_planning(project_name: str) -> Path:
     """Archive planning artifacts after workflow completion."""
-    if not PLANNING_DIR.exists():
-        print(f"Error: Planning directory not found: {PLANNING_DIR}", file=sys.stderr)
+    if not TASKER_DIR.exists():
+        print(f"Error: Planning directory not found: {TASKER_DIR}", file=sys.stderr)
         sys.exit(1)
 
-    state_file = PLANNING_DIR / "state.json"
+    state_file = TASKER_DIR / "state.json"
     if not state_file.exists():
         print("Error: No state.json found - nothing to archive", file=sys.stderr)
         sys.exit(1)
@@ -73,7 +73,7 @@ def archive_planning(project_name: str) -> Path:
     dirs_to_archive = ["inputs", "artifacts", "tasks", "reports"]
 
     for dir_name in dirs_to_archive:
-        src_dir = PLANNING_DIR / dir_name
+        src_dir = TASKER_DIR / dir_name
         if src_dir.exists() and any(src_dir.iterdir()):
             dst_dir = archive_path / dir_name
             shutil.copytree(src_dir, dst_dir)
@@ -90,7 +90,7 @@ def archive_planning(project_name: str) -> Path:
         "project_name": project_name,
         "archive_id": archive_id,
         "archived_at": now_iso(),
-        "source_dir": str(PLANNING_DIR),
+        "source_dir": str(TASKER_DIR),
         "phase_at_archive": current_phase,
         "contents": {
             "inputs": list((archive_path / "inputs").glob("*")) if (archive_path / "inputs").exists() else [],
@@ -118,11 +118,11 @@ def archive_planning(project_name: str) -> Path:
 
 def archive_execution(project_name: str) -> Path:
     """Archive execution artifacts after workflow completion."""
-    if not PLANNING_DIR.exists():
-        print(f"Error: Planning directory not found: {PLANNING_DIR}", file=sys.stderr)
+    if not TASKER_DIR.exists():
+        print(f"Error: Planning directory not found: {TASKER_DIR}", file=sys.stderr)
         sys.exit(1)
 
-    state_file = PLANNING_DIR / "state.json"
+    state_file = TASKER_DIR / "state.json"
     if not state_file.exists():
         print("Error: No state.json found - nothing to archive", file=sys.stderr)
         sys.exit(1)
@@ -130,7 +130,7 @@ def archive_execution(project_name: str) -> Path:
     state = json.loads(state_file.read_text())
 
     # Check for execution artifacts
-    bundles_dir = PLANNING_DIR / "bundles"
+    bundles_dir = TASKER_DIR / "bundles"
     logs_dir = PROJECT_ROOT / ".claude" / "logs"
 
     has_bundles = bundles_dir.exists() and any(bundles_dir.glob("*-result.json"))
@@ -184,7 +184,7 @@ def archive_execution(project_name: str) -> Path:
         "project_name": project_name,
         "archive_id": archive_id,
         "archived_at": now_iso(),
-        "source_dir": str(PLANNING_DIR),
+        "source_dir": str(TASKER_DIR),
         "target_dir": state.get("target_dir", ""),
         "contents": archived_items,
         "execution_summary": {
@@ -274,15 +274,15 @@ def restore_planning(archive_id: str, project_name: str = None) -> None:
 
     # Confirm restore
     print(f"Restoring from: {archive_path}")
-    print(f"This will OVERWRITE: {PLANNING_DIR}")
+    print(f"This will OVERWRITE: {TASKER_DIR}")
     response = input("Continue? (yes/no): ")
     if response.lower() != "yes":
         print("Aborted")
         return
 
     # Clear existing planning directory
-    if PLANNING_DIR.exists():
-        for item in PLANNING_DIR.iterdir():
+    if TASKER_DIR.exists():
+        for item in TASKER_DIR.iterdir():
             if item.is_dir():
                 shutil.rmtree(item)
             else:
@@ -292,14 +292,14 @@ def restore_planning(archive_id: str, project_name: str = None) -> None:
     for dir_name in ["inputs", "artifacts", "tasks", "reports"]:
         src_dir = archive_path / dir_name
         if src_dir.exists():
-            dst_dir = PLANNING_DIR / dir_name
+            dst_dir = TASKER_DIR / dir_name
             shutil.copytree(src_dir, dst_dir)
             print(f"  Restored: {dir_name}/")
 
     # Restore state.json
     state_src = archive_path / "state.json"
     if state_src.exists():
-        shutil.copy2(state_src, PLANNING_DIR / "state.json")
+        shutil.copy2(state_src, TASKER_DIR / "state.json")
         print("  Restored: state.json")
 
     print(f"\nRestored planning artifacts from archive: {archive_id}")
@@ -307,19 +307,19 @@ def restore_planning(archive_id: str, project_name: str = None) -> None:
 
 def clean_planning_dir() -> None:
     """Clean planning directory after successful archive."""
-    if not PLANNING_DIR.exists():
+    if not TASKER_DIR.exists():
         return
 
     # Keep the directory structure but clear contents
     for subdir in ["inputs", "artifacts", "tasks", "reports", "bundles"]:
-        dir_path = PLANNING_DIR / subdir
+        dir_path = TASKER_DIR / subdir
         if dir_path.exists():
             for item in dir_path.iterdir():
                 if item.is_file():
                     item.unlink()
 
     # Remove state.json
-    state_file = PLANNING_DIR / "state.json"
+    state_file = TASKER_DIR / "state.json"
     if state_file.exists():
         state_file.unlink()
 

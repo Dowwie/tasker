@@ -174,7 +174,7 @@ def main() -> int:
     parser.add_argument(
         "--state-file",
         type=Path,
-        help="Path to state.json file (default: project-planning/state.json)",
+        help="Path to state.json file (default: .tasker/state.json)",
     )
 
     args = parser.parse_args()

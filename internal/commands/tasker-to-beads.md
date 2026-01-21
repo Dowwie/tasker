@@ -45,7 +45,7 @@ tasker transform init-target /path/to/target FATHOM
 tasker transform context --all
 
 # Create issue in target directory
-tasker transform create T001 project-planning/beads-export/T001-enriched.json -t /path/to/target
+tasker transform create T001 .tasker/beads-export/T001-enriched.json -t /path/to/target
 ```
 
 ## Example Session

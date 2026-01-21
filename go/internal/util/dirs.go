@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 )
 
-// PlanningDirName is the default name for the planning directory.
-const PlanningDirName = "project-planning"
+// TaskerDirName is the default name for the tasker working directory.
+// This is created inside the target project directory (e.g., /myproject/.tasker/).
+const TaskerDirName = ".tasker"
 
 // PlanningSubdirs defines the required subdirectories within a planning directory.
 var PlanningSubdirs = []string{
@@ -27,7 +28,7 @@ func (e *DirectoryError) Error() string {
 }
 
 // InitDirectories creates the planning directory structure at the specified root.
-// If planningDir is empty, it defaults to "project-planning" under the root.
+// If planningDir is empty, it defaults to ".tasker" under the root.
 // Returns the absolute path to the planning directory.
 func InitDirectories(root string, planningDir string) (string, error) {
 	absRoot, err := filepath.Abs(root)
@@ -47,7 +48,7 @@ func InitDirectories(root string, planningDir string) (string, error) {
 	}
 
 	if planningDir == "" {
-		planningDir = PlanningDirName
+		planningDir = TaskerDirName
 	}
 
 	planningPath := filepath.Join(absRoot, planningDir)

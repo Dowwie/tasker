@@ -28,8 +28,8 @@ If a user runs `/plan` with a spec that hasn't been through `/specify`, the orch
 ## Output Contract
 
 You MUST produce two artifacts:
-1. `{PLANNING_DIR}/artifacts/spec-review.json` - Detected weaknesses
-2. `{PLANNING_DIR}/artifacts/spec-resolutions.json` - User resolutions
+1. `{TASKER_DIR}/artifacts/spec-review.json` - Detected weaknesses
+2. `{TASKER_DIR}/artifacts/spec-resolutions.json` - User resolutions
 
 ---
 
@@ -40,7 +40,7 @@ You MUST produce two artifacts:
 Run the weakness detection and checklist verification:
 
 ```bash
-tasker spec review analyze {PLANNING_DIR}/inputs/spec.md > {PLANNING_DIR}/artifacts/spec-review.json
+tasker spec review analyze {TASKER_DIR}/inputs/spec.md > {TASKER_DIR}/artifacts/spec-review.json
 ```
 
 This outputs JSON with:
@@ -54,7 +54,7 @@ This outputs JSON with:
 View the completeness checklist:
 
 ```bash
-tasker spec review checklist {PLANNING_DIR}
+tasker spec review checklist {TASKER_DIR}
 ```
 
 This shows which spec areas are complete, partial, or missing.
@@ -64,7 +64,7 @@ This shows which spec areas are complete, partial, or missing.
 List unresolved critical items:
 
 ```bash
-tasker spec review unresolved {PLANNING_DIR}
+tasker spec review unresolved {TASKER_DIR}
 ```
 
 Categorize by severity:
@@ -149,19 +149,19 @@ Use the add-resolution command to persist each resolution:
 
 ```bash
 # Record that DDL constraint is mandatory
-tasker spec review add-resolution {PLANNING_DIR} W1-001 mandatory --notes "DB-level constraint required"
+tasker spec review add-resolution {TASKER_DIR} W1-001 mandatory --notes "DB-level constraint required"
 
 # Record that a checklist gap is not applicable
-tasker spec review add-resolution {PLANNING_DIR} CK-C7.1 not_applicable --notes "Internal service, no auth needed"
+tasker spec review add-resolution {TASKER_DIR} CK-C7.1 not_applicable --notes "Internal service, no auth needed"
 
 # Record clarification from user
-tasker spec review add-resolution {PLANNING_DIR} W6-001 clarified --notes "Section 11.1 is authoritative, cancelled status removed"
+tasker spec review add-resolution {TASKER_DIR} W6-001 clarified --notes "Section 11.1 is authoritative, cancelled status removed"
 
 # Record ambiguity clarification with specific value
-tasker spec review add-resolution {PLANNING_DIR} W7-003 clarified --notes "Retry count: 3 attempts with exponential backoff (1s, 2s, 4s)"
+tasker spec review add-resolution {TASKER_DIR} W7-003 clarified --notes "Retry count: 3 attempts with exponential backoff (1s, 2s, 4s)"
 
 # Record that ambiguous term is not a hard requirement
-tasker spec review add-resolution {PLANNING_DIR} W7-005 optional --notes "Caching is optional optimization, not required"
+tasker spec review add-resolution {TASKER_DIR} W7-005 optional --notes "Caching is optional optimization, not required"
 ```
 
 Resolution types:
@@ -171,7 +171,7 @@ Resolution types:
 - `clarified` - User provided context
 - `not_applicable` - Not a real requirement
 
-Resolutions are persisted to `{PLANNING_DIR}/artifacts/spec-resolutions.json`.
+Resolutions are persisted to `{TASKER_DIR}/artifacts/spec-resolutions.json`.
 
 ### Step 6: Summarize for User
 
@@ -197,7 +197,7 @@ Ready to proceed to capability extraction (Phase 1).
 Run status check:
 
 ```bash
-tasker spec review status {PLANNING_DIR}
+tasker spec review status {TASKER_DIR}
 ```
 
 - If **BLOCKED**: Critical weaknesses remain. Do NOT proceed.
@@ -289,7 +289,7 @@ All critical weaknesses resolved. Write resolutions file and report ready status
 
 The logic-architect (Phase 1) should receive and use the resolutions:
 
-1. **Read** `{PLANNING_DIR}/artifacts/spec-resolutions.json`
+1. **Read** `{TASKER_DIR}/artifacts/spec-resolutions.json`
 2. **Apply** resolutions when extracting capabilities:
    - `mandatory` resolutions become explicit behaviors
    - `cross_cutting` concerns get flagged for dedicated capabilities
@@ -302,7 +302,7 @@ The logic-architect (Phase 1) should receive and use the resolutions:
 ### Spec Not Found
 
 ```
-Error: Spec file not found at {PLANNING_DIR}/inputs/spec.md
+Error: Spec file not found at {TASKER_DIR}/inputs/spec.md
 
 The specification file must be placed in the inputs directory before
 running spec review. Check that the orchestrator has completed the
@@ -333,5 +333,5 @@ When spec review is complete and ready to proceed:
 
 1. Verify `spec-review.json` exists and is valid
 2. Verify `spec-resolutions.json` exists if any critical weaknesses were found
-3. Run `tasker spec review status {PLANNING_DIR}` - must return exit code 0
+3. Run `tasker spec review status {TASKER_DIR}` - must return exit code 0
 4. Report: "Phase 0 complete. Spec review passed. Ready for capability extraction."

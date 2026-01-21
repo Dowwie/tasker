@@ -184,10 +184,10 @@ def _try_shim_to_go() -> bool:
 # Paths relative to script location
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-PLANNING_DIR = PROJECT_ROOT / "project-planning"
-STATE_FILE = PLANNING_DIR / "state.json"
+TASKER_DIR = PROJECT_ROOT / ".tasker"
+STATE_FILE = TASKER_DIR / "state.json"
 SCHEMAS_DIR = PROJECT_ROOT / "schemas"
-STOP_FILE = PLANNING_DIR / "STOP"  # Touch file to signal halt
+STOP_FILE = TASKER_DIR / "STOP"  # Touch file to signal halt
 
 
 def now_iso() -> str:
@@ -363,13 +363,13 @@ def can_advance_phase(state: dict) -> tuple[bool, str]:
     current = state["phase"]["current"]
     
     if current == "ingestion":
-        spec_path = PLANNING_DIR / "inputs" / "spec.md"
+        spec_path = TASKER_DIR / "inputs" / "spec.md"
         if not spec_path.exists():
-            return False, "spec.md not found in project-planning/inputs/"
+            return False, "spec.md not found in .tasker/inputs/"
         return True, ""
 
     elif current == "spec_review":
-        review_path = PLANNING_DIR / "artifacts" / "spec-review.json"
+        review_path = TASKER_DIR / "artifacts" / "spec-review.json"
         if not review_path.exists():
             return False, "spec-review.json not found - run spec-review.py analyze first"
 
@@ -379,7 +379,7 @@ def can_advance_phase(state: dict) -> tuple[bool, str]:
 
         if critical_count > 0:
             # Check for resolutions
-            resolutions_path = PLANNING_DIR / "artifacts" / "spec-resolutions.json"
+            resolutions_path = TASKER_DIR / "artifacts" / "spec-resolutions.json"
             if not resolutions_path.exists():
                 return False, f"{critical_count} critical weaknesses require resolution"
 
@@ -415,7 +415,7 @@ def can_advance_phase(state: dict) -> tuple[bool, str]:
 
         # Run automated planning gates before advancing to validation
         from validate import run_planning_gates
-        results = run_planning_gates(PLANNING_DIR, spec_threshold=0.0)
+        results = run_planning_gates(TASKER_DIR, spec_threshold=0.0)
 
         # Store validation results in state for observability
         state["artifacts"]["validation_results"] = {
@@ -579,7 +579,7 @@ def register_task_validation(
 
 def load_tasks_from_dir(state: dict) -> int:
     """Load individual task files from tasks/ directory."""
-    tasks_dir = PLANNING_DIR / "tasks"
+    tasks_dir = TASKER_DIR / "tasks"
     if not tasks_dir.exists():
         return 0
     
@@ -1034,7 +1034,7 @@ def get_calibration_score(state: dict) -> float:
 
 
 def check_stop_file() -> bool:
-    """Check if STOP file exists in project-planning directory."""
+    """Check if STOP file exists in .tasker directory."""
     return STOP_FILE.exists()
 
 
@@ -1246,7 +1246,7 @@ def compute_planning_metrics(state: dict) -> dict:
         }
 
     # Load task files to get full details
-    tasks_dir = PLANNING_DIR / "tasks"
+    tasks_dir = TASKER_DIR / "tasks"
     total_behaviors = 0
     total_criteria = 0
     total_files = 0
@@ -1371,7 +1371,7 @@ def compute_spec_coverage(state: dict) -> dict:
         - total_count: Total requirements found
         - uncovered: List of uncovered requirement IDs
     """
-    spec_path = PLANNING_DIR / "inputs" / "spec.md"
+    spec_path = TASKER_DIR / "inputs" / "spec.md"
     requirements = extract_requirements_from_spec(spec_path)
 
     if not requirements:
@@ -1390,7 +1390,7 @@ def compute_spec_coverage(state: dict) -> dict:
         r["covered_by"] = []
 
     # Load task files and find coverage
-    tasks_dir = PLANNING_DIR / "tasks"
+    tasks_dir = TASKER_DIR / "tasks"
     for tid in state.get("tasks", {}):
         task_path = tasks_dir / f"{tid}.json"
         if task_path.exists():
@@ -1667,8 +1667,8 @@ def main():
         
         artifact_type = sys.argv[2]
         path_map = {
-            "capability_map": PLANNING_DIR / "artifacts" / "capability-map.json",
-            "physical_map": PLANNING_DIR / "artifacts" / "physical-map.json",
+            "capability_map": TASKER_DIR / "artifacts" / "capability-map.json",
+            "physical_map": TASKER_DIR / "artifacts" / "physical-map.json",
         }
         
         if artifact_type not in path_map:
@@ -2185,7 +2185,7 @@ def main():
             sys.exit(1)
 
         subcmd = sys.argv[2]
-        checkpoint_path = PLANNING_DIR / "orchestrator-checkpoint.json"
+        checkpoint_path = TASKER_DIR / "orchestrator-checkpoint.json"
 
         if subcmd == "create":
             if len(sys.argv) < 4:
@@ -2326,7 +2326,7 @@ def main():
             # Find orphaned tasks: pending in checkpoint but have result files
             orphaned = []
             recovered = []
-            bundles_dir = PLANNING_DIR / "bundles"
+            bundles_dir = TASKER_DIR / "bundles"
 
             for task_id in checkpoint["tasks"]["pending"]:
                 result_file = bundles_dir / f"{task_id}-result.json"

@@ -1,6 +1,6 @@
 # Project Specification Template
 
-Copy this file to `project-planning/inputs/spec.md` and customize for your project.
+Copy this file to `$TARGET_DIR/.tasker/inputs/spec.md` and customize for your project.
 
 ---
 

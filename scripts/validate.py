@@ -142,9 +142,9 @@ def _try_shim_to_go() -> bool:
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-PLANNING_DIR = PROJECT_ROOT / "project-planning"
-STATE_FILE = PLANNING_DIR / "state.json"
-TASKS_DIR = PLANNING_DIR / "tasks"
+TASKER_DIR = PROJECT_ROOT / ".tasker"
+STATE_FILE = TASKER_DIR / "state.json"
+TASKS_DIR = TASKER_DIR / "tasks"
 
 
 def load_state() -> dict | None:
@@ -1069,7 +1069,7 @@ def main() -> None:
         threshold = 0.9
         if len(sys.argv) > 2 and sys.argv[2] == "--threshold":
             threshold = float(sys.argv[3])
-        valid, report = validate_spec_coverage(PLANNING_DIR, threshold)
+        valid, report = validate_spec_coverage(TASKER_DIR, threshold)
         print("Spec Coverage Report")
         print("=" * 40)
         print(f"Coverage: {report['coverage_ratio']:.1%}")
@@ -1084,7 +1084,7 @@ def main() -> None:
         sys.exit(0 if valid else 1)
 
     elif cmd == "phase-leakage":
-        valid, violations = detect_phase_leakage(PLANNING_DIR)
+        valid, violations = detect_phase_leakage(TASKER_DIR)
         if valid:
             print("No phase leakage detected")
         else:
@@ -1095,7 +1095,7 @@ def main() -> None:
         sys.exit(0 if valid else 1)
 
     elif cmd == "dependency-existence":
-        valid, violations = validate_dependency_existence(PLANNING_DIR)
+        valid, violations = validate_dependency_existence(TASKER_DIR)
         if valid:
             print("All dependencies exist")
         else:
@@ -1105,7 +1105,7 @@ def main() -> None:
         sys.exit(0 if valid else 1)
 
     elif cmd == "acceptance-criteria":
-        valid, violations = validate_acceptance_criteria_quality(PLANNING_DIR)
+        valid, violations = validate_acceptance_criteria_quality(TASKER_DIR)
         if valid:
             print("All acceptance criteria meet quality standards")
         else:
@@ -1118,7 +1118,7 @@ def main() -> None:
         threshold = 0.9
         if len(sys.argv) > 2 and sys.argv[2] == "--threshold":
             threshold = float(sys.argv[3])
-        results = run_planning_gates(PLANNING_DIR, threshold)
+        results = run_planning_gates(TASKER_DIR, threshold)
         print("Planning Gates Report")
         print("=" * 40)
         print()
@@ -1147,7 +1147,7 @@ def main() -> None:
         sys.exit(0 if results["passed"] else 1)
 
     elif cmd == "refactor-priority":
-        priority = resolve_refactor_priority(PLANNING_DIR)
+        priority = resolve_refactor_priority(TASKER_DIR)
         print("Refactor Priority Resolution")
         print("=" * 40)
         print(f"Original requirements: {len(priority['original_requirements'])}")

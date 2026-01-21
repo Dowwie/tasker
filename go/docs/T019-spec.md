@@ -34,7 +34,7 @@ type GitRepoError struct {
 
 ```go
 // InitDirectories creates the planning directory structure at the specified root.
-// If planningDir is empty, it defaults to "project-planning" under the root.
+// If planningDir is empty, it defaults to ".tasker" under the root.
 // Returns the absolute path to the planning directory.
 func InitDirectories(root string, planningDir string) (string, error)
 
@@ -49,7 +49,7 @@ type DirectoryError struct {
 }
 
 // PlanningDirName is the default name for the planning directory.
-const PlanningDirName = "project-planning"
+const PlanningDirName = ".tasker"
 
 // PlanningSubdirs defines the required subdirectories within a planning directory.
 var PlanningSubdirs = []string{"bundles", "artifacts"}

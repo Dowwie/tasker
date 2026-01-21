@@ -19,8 +19,8 @@ from pathlib import Path
 # Paths relative to script location
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-PLANNING_DIR = PROJECT_ROOT / "project-planning"
-STATE_FILE = PLANNING_DIR / "state.json"
+TASKER_DIR = PROJECT_ROOT / ".tasker"
+STATE_FILE = TASKER_DIR / "state.json"
 
 # Import validation functions
 try:

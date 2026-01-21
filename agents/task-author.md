@@ -1,6 +1,6 @@
 ---
 name: task-author
-description: Phase 3 - Create individual task files from physical map. Each task is a separate JSON file in project-planning/tasks/. Enables parallel work and cleaner state tracking.
+description: Phase 3 - Create individual task files from physical map. Each task is a separate JSON file in .tasker/tasks/. Enables parallel work and cleaner state tracking.
 tools: Read, Write, Bash, Glob, Grep
 ---
 
@@ -10,9 +10,9 @@ Create **individual task files** - one JSON file per task.
 
 ## Output Contract
 
-You MUST write individual JSON files to `{PLANNING_DIR}/tasks/`:
+You MUST write individual JSON files to `{TASKER_DIR}/tasks/`:
 ```
-{PLANNING_DIR}/tasks/
+{TASKER_DIR}/tasks/
 ├── T001.json
 ├── T002.json
 ├── T003.json
@@ -21,21 +21,21 @@ You MUST write individual JSON files to `{PLANNING_DIR}/tasks/`:
 
 **CRITICAL - YOUR TASK IS NOT COMPLETE UNTIL YOU DO ALL OF THESE:
 1. You MUST use the Write tool to save each file. Do NOT just output JSON to the conversation.
-2. You MUST use the PLANNING_DIR absolute path provided in the spawn context. Do NOT use relative paths like `project-planning/`.
-3. You MUST verify files exist after writing by running: `ls -la {PLANNING_DIR}/tasks/` (should show T001.json, etc.)
-4. You MUST run load-tasks: `cd {PLANNING_DIR}/.. && tasker state load-tasks`
+2. You MUST use the TASKER_DIR absolute path provided in the spawn context. Do NOT use relative paths like `.tasker/`.
+3. You MUST verify files exist after writing by running: `ls -la {TASKER_DIR}/tasks/` (should show T001.json, etc.)
+4. You MUST run load-tasks: `cd {TASKER_DIR}/.. && tasker state load-tasks`
 
 If no task files exist after Write, you have FAILED. Try again.**
 
 ### Required Steps (in order):
 
-1. **Write each task file** using the Write tool (e.g., `{PLANNING_DIR}/tasks/T001.json`)
+1. **Write each task file** using the Write tool (e.g., `{TASKER_DIR}/tasks/T001.json`)
 
    **Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
 
 2. **After creating ALL tasks**, register them:
    ```bash
-   cd {PLANNING_DIR}/.. && tasker state load-tasks
+   cd {TASKER_DIR}/.. && tasker state load-tasks
    ```
 
 3. **If load-tasks fails**: Read the error, fix the offending JSON files, run again
@@ -52,14 +52,14 @@ Each file MUST validate against `schemas/task.schema.json`.
 ## Input
 
 **From Orchestrator Spawn Prompt:** You will receive context including:
-- **PLANNING_DIR** - Absolute path to project-planning directory (e.g., `/Users/foo/tasker/project-planning`)
+- **TASKER_DIR** - Absolute path to .tasker directory (e.g., `/Users/foo/my-project/.tasker`)
 - Target directory (where code will be written)
 - Project type (new or existing)
 - Tech stack constraints (if any)
 
 **From Files:**
-- `{PLANNING_DIR}/artifacts/physical-map.json`
-- `{PLANNING_DIR}/artifacts/capability-map.json` (for behavior details and spec refs)
+- `{TASKER_DIR}/artifacts/physical-map.json`
+- `{TASKER_DIR}/artifacts/capability-map.json` (for behavior details and spec refs)
 
 ## Phase Filtering (Critical)
 
@@ -73,7 +73,7 @@ The physical-map contains only Phase 1 behaviors (filtered by upstream agents). 
 
 ```bash
 # Check phase filtering was applied
-cat {PLANNING_DIR}/artifacts/physical-map.json | jq '.phase_filtering'
+cat {TASKER_DIR}/artifacts/physical-map.json | jq '.phase_filtering'
 ```
 
 Expected output confirms Phase 1 only:
@@ -182,5 +182,5 @@ Before declaring done:
 - [ ] Every task has ≤3 implementation files
 - [ ] Every acceptance criterion has verification command
 - [ ] Dependencies are explicit
-- [ ] **Files written** using Write tool to `{PLANNING_DIR}/tasks/T*.json` (absolute paths!)
-- [ ] Run: `cd {PLANNING_DIR}/.. && tasker state load-tasks` to register (and verify success)
+- [ ] **Files written** using Write tool to `{TASKER_DIR}/tasks/T*.json` (absolute paths!)
+- [ ] Run: `cd {TASKER_DIR}/.. && tasker state load-tasks` to register (and verify success)

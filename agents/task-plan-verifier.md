@@ -14,36 +14,36 @@ You receive from orchestrator:
 ```
 Verify task definitions for planning
 
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
-Spec: {PLANNING_DIR}/inputs/spec.md
-Capability Map: {PLANNING_DIR}/artifacts/capability-map.json
-Tasks Directory: {PLANNING_DIR}/tasks/
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
+Spec: {TASKER_DIR}/inputs/spec.md
+Capability Map: {TASKER_DIR}/artifacts/capability-map.json
+Tasks Directory: {TASKER_DIR}/tasks/
 User Preferences: ~/.claude/CLAUDE.md (if exists)
 ```
 
-**CRITICAL:** Use the `PLANNING_DIR` absolute path provided. Do NOT use relative paths like `project-planning/`.
+**CRITICAL:** Use the `TASKER_DIR` absolute path provided. Do NOT use relative paths like `.tasker/`.
 
 ## Protocol
 
 ### 1. Load Context
 
-Replace `{PLANNING_DIR}` with the absolute path from your spawn context:
+Replace `{TASKER_DIR}` with the absolute path from your spawn context:
 
 ```bash
 # Load the spec
-cat {PLANNING_DIR}/inputs/spec.md
+cat {TASKER_DIR}/inputs/spec.md
 
 # Load capability map (the decomposition strategy)
-cat {PLANNING_DIR}/artifacts/capability-map.json
+cat {TASKER_DIR}/artifacts/capability-map.json
 
 # Load physical map (for phase filtering verification)
-cat {PLANNING_DIR}/artifacts/physical-map.json
+cat {TASKER_DIR}/artifacts/physical-map.json
 
 # Load user preferences (global coding standards)
 cat ~/.claude/CLAUDE.md 2>/dev/null || echo "No global CLAUDE.md found"
 
 # List all task files
-ls {PLANNING_DIR}/tasks/*.json
+ls {TASKER_DIR}/tasks/*.json
 ```
 
 Extract from capability map:
@@ -64,8 +64,8 @@ Extract from user preferences (if present):
 ### 2. Load All Tasks
 
 ```bash
-# Read each task file (use absolute PLANNING_DIR path)
-for task in {PLANNING_DIR}/tasks/*.json; do
+# Read each task file (use absolute TASKER_DIR path)
+for task in {TASKER_DIR}/tasks/*.json; do
   cat "$task"
 done
 ```
@@ -80,7 +80,7 @@ Build a mental model of:
 Before evaluating tasks manually, run the programmatic validation gates:
 
 ```bash
-cd {PLANNING_DIR}/.. && tasker validate planning-gates --threshold 0.9
+cd {TASKER_DIR}/.. && tasker validate planning-gates --threshold 0.9
 ```
 
 This checks:
@@ -113,7 +113,7 @@ For each task, evaluate these dimensions:
 
 **Evidence to check:**
 - `context.spec_ref` contains quoted spec content that justifies this task
-- The quoted text exists in `{PLANNING_DIR}/inputs/spec.md` (search for it)
+- The quoted text exists in `{TASKER_DIR}/inputs/spec.md` (search for it)
 - Behaviors in task exist in capability-map
 - Task purpose aligns with spec intent
 
@@ -145,8 +145,8 @@ For content-based refs, verify the `quote` text appears in the spec file.
 
 **How to detect Phase 2+ leakage:**
 ```bash
-# Get excluded phase summaries (use absolute PLANNING_DIR path)
-cat {PLANNING_DIR}/artifacts/capability-map.json | jq '.phase_filtering.excluded_phases[].summary'
+# Get excluded phase summaries (use absolute TASKER_DIR path)
+cat {TASKER_DIR}/artifacts/capability-map.json | jq '.phase_filtering.excluded_phases[].summary'
 
 # For each task, check if spec_ref quotes Phase 2+ content
 # Compare task descriptions against excluded summaries
@@ -300,7 +300,7 @@ cat {PLANNING_DIR}/artifacts/capability-map.json | jq '.phase_filtering.excluded
 
 **Run refactor priority check:**
 ```bash
-cd {PLANNING_DIR}/.. && tasker validate refactor-priority
+cd {TASKER_DIR}/.. && tasker validate refactor-priority
 ```
 
 This shows which original requirements are superseded by refactor tasks.
@@ -341,12 +341,12 @@ After evaluating all tasks:
 
 **Save the verification report to a file:**
 
-Write the full report to `{PLANNING_DIR}/reports/task-validation-report.md`.
+Write the full report to `{TASKER_DIR}/reports/task-validation-report.md`.
 
 **Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
 
 ```bash
-cat > {PLANNING_DIR}/reports/task-validation-report.md << 'EOF'
+cat > {TASKER_DIR}/reports/task-validation-report.md << 'EOF'
 # Plan Verification Report
 
 **Generated:** $(date -Iseconds)
@@ -361,20 +361,20 @@ This file persists for review and debugging.
 
 ### 8. Register Verdict
 
-**Register the verdict with state.py (run from parent of PLANNING_DIR):**
+**Register the verdict with state.py (run from parent of TASKER_DIR):**
 
 **CRITICAL:** The command is `validate-tasks` - use this exact command name. Do NOT use `validate-complete`, `validation-complete`, or any other variant.
 
 ```bash
 # For READY (all tasks pass)
-cd {PLANNING_DIR}/.. && tasker state validate-tasks READY "All tasks aligned with spec and preferences"
+cd {TASKER_DIR}/.. && tasker state validate-tasks READY "All tasks aligned with spec and preferences"
 
 # For READY_WITH_NOTES (pass with minor issues)
-cd {PLANNING_DIR}/.. && tasker state validate-tasks READY_WITH_NOTES "Minor issues found" \
+cd {TASKER_DIR}/.. && tasker state validate-tasks READY_WITH_NOTES "Minor issues found" \
   --issues "T002: missing constraints" "T012: unclear verification"
 
 # For BLOCKED (critical issues)
-cd {PLANNING_DIR}/.. && tasker state validate-tasks BLOCKED "Critical issues block planning" \
+cd {TASKER_DIR}/.. && tasker state validate-tasks BLOCKED "Critical issues block planning" \
   --issues "T005: not traceable to spec"
 ```
 
@@ -385,7 +385,7 @@ This registration is required for the orchestrator to advance the phase.
 ```markdown
 ## Task Plan Verification Report
 
-**Spec:** {PLANNING_DIR}/inputs/spec.md
+**Spec:** {TASKER_DIR}/inputs/spec.md
 **Tasks Evaluated:** 12
 **Aggregate Verdict:** READY | READY_WITH_NOTES | BLOCKED
 
@@ -502,13 +502,13 @@ If READY or READY_WITH_NOTES:
 ## Output Contract
 
 Before your final message, you MUST:
-1. Save full report to `{PLANNING_DIR}/reports/task-validation-report.md` (absolute path!)
-2. Run `cd {PLANNING_DIR}/.. && tasker state validate-tasks <VERDICT> "<summary>" [--issues ...]`
+1. Save full report to `{TASKER_DIR}/reports/task-validation-report.md` (absolute path!)
+2. Run `cd {TASKER_DIR}/.. && tasker state validate-tasks <VERDICT> "<summary>" [--issues ...]`
    - **IMPORTANT:** The command is `validate-tasks` (with hyphen), NOT `validate-complete` or any other variant
 
 Your final message MUST include:
 1. `**Aggregate Verdict:** READY` or `READY_WITH_NOTES` or `BLOCKED`
-2. `**Report:** {PLANNING_DIR}/reports/task-validation-report.md`
+2. `**Report:** {TASKER_DIR}/reports/task-validation-report.md`
 3. Per-task evaluation summary (details in report file)
 4. For BLOCKED: List of blocking issues with fix suggestions
 5. `### Next Steps` with clear instructions

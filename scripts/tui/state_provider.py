@@ -192,7 +192,7 @@ class FileStateProvider:
     def __init__(self, state_file: Path | None = None):
         if state_file is None:
             project_root = Path(__file__).resolve().parent.parent.parent
-            state_file = project_root / "project-planning" / "state.json"
+            state_file = project_root / ".tasker" / "state.json"
         self._state_file = state_file
         self._validation_provider: "FileValidationProvider | None" = None
 
@@ -287,7 +287,7 @@ class FileValidationProvider:
     def __init__(self, state_file: Path | None = None):
         if state_file is None:
             project_root = Path(__file__).resolve().parent.parent.parent
-            state_file = project_root / "project-planning" / "state.json"
+            state_file = project_root / ".tasker" / "state.json"
         self._state_file = state_file
 
     def _load_raw_state(self) -> dict | None:

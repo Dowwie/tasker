@@ -24,7 +24,7 @@ The `/plan` orchestrator checks for existing capability maps and skips this agen
 
 **Before reading the spec, before any analysis, your FIRST tool call MUST be Write.**
 
-Write this placeholder to `{PLANNING_DIR}/artifacts/capability-map.json`:
+Write this placeholder to `{TASKER_DIR}/artifacts/capability-map.json`:
 
 ```json
 {"version": "1.0", "status": "in_progress", "domains": [], "flows": [], "coverage": {"total_requirements": 0, "covered_requirements": 0, "gaps": []}}
@@ -34,7 +34,7 @@ Write this placeholder to `{PLANNING_DIR}/artifacts/capability-map.json`:
 
 After writing the placeholder, verify it exists:
 ```bash
-ls -la {PLANNING_DIR}/artifacts/capability-map.json
+ls -la {TASKER_DIR}/artifacts/capability-map.json
 ```
 
 **Only proceed to analysis after confirming the file exists.**
@@ -43,17 +43,17 @@ ls -la {PLANNING_DIR}/artifacts/capability-map.json
 
 ## Output Contract
 
-You MUST write valid JSON to `{PLANNING_DIR}/artifacts/capability-map.json`.
+You MUST write valid JSON to `{TASKER_DIR}/artifacts/capability-map.json`.
 
 The JSON MUST validate against `schemas/capability-map.schema.json`.
 
 ### Workflow (MANDATORY order):
 
 1. **WRITE PLACEHOLDER** (your first action - see above)
-2. **READ** the spec from `{PLANNING_DIR}/inputs/spec.md`
+2. **READ** the spec from `{TASKER_DIR}/inputs/spec.md`
 3. **ANALYZE** using I.P.S.O. decomposition (see below)
 4. **OVERWRITE** the file with your complete analysis using the Write tool
-5. **VALIDATE**: `cd {PLANNING_DIR}/.. && tasker state validate capability_map`
+5. **VALIDATE**: `cd {TASKER_DIR}/.. && tasker state validate capability_map`
 6. **If validation fails**: Fix the JSON, Write again, re-validate
 
 **Note:** The orchestrator has already created all required directories. If you encounter a "directory does not exist" error, report this to the orchestrator - do NOT create directories yourself.
@@ -63,13 +63,13 @@ The JSON MUST validate against `schemas/capability-map.schema.json`.
 ## Input
 
 **From Orchestrator Spawn Prompt:** You will receive context including:
-- **PLANNING_DIR** - Absolute path to project-planning directory (e.g., `/Users/foo/tasker/project-planning`)
+- **TASKER_DIR** - Absolute path to .tasker directory (e.g., `/Users/foo/my-project/.tasker`)
 - Target directory (where code will be written)
 - Project type (new or existing)
 - Tech stack constraints (if any)
 - Existing project analysis (if enhancing an existing codebase)
 
-**From File:** Read `{PLANNING_DIR}/inputs/spec.md`
+**From File:** Read `{TASKER_DIR}/inputs/spec.md`
 
 **Important:** The spec may be in any format (freeform, PRD, bullet list, etc.). Do not expect structured sections. Extract requirements from whatever format is provided.
 
@@ -234,9 +234,9 @@ The quote provides 100% traceability - it IS the spec content. The location is b
 
 ### File Existence (CRITICAL)
 - [ ] Placeholder was written as FIRST action
-- [ ] Final JSON was written using Write tool to `{PLANNING_DIR}/artifacts/capability-map.json`
-- [ ] File exists: `ls -la {PLANNING_DIR}/artifacts/capability-map.json` shows the file
-- [ ] Validation passes: `cd {PLANNING_DIR}/.. && tasker state validate capability_map`
+- [ ] Final JSON was written using Write tool to `{TASKER_DIR}/artifacts/capability-map.json`
+- [ ] File exists: `ls -la {TASKER_DIR}/artifacts/capability-map.json` shows the file
+- [ ] Validation passes: `cd {TASKER_DIR}/.. && tasker state validate capability_map`
 
 ### Content Quality
 - [ ] Phase markers identified and Phase 2+ content excluded

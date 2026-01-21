@@ -16,11 +16,11 @@ You receive from orchestrator:
 ```
 Execute task T001
 
-PLANNING_DIR: {absolute path to project-planning, e.g., /Users/foo/tasker/project-planning}
-Bundle: {PLANNING_DIR}/bundles/T001-bundle.json
+TASKER_DIR: {absolute path to .tasker directory, e.g., /Users/foo/my-project/.tasker}
+Bundle: {TASKER_DIR}/bundles/T001-bundle.json
 ```
 
-**CRITICAL:** Use the `PLANNING_DIR` absolute path provided. Do NOT use relative paths like `project-planning/`.
+**CRITICAL:** Use the `TASKER_DIR` absolute path provided. Do NOT use relative paths like `.tasker/`.
 
 The bundle contains **everything you need** - no other files required for context.
 
@@ -29,8 +29,8 @@ The bundle contains **everything you need** - no other files required for contex
 ### 1. Load Bundle
 
 ```bash
-# Use absolute PLANNING_DIR path from context
-cat {PLANNING_DIR}/bundles/T001-bundle.json
+# Use absolute TASKER_DIR path from context
+cat {TASKER_DIR}/bundles/T001-bundle.json
 ```
 
 The bundle contains:
@@ -49,8 +49,8 @@ The bundle contains:
 ### 2. Mark Started
 
 ```bash
-# Run state.py from orchestrator root (parent of PLANNING_DIR)
-cd {PLANNING_DIR}/.. && tasker state start-task T001
+# Run state.py from orchestrator root (parent of TASKER_DIR)
+cd {TASKER_DIR}/.. && tasker state start-task T001
 ```
 
 ### 3. Implement
@@ -183,8 +183,8 @@ MODIFIED_FILES.append("README.md")
 ```
 Verify task T001
 
-PLANNING_DIR: {PLANNING_DIR}
-Bundle: {PLANNING_DIR}/bundles/T001-bundle.json
+TASKER_DIR: {TASKER_DIR}
+Bundle: {TASKER_DIR}/bundles/T001-bundle.json
 Target: $TARGET_DIR
 ```
 
@@ -207,7 +207,7 @@ The verifier includes a JSON block at the end of its report. Extract it and pers
 # Parse the JSON block from verifier output
 # The JSON contains: task_id, verdict, recommendation, criteria, quality, tests
 
-cd {PLANNING_DIR}/.. && tasker state record-verification T001 \
+cd {TASKER_DIR}/.. && tasker state record-verification T001 \
   --verdict PASS \
   --recommendation PROCEED \
   --criteria '[{"name": "...", "score": "PASS", "evidence": "..."}]' \
@@ -225,12 +225,12 @@ cd {PLANNING_DIR}/.. && tasker state record-verification T001 \
 
 ```bash
 # 1. Update state directly (spec file MUST be in --created list)
-cd {PLANNING_DIR}/.. && tasker state complete-task T001 \
+cd {TASKER_DIR}/.. && tasker state complete-task T001 \
   --created src/auth/validator.py src/auth/errors.py docs/T001-spec.md \
   --modified src/auth/__init__.py README.md
 
 # 2. Commit changes to git
-cd {PLANNING_DIR}/.. && tasker state commit-task T001
+cd {TASKER_DIR}/.. && tasker state commit-task T001
 
 # 3. Write result file for observability (see step 7)
 ```
@@ -238,7 +238,7 @@ cd {PLANNING_DIR}/.. && tasker state commit-task T001
 **If criteria fail:**
 ```bash
 # 1. Update state directly
-cd {PLANNING_DIR}/.. && tasker state fail-task T001 \
+cd {TASKER_DIR}/.. && tasker state fail-task T001 \
   "Acceptance criteria failed: <details>" \
   --category test --retryable
 
@@ -249,7 +249,7 @@ cd {PLANNING_DIR}/.. && tasker state fail-task T001 \
 
 **CRITICAL:** Write detailed results to file. Return ONLY a single status line.
 
-**Write result file:** `{PLANNING_DIR}/bundles/T001-result.json`
+**Write result file:** `{TASKER_DIR}/bundles/T001-result.json`
 
 ```json
 {
@@ -340,7 +340,7 @@ All code must:
 
 **MANDATORY deliverables (task is NOT complete without these):**
 - [ ] `docs/{task_id}-spec.md` - Task specification document
-- [ ] Result file written to `{PLANNING_DIR}/bundles/{task_id}-result.json`
+- [ ] Result file written to `{TASKER_DIR}/bundles/{task_id}-result.json`
 - [ ] State updated via `state.py complete-task` or `state.py fail-task`
 
 ## Subagent Spawning

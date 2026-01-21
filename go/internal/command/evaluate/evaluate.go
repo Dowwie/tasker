@@ -31,9 +31,9 @@ The report includes:
 - Failure analysis (which tasks failed and why)
 - Improvement patterns (common issues across tasks)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		planningDir := os.Getenv("TASKER_PLANNING_DIR")
+		planningDir := os.Getenv("TASKER_DIR")
 		if planningDir == "" {
-			planningDir = "project-planning"
+			planningDir = ".tasker"
 		}
 
 		result, err := util.RunEvaluation(planningDir)

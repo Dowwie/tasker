@@ -460,7 +460,7 @@ tasker state advance
 
 ### Execution Bundles
 
-Each task generates a self-contained bundle at `project-planning/bundles/T001-bundle.json` containing:
+Each task generates a self-contained bundle at `.tasker/bundles/T001-bundle.json` containing:
 - Expanded behaviors (not just IDs)
 - File paths with purposes and layers
 - Acceptance criteria with verification commands

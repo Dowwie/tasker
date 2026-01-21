@@ -259,10 +259,10 @@ Global Flags:
 ```
 
 ### File Interface
-- Reads/writes: `project-planning/state.json`
-- Reads/writes: `project-planning/tasks/*.json`
-- Reads/writes: `project-planning/bundles/*.json`
-- Reads/writes: `project-planning/artifacts/*.json`
+- Reads/writes: `.tasker/state.json`
+- Reads/writes: `.tasker/tasks/*.json`
+- Reads/writes: `.tasker/bundles/*.json`
+- Reads/writes: `.tasker/artifacts/*.json`
 - Reads: `schemas/*.json`
 
 ### Environment Variables

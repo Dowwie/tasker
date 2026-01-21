@@ -20,7 +20,7 @@ Converts Tasker task definitions into enriched Beads issues that are **self-cont
 
 ## Prerequisites
 
-1. Tasker planning complete (`project-planning/state.json` exists, phase is "ready")
+1. Tasker planning complete (`.tasker/state.json` exists, phase is "ready")
 2. A target directory for development (beads will be initialized there if needed)
 
 ## Target Directory Concept
@@ -70,7 +70,7 @@ The `init-target` command runs two steps:
 tasker transform context --all -t /path/to/target
 ```
 
-This extracts structural data from task files and saves context bundles to `project-planning/beads-export/`.
+This extracts structural data from task files and saves context bundles to `.tasker/beads-export/`.
 
 ### Step 3: Enrich Each Task (LLM Work)
 
@@ -78,24 +78,24 @@ For each task, read the context file and generate an enriched issue description.
 
 **Read the context:**
 ```bash
-cat project-planning/beads-export/{TASK_ID}-context.json
+cat .tasker/beads-export/{TASK_ID}-context.json
 ```
 
 **Generate enriched content using the template below**, then save:
 ```bash
-# Save to project-planning/beads-export/{TASK_ID}-enriched.json
+# Save to .tasker/beads-export/{TASK_ID}-enriched.json
 ```
 
 ### Step 4: Create Beads Issues
 
 After enrichment, create issues in the target directory:
 ```bash
-tasker transform create {TASK_ID} project-planning/beads-export/{TASK_ID}-enriched.json -t /path/to/target
+tasker transform create {TASK_ID} .tasker/beads-export/{TASK_ID}-enriched.json -t /path/to/target
 ```
 
 Or batch create from manifest:
 ```bash
-tasker transform batch-create project-planning/beads-export/manifest.json -t /path/to/target
+tasker transform batch-create .tasker/beads-export/manifest.json -t /path/to/target
 ```
 
 ---
@@ -221,14 +221,14 @@ To transform a single task:
 tasker transform context T001
 
 # 2. Read and understand
-cat project-planning/beads-export/T001-context.json
+cat .tasker/beads-export/T001-context.json
 
 # 3. Generate enriched content (you do this)
 # ... apply the enrichment template ...
-# Save to project-planning/beads-export/T001-enriched.json
+# Save to .tasker/beads-export/T001-enriched.json
 
 # 4. Create the issue in target directory
-tasker transform create T001 project-planning/beads-export/T001-enriched.json -t /path/to/target
+tasker transform create T001 .tasker/beads-export/T001-enriched.json -t /path/to/target
 ```
 
 ---
@@ -248,11 +248,11 @@ tasker transform context --all
 # This is the neural loop - process each T*-context.json
 
 # 4. Create manifest with all enriched issues
-# Save to project-planning/beads-export/manifest.json with structure:
+# Save to .tasker/beads-export/manifest.json with structure:
 # { "issues": [ {...enriched issue 1...}, {...enriched issue 2...}, ... ] }
 
 # 5. Batch create in target directory
-tasker transform batch-create project-planning/beads-export/manifest.json -t /path/to/target
+tasker transform batch-create .tasker/beads-export/manifest.json -t /path/to/target
 ```
 
 ---

@@ -29,13 +29,13 @@ An **agent-driven interactive workflow** that transforms ideas into actionable s
 - **Behavior Model (FSM)** — `{TARGET}/docs/state-machines/<slug>/` (state machine artifacts, for `/plan` and `/execute`)
 - **ADR files** — `{TARGET}/docs/adrs/ADR-####-<slug>.md` (0..N)
 
-### Working Files (in tasker)
-- **Discovery file** — `.claude/clarify-session.md` (ephemeral)
-- **Session state** — `.claude/spec-session.json` (ephemeral)
-- **Spec Review** — `.claude/spec-review.json` (ephemeral)
+### Working Files (in target project's .tasker/)
+- **Discovery file** — `$TARGET_DIR/.tasker/clarify-session.md` (ephemeral)
+- **Session state** — `$TARGET_DIR/.tasker/state.json` (persistent)
+- **Spec Review** — `$TARGET_DIR/.tasker/spec-review.json` (ephemeral)
 
-### Archive (in tasker)
-After completion, artifacts are archived to `archive/{project}/` for post-hoc analysis.
+### Archive
+After completion, artifacts can be archived using `tasker archive` for post-hoc analysis.
 
 ---
 
@@ -54,9 +54,78 @@ Initialization → Scope → Clarification Loop (Discovery) → Synthesis → Ar
 ## Goal
 Establish project context and session state before specification work begins.
 
-## Step 1: Ask User Intent First
+## Step 1: Ask for Target Project Directory (MANDATORY FIRST)
 
-**ALWAYS ask the user first** what they want to do. Do not assume or auto-discover.
+**ALWAYS ask for target_dir FIRST before anything else.** No guessing, no inference from CWD.
+
+Ask using AskUserQuestion:
+```
+What is the target project directory?
+```
+Free-form text input. User must provide an absolute or relative path.
+
+**Validation:**
+```bash
+TARGET_DIR="<user-provided-path>"
+# Convert to absolute path
+TARGET_DIR=$(cd "$TARGET_DIR" 2>/dev/null && pwd || echo "$TARGET_DIR")
+
+if [ ! -d "$TARGET_DIR" ]; then
+    # For new projects, check parent exists
+    PARENT=$(dirname "$TARGET_DIR")
+    if [ -d "$PARENT" ]; then
+        echo "Directory will be created: $TARGET_DIR"
+    else
+        echo "Error: Parent directory does not exist: $PARENT"
+        # Re-ask for target_dir
+    fi
+fi
+```
+
+## Step 2: Ask About Existing Specs
+
+Ask using AskUserQuestion:
+```
+Do you have existing specification files?
+```
+Options:
+- **No specs yet** — Starting from scratch
+- **Yes, I have specs** — I'll provide the location
+
+### If "Yes, I have specs":
+Ask for the spec location:
+```
+Where are your spec files located?
+```
+Free-form text input. User provides path (e.g., `docs/specs/`, `requirements.md`, `PRD.pdf`).
+
+**Store the spec location for later use:**
+```bash
+EXISTING_SPEC_PATH="<user-provided-path>"
+# Validate path exists
+if [ ! -e "$TARGET_DIR/$EXISTING_SPEC_PATH" ] && [ ! -e "$EXISTING_SPEC_PATH" ]; then
+    echo "Warning: Spec path not found. Will ask again during Scope phase."
+fi
+```
+
+## Step 3: Check for Existing Tasker Session
+
+After target_dir is confirmed, check for existing `.tasker/` state:
+
+```bash
+TASKER_DIR="$TARGET_DIR/.tasker"
+if [ -f "$TASKER_DIR/state.json" ]; then
+    echo "Found existing tasker session at $TASKER_DIR"
+    echo "Resuming from saved state..."
+    # Read phase from state.json and resume
+else
+    echo "No existing session. Starting fresh."
+fi
+```
+
+If existing session found, inform user and resume from saved phase.
+
+## Step 4: Ask User Intent
 
 Ask using AskUserQuestion:
 ```
@@ -64,60 +133,52 @@ What would you like to do?
 ```
 Options:
 - **New specification** — Start a new spec from scratch
-- **Continue existing spec** — Resume work on an existing spec file
-- **Resume session** — Continue an interrupted specification session
+- **Continue existing spec** — Resume work on an existing spec file (use if user provided spec path in Step 2)
 
-## Step 2: Gather Path Based on Intent
+**Note:** If user provided a spec path in Step 2, default to "Continue existing spec" and use that path.
 
-### If "New specification":
-Ask for target directory path. Default to current directory if user doesn't specify.
+## Step 5: Initialize Session State
 
-### If "Continue existing spec":
-Ask user to provide the spec file path.
+Create `.tasker/` directory structure in target project:
 
-### If "Resume session":
-Read `.claude/spec-session.json` and resume from saved phase.
-If no session exists, inform user and offer to start fresh.
-
-## Step 3: Confirm Target Directory
-
-Based on user input, confirm the target directory:
-
-- **Current directory is the target** → Use CWD as TARGET_DIR
-- **User specifies different path** → Validate path exists, use as TARGET_DIR
-- **New project in different location** → Validate parent exists, use as TARGET_DIR
-
-**Validation:**
 ```bash
-TARGET_DIR="<resolved-path>"
-if [ ! -d "$TARGET_DIR" ]; then
-    # For new projects, check parent exists
-    PARENT=$(dirname "$TARGET_DIR")
-    [ -d "$PARENT" ] || echo "Error: Parent directory does not exist"
-fi
+TASKER_DIR="$TARGET_DIR/.tasker"
+mkdir -p "$TASKER_DIR"/{inputs,artifacts,tasks,bundles,reports}
 ```
 
-## Step 4: Initialize Session State
-
-Create or update `.claude/spec-session.json`:
+Create or update `$TARGET_DIR/.tasker/state.json`:
 
 ```json
 {
+  "version": "2.0",
   "target_dir": "<absolute-path>",
-  "project_type": "new|existing",
-  "spec_slug": "<slug>",
-  "spec_path": "<target>/docs/specs/<slug>.md",
-  "phase": "initialization",
-  "started_at": "<timestamp>",
-  "resumed_from": null
+  "phase": {
+    "current": "initialization",
+    "completed": []
+  },
+  "created_at": "<timestamp>",
+  "spec_session": {
+    "project_type": "new|existing",
+    "existing_spec_path": "<path-from-step-2-or-null>",
+    "spec_slug": "<slug>",
+    "spec_path": "<target>/docs/specs/<slug>.md",
+    "started_at": "<timestamp>",
+    "resumed_from": null
+  },
+  "artifacts": {},
+  "tasks": {}
 }
 ```
+
+**If user provided existing spec path in Step 2**, store it in `spec_session.existing_spec_path` for reference during Scope phase.
 
 **For existing projects**, store discovered project context in session state for later reference during Synthesis phase.
 
 ## Output
 
-- Session state initialized in `.claude/spec-session.json`
+- `.tasker/` directory structure created in target project
+- Session state initialized in `$TARGET_DIR/.tasker/state.json`
+- Existing spec path captured (if provided)
 - Project context captured (for existing projects)
 - Clear path forward: resume existing spec OR start new spec
 
@@ -132,9 +193,26 @@ After initialization completes, advance to Phase 1 (Scope).
 ## Goal
 Establish bounds before discovery.
 
+## Pre-Scope: Load Existing Spec (if provided)
+
+If `spec_session.existing_spec_path` was set during initialization:
+
+1. **Read the existing spec file** to understand prior context
+2. **Extract initial answers** for the scope questions below (Goal, Non-goals, Done means)
+3. **Present extracted context** to user for confirmation/refinement rather than asking from scratch
+
+```bash
+if [ -n "$EXISTING_SPEC_PATH" ]; then
+    echo "Loading existing spec from: $EXISTING_SPEC_PATH"
+    # Read and analyze existing spec
+    # Pre-fill scope questions with extracted information
+fi
+```
+
 ## Required Questions (AskUserQuestion)
 
-Ask these questions using AskUserQuestion tool with structured options:
+Ask these questions using AskUserQuestion tool with structured options.
+**If existing spec was loaded**, present extracted answers for confirmation rather than blank questions:
 
 ### Question 1: Goal
 ```
@@ -154,11 +232,26 @@ What are the acceptance bullets? (When is this "done"?)
 ```
 Free-form text input (allow multiple items).
 
+### Question 4: Tech Stack
+```
+What tech stack should be used?
+```
+Free-form text input. Examples:
+- "Python 3.12+ with FastAPI, PostgreSQL, Redis"
+- "TypeScript, Next.js, Prisma, Supabase"
+- "Go with Chi router, SQLite"
+- "Whatever fits best" (let /specify recommend based on requirements)
+
+**If user says "whatever fits best" or similar:**
+- Note this for Phase 2 (Clarify) to recommend based on gathered requirements
+- Ask clarifying questions: "Any language preferences?", "Cloud provider constraints?", "Team expertise?"
+
 ## Output
 Create initial spec draft with:
 - Goal
 - Non-goals
 - Done means
+- Tech stack (or "TBD - will recommend after requirements gathering")
 
 ---
 
@@ -169,7 +262,7 @@ Exhaustively gather requirements via structured questioning.
 
 ## Setup
 
-Create `.claude/clarify-session.md`:
+Create `$TARGET_DIR/.tasker/clarify-session.md`:
 
 ```markdown
 # Discovery: {TOPIC}
@@ -274,7 +367,7 @@ questions:
 
 ## Updating Discovery File
 
-After each Q&A round, append to `.claude/clarify-session.md`:
+After each Q&A round, append to `$TARGET_DIR/.tasker/clarify-session.md`:
 
 ```markdown
 ### Round N
@@ -318,7 +411,7 @@ This phase produces TWO outputs:
 
 ## Process
 
-1. Read `.claude/clarify-session.md` completely
+1. Read `$TARGET_DIR/.tasker/clarify-session.md` completely
 2. Extract and organize into spec sections
 3. Decompose into capabilities using I.P.S.O. taxonomy
 4. Everything must trace to a specific discovery answer
@@ -590,7 +683,7 @@ Write to `{TARGET}/docs/specs/<slug>.capabilities.json`:
 
 ### Traceability
 
-Every capability and invariant MUST have a `discovery_ref` pointing to the specific round and question in `.claude/clarify-session.md` that established it.
+Every capability and invariant MUST have a `discovery_ref` pointing to the specific round and question in `$TARGET_DIR/.tasker/clarify-session.md` that established it.
 
 ---
 
@@ -958,7 +1051,7 @@ tasker spec review /tmp/claude/spec-draft.md
 Save the final review results:
 
 ```bash
-tasker spec review /tmp/claude/spec-draft.md > .claude/spec-review.json
+tasker spec review /tmp/claude/spec-draft.md > $TARGET_DIR/.tasker/spec-review.json
 ```
 
 ## Spec Review Gate
@@ -967,7 +1060,7 @@ tasker spec review /tmp/claude/spec-draft.md > .claude/spec-review.json
 |-------|-------------|
 | No critical weaknesses | All W1, W6, critical W7, CK-* resolved or accepted |
 | Resolutions recorded | `spec-resolutions.json` contains all resolution decisions |
-| Review file saved | `.claude/spec-review.json` exists |
+| Review file saved | `$TARGET_DIR/.tasker/spec-review.json` exists |
 
 Check resolution status:
 ```bash
@@ -1008,6 +1101,26 @@ Write to `{TARGET}/docs/specs/<slug>.md`:
 
 ## Done means
 [From Phase 1]
+
+## Tech Stack
+[From Phase 1 - summarized]
+
+**Language & Runtime:**
+- [e.g., Python 3.12+, Node.js 20+, Go 1.22+]
+
+**Frameworks:**
+- [e.g., FastAPI, Next.js, Chi]
+
+**Data:**
+- [e.g., PostgreSQL, Redis, SQLite]
+
+**Infrastructure:**
+- [e.g., Docker, AWS Lambda, Kubernetes]
+
+**Testing:**
+- [e.g., pytest, Jest, go test]
+
+(Remove sections that don't apply)
 
 ## Workflows
 [From Phase 3]
@@ -1083,7 +1196,7 @@ tasker fsm validate {TARGET}/docs/state-machines/<slug>
 Write each ADR to `{TARGET}/docs/adrs/ADR-####-<slug>.md`.
 
 ### 7. Spec Review Results
-Verify `.claude/spec-review.json` is saved.
+Verify `$TARGET_DIR/.tasker/spec-review.json` is saved.
 
 ## Completion Message
 
@@ -1098,9 +1211,10 @@ Verify `.claude/spec-review.json` is saved.
   - `steel-thread.mmd` (Mermaid diagram)
 - `adrs/ADR-####-*.md` (N ADRs)
 
-**Working files (in tasker):**
-- `.claude/clarify-session.md` (discovery log)
-- `.claude/spec-review.json` (weakness analysis)
+**Working files (in $TARGET_DIR/.tasker/):**
+- `clarify-session.md` (discovery log)
+- `spec-review.json` (weakness analysis)
+- `state.json` (session state)
 
 **Capabilities Extracted:**
 - Domains: N
@@ -1142,7 +1256,7 @@ Verify `.claude/spec-review.json` is saved.
 | Command | Action |
 |---------|--------|
 | `/specify` | Start new specification workflow |
-| `/specify resume` | Resume interrupted session from `.claude/clarify-session.md` |
+| `/specify resume` | Resume interrupted session from `$TARGET_DIR/.tasker/clarify-session.md` |
 | `/specify status` | Show current phase and progress |
 
 ---

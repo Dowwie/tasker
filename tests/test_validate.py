@@ -24,7 +24,7 @@ def temp_validate_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Set up temporary validation environment."""
     import validate
 
-    planning_dir = tmp_path / "project-planning"
+    planning_dir = tmp_path / ".tasker"
     planning_dir.mkdir()
     (planning_dir / "tasks").mkdir()
 

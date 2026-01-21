@@ -188,7 +188,7 @@ var contextCmd = &cobra.Command{
 	Long: `Extracts structural data from task files and saves context bundles.
 
 Use --all to prepare context for all tasks, or specify a single task ID.
-Context files are saved to project-planning/beads-export/`,
+Context files are saved to .tasker/beads-export/`,
 	RunE: runContext,
 }
 

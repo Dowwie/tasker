@@ -7,7 +7,7 @@
       "Bash(ls:*)",
       "Bash(mkdir:*)",
       "Read({{PROJECT_ROOT}}/**)",
-      "Write({{PROJECT_ROOT}}/project-planning/**)",
+      "Write({{PROJECT_ROOT}}/.tasker/**)",
       "Read({{TARGET_DIR}}/**)",
       "Write({{TARGET_DIR}}/**)",
       "Edit({{TARGET_DIR}}/**)"
