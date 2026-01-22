@@ -30,9 +30,11 @@ An **agent-driven interactive workflow** that transforms ideas into actionable s
 - **ADR files** — `{TARGET}/docs/adrs/ADR-####-<slug>.md` (0..N)
 
 ### Working Files (in target project's .tasker/)
-- **Discovery file** — `$TARGET_DIR/.tasker/clarify-session.md` (ephemeral)
-- **Session state** — `$TARGET_DIR/.tasker/state.json` (persistent)
-- **Spec Review** — `$TARGET_DIR/.tasker/spec-review.json` (ephemeral)
+- **Session state** — `$TARGET_DIR/.tasker/state.json` (persistent, primary resume source)
+- **Spec draft** — `$TARGET_DIR/.tasker/spec-draft.md` (working draft, written incrementally)
+- **Discovery file** — `$TARGET_DIR/.tasker/clarify-session.md` (append-only log)
+- **Decision registry** — `$TARGET_DIR/.tasker/decisions.json` (index of decisions/ADRs)
+- **Spec Review** — `$TARGET_DIR/.tasker/spec-review.json` (weakness analysis)
 
 ### Archive
 After completion, artifacts can be archived using `tasker archive` for post-hoc analysis.
@@ -54,109 +56,119 @@ Initialization → Scope → Clarification Loop (Discovery) → Synthesis → Ar
 ## Goal
 Establish project context and session state before specification work begins.
 
-## Step 1: Ask for Target Project Directory (MANDATORY FIRST)
+## STEP 1: Auto-Detect Session State (MANDATORY FIRST)
 
-**ALWAYS ask for target_dir FIRST before anything else.** No guessing, no inference from CWD.
+**Before asking the user anything**, check for existing session state files.
 
-Ask using AskUserQuestion:
+### 1a. Determine Target Directory
+
+Check in order:
+1. If user provided a path in their message, use that
+2. If CWD contains `.tasker/state.json`, use CWD
+3. Otherwise, ask:
+
 ```
 What is the target project directory?
 ```
-Free-form text input. User must provide an absolute or relative path.
 
-**Validation:**
+### 1b. Check for Existing Session
+
 ```bash
-TARGET_DIR="<user-provided-path>"
-# Convert to absolute path
-TARGET_DIR=$(cd "$TARGET_DIR" 2>/dev/null && pwd || echo "$TARGET_DIR")
+TARGET_DIR="<determined-path>"
+STATE_FILE="$TARGET_DIR/.tasker/state.json"
 
-if [ ! -d "$TARGET_DIR" ]; then
-    # For new projects, check parent exists
-    PARENT=$(dirname "$TARGET_DIR")
-    if [ -d "$PARENT" ]; then
-        echo "Directory will be created: $TARGET_DIR"
+if [ -f "$STATE_FILE" ]; then
+    # Read state to determine if session is in progress
+    PHASE=$(jq -r '.phase.current' "$STATE_FILE")
+    if [ "$PHASE" != "complete" ] && [ "$PHASE" != "null" ]; then
+        echo "RESUME: Found active session at phase '$PHASE'"
+        # AUTO-RESUME - skip to Step 1c
     else
-        echo "Error: Parent directory does not exist: $PARENT"
-        # Re-ask for target_dir
+        echo "NEW: Previous session completed. Starting fresh."
+        # Proceed to Step 2 (new session)
     fi
+else
+    echo "NEW: No existing session found."
+    # Proceed to Step 2 (new session)
 fi
 ```
 
-## Step 2: Ask About Existing Specs
+### 1c. Auto-Resume Protocol (if active session found)
+
+**If `.tasker/state.json` exists and `phase.current != "complete"`:**
+
+1. **Read state.json** to get current phase and step
+2. **Inform user** (no question needed):
+   ```
+   Resuming specification session for "{spec_session.spec_slug}"
+   Current phase: {phase.current}, step: {phase.step}
+   ```
+3. **Read required working files** for the current phase (see Resume Protocol section)
+4. **Jump directly to the current phase** - do NOT re-run earlier phases
+
+**This is automatic. Do not ask the user whether to resume.**
+
+---
+
+## STEP 2: New Session Setup (only if no active session)
+
+### 2a. No Guessing on Reference Materials
+
+**You MUST NOT:**
+- Scan directories to infer what files exist
+- Guess spec locations from directory structure
+- Read files to detect existing specs
+- Make any assumptions about what the user has
+
+**The user tells you everything. You ask, they answer.**
+
+### 2b. Ask About Reference Materials
 
 Ask using AskUserQuestion:
 ```
-Do you have existing specification files?
+Do you have existing specification reference materials (PRDs, requirements docs, design docs, etc.)?
 ```
 Options:
-- **No specs yet** — Starting from scratch
-- **Yes, I have specs** — I'll provide the location
+- **No reference materials** — Starting from scratch
+- **Yes, I have reference materials** — I'll provide the location(s)
 
-### If "Yes, I have specs":
-Ask for the spec location:
+### If "Yes, I have reference materials":
+Ask for the location(s):
 ```
-Where are your spec files located?
+Where are your reference materials located? (Provide path(s) - can be files or directories)
 ```
-Free-form text input. User provides path (e.g., `docs/specs/`, `requirements.md`, `PRD.pdf`).
+Free-form text input. User provides path(s) (e.g., `docs/specs/`, `requirements.md`, `PRD.pdf`).
 
-**Store the spec location for later use:**
+**Validate path exists:**
 ```bash
 EXISTING_SPEC_PATH="<user-provided-path>"
-# Validate path exists
 if [ ! -e "$TARGET_DIR/$EXISTING_SPEC_PATH" ] && [ ! -e "$EXISTING_SPEC_PATH" ]; then
-    echo "Warning: Spec path not found. Will ask again during Scope phase."
+    echo "Warning: Path not found. Please verify the path."
 fi
 ```
 
-## Step 3: Check for Existing Tasker Session
-
-After target_dir is confirmed, check for existing `.tasker/` state:
-
-```bash
-TASKER_DIR="$TARGET_DIR/.tasker"
-if [ -f "$TASKER_DIR/state.json" ]; then
-    echo "Found existing tasker session at $TASKER_DIR"
-    echo "Resuming from saved state..."
-    # Read phase from state.json and resume
-else
-    echo "No existing session. Starting fresh."
-fi
-```
-
-If existing session found, inform user and resume from saved phase.
-
-## Step 4: Ask User Intent
-
-Ask using AskUserQuestion:
-```
-What would you like to do?
-```
-Options:
-- **New specification** — Start a new spec from scratch
-- **Continue existing spec** — Resume work on an existing spec file (use if user provided spec path in Step 2)
-
-**Note:** If user provided a spec path in Step 2, default to "Continue existing spec" and use that path.
-
-## Step 5: Initialize Session State
+### 2c. Initialize Session State
 
 Create `.tasker/` directory structure in target project:
 
 ```bash
 TASKER_DIR="$TARGET_DIR/.tasker"
-mkdir -p "$TASKER_DIR"/{inputs,artifacts,tasks,bundles,reports}
+mkdir -p "$TASKER_DIR"/{inputs,artifacts,tasks,bundles,reports,fsm-draft,adrs-draft}
 ```
 
-Create or update `$TARGET_DIR/.tasker/state.json`:
+Create `$TARGET_DIR/.tasker/state.json`:
 
 ```json
 {
-  "version": "2.0",
+  "version": "3.0",
   "target_dir": "<absolute-path>",
   "phase": {
     "current": "initialization",
-    "completed": []
+    "completed": [],
+    "step": null
   },
   "created_at": "<timestamp>",
+  "updated_at": "<timestamp>",
   "spec_session": {
     "project_type": "new|existing",
     "existing_spec_path": "<path-from-step-2-or-null>",
@@ -165,26 +177,33 @@ Create or update `$TARGET_DIR/.tasker/state.json`:
     "started_at": "<timestamp>",
     "resumed_from": null
   },
-  "artifacts": {},
-  "tasks": {}
+  "scope": null,
+  "clarify": null,
+  "synthesis": null,
+  "architecture": null,
+  "decisions": null,
+  "review": null
 }
 ```
 
-**If user provided existing spec path in Step 2**, store it in `spec_session.existing_spec_path` for reference during Scope phase.
+**CRITICAL: Update state.json after EVERY significant action.** This enables resume from any point.
 
-**For existing projects**, store discovered project context in session state for later reference during Synthesis phase.
+The phase-specific state objects are populated as each phase progresses (see phase definitions below).
 
-## Output
+**If user provided existing spec path in Step 2b**, store it in `spec_session.existing_spec_path` for reference during Scope phase.
 
+## Output (New Session Only)
+
+For **new sessions** (Step 2 path):
 - `.tasker/` directory structure created in target project
 - Session state initialized in `$TARGET_DIR/.tasker/state.json`
 - Existing spec path captured (if provided)
-- Project context captured (for existing projects)
-- Clear path forward: resume existing spec OR start new spec
+- Proceed to Phase 1 (Scope)
 
-## Proceed to Phase 1
-
-After initialization completes, advance to Phase 1 (Scope).
+For **resumed sessions** (Step 1c path):
+- State already exists - no initialization needed
+- Jump directly to `phase.current` phase
+- Read working files as specified in Resume Protocol
 
 ---
 
@@ -247,11 +266,51 @@ Free-form text input. Examples:
 - Ask clarifying questions: "Any language preferences?", "Cloud provider constraints?", "Team expertise?"
 
 ## Output
-Create initial spec draft with:
-- Goal
-- Non-goals
-- Done means
-- Tech stack (or "TBD - will recommend after requirements gathering")
+
+### 1. Update State (MANDATORY)
+
+Update `$TARGET_DIR/.tasker/state.json`:
+```json
+{
+  "phase": {
+    "current": "scope",
+    "completed": ["initialization"],
+    "step": "complete"
+  },
+  "updated_at": "<timestamp>",
+  "scope": {
+    "goal": "<user-provided-goal>",
+    "non_goals": ["<item1>", "<item2>"],
+    "done_means": ["<criterion1>", "<criterion2>"],
+    "tech_stack": "<tech-stack-or-TBD>",
+    "completed_at": "<timestamp>"
+  }
+}
+```
+
+### 2. Write Spec Draft (MANDATORY)
+
+Write initial spec sections to `$TARGET_DIR/.tasker/spec-draft.md`:
+
+```markdown
+# Spec: {Title}
+
+## Goal
+{goal from scope}
+
+## Non-goals
+{non_goals from scope}
+
+## Done means
+{done_means from scope}
+
+## Tech Stack
+{tech_stack from scope}
+
+<!-- Remaining sections will be added by subsequent phases -->
+```
+
+**IMPORTANT:** All spec content is built in this file, NOT in conversation context. Read from this file when you need prior spec content.
 
 ---
 
@@ -262,33 +321,216 @@ Exhaustively gather requirements via structured questioning.
 
 ## Setup
 
+### 1. Initialize Clarify State in state.json (MANDATORY)
+
+Update `$TARGET_DIR/.tasker/state.json`:
+```json
+{
+  "phase": {
+    "current": "clarify",
+    "completed": ["initialization", "scope"],
+    "step": "starting"
+  },
+  "updated_at": "<timestamp>",
+  "clarify": {
+    "current_category": "core_requirements",
+    "current_round": 1,
+    "categories": {
+      "core_requirements": { "status": "not_started", "rounds": 0 },
+      "users_context": { "status": "not_started", "rounds": 0 },
+      "integrations": { "status": "not_started", "rounds": 0 },
+      "edge_cases": { "status": "not_started", "rounds": 0 },
+      "quality_attributes": { "status": "not_started", "rounds": 0 },
+      "existing_patterns": { "status": "not_started", "rounds": 0 },
+      "preferences": { "status": "not_started", "rounds": 0 }
+    },
+    "pending_followups": [],
+    "requirements_count": 0,
+    "started_at": "<timestamp>"
+  }
+}
+```
+
+### 2. Create Discovery File
+
 Create `$TARGET_DIR/.tasker/clarify-session.md`:
 
 ```markdown
 # Discovery: {TOPIC}
 Started: {timestamp}
 
-## Questions Asked
+## Category Status
 
-## Answers Received
+| Category | Status | Rounds | Notes |
+|----------|--------|--------|-------|
+| Core requirements | ○ Not Started | 0 | — |
+| Users & context | ○ Not Started | 0 | — |
+| Integrations | ○ Not Started | 0 | — |
+| Edge cases | ○ Not Started | 0 | — |
+| Quality attributes | ○ Not Started | 0 | — |
+| Existing patterns | ○ Not Started | 0 | — |
+| Preferences | ○ Not Started | 0 | — |
 
-## Emerging Requirements
+## Discovery Rounds
+
 ```
+
+## CRITICAL: Resume Capability
+
+**On resume (after compaction or restart):**
+1. Read `$TARGET_DIR/.tasker/state.json` to get `clarify` state
+2. Read `$TARGET_DIR/.tasker/clarify-session.md` to get discovery history
+3. Resume from `clarify.current_category` and `clarify.current_round`
+4. If `clarify.pending_followups` is non-empty, continue follow-up loop first
+
+**DO NOT rely on conversation context for clarify progress. Always read from files.**
 
 ## Loop Rules
 
 - **No iteration cap** - Continue until goals are met
+- **Category Focus Mode** - Work on ONE category at a time until it's complete or explicitly deferred
 - Each iteration:
   1. Read discovery file
-  2. Check category goals (see checklist below)
-  3. Ask **2–4 new questions** targeting incomplete goals (NEVER repeat a question)
-  4. Update discovery file with Q&A
-  5. Extract any new requirements discovered
-  6. Update category completion status
+  2. Select ONE incomplete category to focus on (priority: Core requirements → Users & context → Integrations → Edge cases → Quality attributes → Existing patterns → Preferences)
+  3. Ask **2–4 questions** within that focused category
+  4. Get user answers
+  5. **Run Follow-up Sub-loop** (see below) - validate and drill down on answers
+  6. Only after follow-ups are complete: update discovery file, extract requirements, update category status
+  7. Repeat within same category until goal is met OR user says "move on from this category"
+
+- **Clarity Before Progress** - If user response is anything except a direct answer (counter-question, confusion, pushback, tangential), provide clarification FIRST. Do NOT present new questions until prior questions have direct answers.
 
 - **Stop ONLY when:**
   - ALL category goals are met (see checklist), OR
   - User says "enough", "stop", "move on", or similar
+
+## Follow-up Sub-loop (MANDATORY)
+
+After receiving answers to a question round, **DO NOT immediately move to the next round**. First, validate each answer:
+
+### Answer Validation Triggers
+
+For each answer, check if follow-up is required:
+
+| Trigger | Example | Required Follow-up |
+|---------|---------|-------------------|
+| **Vague quantifier** | "several users", "a few endpoints" | "How many specifically?" |
+| **Undefined scope** | "and so on", "etc.", "things like that" | "Can you list all items explicitly?" |
+| **Weak commitment** | "probably", "maybe", "I think" | "Is this confirmed or uncertain?" |
+| **Missing specifics** | "fast response", "secure" | "What's the specific target? (e.g., <100ms)" |
+| **Deferred knowledge** | "I'm not sure", "don't know yet" | "Should we make a default assumption, or is this blocking?" |
+| **Contradicts earlier answer** | Conflicts with prior round | "Earlier you said X, now Y. Which is correct?" |
+
+### Sub-loop Process
+
+```
+For each answer in current round:
+  1. Check against validation triggers
+  2. If trigger found:
+     a. Add to pending_followups in state.json
+     b. Ask ONE follow-up question (not batched)
+     c. Wait for response
+     d. Remove from pending_followups, re-validate the new response
+     e. Repeat until answer is concrete OR user explicitly defers
+  3. Only after ALL answers validated → proceed to next round
+```
+
+### MANDATORY: Persist Follow-up State
+
+Before asking a follow-up question, update `state.json`:
+```json
+{
+  "clarify": {
+    "pending_followups": [
+      {
+        "question_id": "Q3.2",
+        "original_answer": "<user's vague answer>",
+        "trigger": "vague_quantifier",
+        "followup_question": "<the follow-up question being asked>"
+      }
+    ]
+  }
+}
+```
+
+After receiving follow-up response, remove from `pending_followups` and update the round in `clarify-session.md`.
+
+### Follow-up Question Format
+
+Use AskUserQuestion with context from the original answer:
+
+```json
+{
+  "question": "You mentioned '{user_quote}'. {specific_follow_up_question}",
+  "header": "Clarify",
+  "options": [
+    {"label": "Specify", "description": "I'll provide a specific answer"},
+    {"label": "Not critical", "description": "This detail isn't important for the spec"},
+    {"label": "Defer", "description": "I don't know yet, note as open question"}
+  ]
+}
+```
+
+### Handling Non-Direct Responses (MANDATORY)
+
+If the user's response is **anything other than a direct answer**, assume clarification is required. Do NOT present new questions until the original question is resolved.
+
+| Response Type | Example | Required Action |
+|---------------|---------|-----------------|
+| **Counter-question** | "What do you mean by X?" | Answer their question, then re-ask yours |
+| **Confusion** | "I'm not sure what you're asking" | Rephrase the question with more context |
+| **Pushback** | "Why do you need to know that?" | Explain why this matters for the spec |
+| **Tangential** | Talks about something else | Acknowledge, then redirect to the question |
+| **Partial answer** | Answers part, ignores rest | Note the partial, ask about the unanswered part |
+| **Meta-comment** | "This is getting detailed" | Acknowledge, offer to simplify or defer |
+
+**Process:**
+```
+1. Detect non-direct response
+2. Address the user's concern/question FIRST
+3. Only after clarity achieved → re-present the original question (or confirm it's now answered)
+4. Do NOT batch new questions until all prior questions have direct answers
+```
+
+**Example:**
+```
+Agent: "What authentication method should users use?"
+User: "What options are there?"
+
+[NON-DIRECT: User asked a counter-question]
+
+Agent: "Common options are: (1) Email/password, (2) OAuth (Google, GitHub),
+       (3) Magic link, (4) SSO/SAML. Which fits your use case?"
+User: "Email/password for now, maybe OAuth later."
+
+[NOW DIRECT: Can proceed]
+```
+
+### When NOT to Follow Up
+
+- User explicitly says "that's all I know" or "let's move on"
+- The answer is already concrete and specific
+- The detail is genuinely non-blocking (implementation detail, not spec-level)
+- You've already asked 2 follow-ups on the same answer (avoid interrogation)
+
+### Example Interaction
+
+```
+Agent: "What integrations are required?"
+User: "We need to connect to a few external services and maybe some APIs."
+
+[FOLLOW-UP REQUIRED: "a few" is vague, "maybe" is weak commitment]
+
+Agent: "You mentioned 'a few external services'. Can you list all the external systems this will integrate with?"
+User: "Stripe for payments, SendGrid for email, and our internal user service."
+
+[ANSWER NOW CONCRETE: specific services named]
+
+Agent: "You said 'maybe some APIs'. Are there additional API integrations beyond Stripe, SendGrid, and the user service?"
+User: "No, that's all."
+
+[CATEGORY GOAL PROGRESS: Integrations now has concrete list]
+```
 
 ## Category Checklist (Goal-Driven Coverage)
 
@@ -327,21 +569,36 @@ Update discovery file with completion status:
 A category is **complete** when:
 1. The goal condition is satisfied (see table above)
 2. User has confirmed or provided the information
-3. No obvious follow-up questions remain for that category
+3. **All answers have passed follow-up validation** (no vague quantifiers, no weak commitments, no undefined scope)
+4. No obvious follow-up questions remain for that category
+5. User has explicitly confirmed or the agent has verified understanding
 
 **Do NOT mark complete** if:
 - User said "I don't know" without a fallback decision
 - Information is vague (e.g., "fast" instead of "<100ms")
 - Dependencies on other categories are unresolved
+- **Follow-up validation has not been run on all answers**
+- **Any answer contains unresolved triggers** (vague quantifiers, weak commitments, etc.)
+
+### Category Transition Rules
+
+Before moving to a new category:
+1. **Summarize** what was learned in the current category
+2. **Confirm** with user: "I've captured X, Y, Z for [category]. Does that cover everything, or is there more?"
+3. **Only then** move to the next incomplete category
+
+This prevents the feeling of being "rushed" through categories.
 
 ## AskUserQuestion Format
 
-Use AskUserQuestion with 2-4 questions per iteration:
+### Primary Questions (Category-Focused)
+
+Use AskUserQuestion with 2-4 questions per iteration, **all within the same category**:
 
 ```
 questions:
   - question: "How should the system handle [specific scenario]?"
-    header: "Edge case"
+    header: "Edge case"  # Keep headers consistent within a round
     options:
       - label: "Option A"
         description: "Description of approach A"
@@ -349,6 +606,28 @@ questions:
         description: "Description of approach B"
     multiSelect: false
 ```
+
+**IMPORTANT:** Do NOT mix categories in a single question batch. If you're asking about "Edge cases", all 2-4 questions should be about edge cases.
+
+### Follow-up Questions (Single Question)
+
+For follow-ups during the validation sub-loop, ask **ONE question at a time**:
+
+```
+questions:
+  - question: "You mentioned '{user_quote}'. Can you be more specific about X?"
+    header: "Clarify"
+    options:
+      - label: "Specify"
+        description: "I'll provide details"
+      - label: "Not critical"
+        description: "This isn't spec-relevant"
+      - label: "Defer"
+        description: "Note as open question"
+    multiSelect: false
+```
+
+### Open-ended Questions
 
 For open-ended questions, use free-form with context:
 ```
@@ -365,12 +644,16 @@ questions:
     multiSelect: true
 ```
 
-## Updating Discovery File
+## Updating Discovery File AND State (MANDATORY)
 
-After each Q&A round, append to `$TARGET_DIR/.tasker/clarify-session.md`:
+After each Q&A round AND its follow-ups are complete:
+
+### 1. Append to Discovery File
+
+Append to `$TARGET_DIR/.tasker/clarify-session.md`:
 
 ```markdown
-### Round N
+### Round N — [Category Name]
 
 **Questions:**
 1. [Question text]
@@ -380,10 +663,43 @@ After each Q&A round, append to `$TARGET_DIR/.tasker/clarify-session.md`:
 1. [User's answer]
 2. [User's answer]
 
+**Follow-ups:**
+- Q1 follow-up: "[follow-up question]" → "[user response]"
+- Q2: No follow-up needed (answer was specific)
+
 **Requirements Discovered:**
-- [Req 1]
-- [Req 2]
+- REQ-NNN: [Req 1]
+- REQ-NNN: [Req 2]
+
+**Category Status:** [✓ Complete | ⋯ In Progress | User deferred]
 ```
+
+### 2. Update State (MANDATORY after every round)
+
+Update `$TARGET_DIR/.tasker/state.json`:
+```json
+{
+  "phase": {
+    "step": "round_N_complete"
+  },
+  "updated_at": "<timestamp>",
+  "clarify": {
+    "current_category": "<category>",
+    "current_round": N+1,
+    "categories": {
+      "<category>": { "status": "in_progress|complete", "rounds": N }
+    },
+    "pending_followups": [],
+    "requirements_count": <total REQ count>
+  }
+}
+```
+
+### 3. Update Category Status Table
+
+Also update the Category Status table at the top of `clarify-session.md` to reflect current state.
+
+**NOTE:** Do NOT proceed to next round until both files are updated. This ensures resumability.
 
 ## Completion Signal
 
@@ -391,12 +707,29 @@ When ALL category goals are met:
 
 1. Verify all categories show "✓ Complete" in the status table
 2. Confirm no blocking questions remain
-3. Output:
+3. Update state.json:
+```json
+{
+  "phase": {
+    "current": "clarify",
+    "completed": ["initialization", "scope"],
+    "step": "complete"
+  },
+  "updated_at": "<timestamp>",
+  "clarify": {
+    "status": "complete",
+    "completed_at": "<timestamp>",
+    "categories": { /* all marked complete */ },
+    "requirements_count": <final count>
+  }
+}
+```
+4. Output:
 ```
 <promise>CLARIFIED</promise>
 ```
 
-**If user requests early exit:** Accept it, but note incomplete categories in the discovery file for Phase 3 to flag as assumptions.
+**If user requests early exit:** Accept it, mark incomplete categories in state.json with `status: "deferred"`, and note in discovery file for Phase 3 to flag as assumptions.
 
 ---
 
@@ -409,10 +742,54 @@ This phase produces TWO outputs:
 1. **Spec sections** (human-readable) - Workflows, invariants, interfaces
 2. **Capability map** (machine-readable) - For `/plan` to consume
 
+## CRITICAL: State-Driven, Not Context-Driven
+
+**On entry to Phase 3:**
+1. Read `$TARGET_DIR/.tasker/state.json` to confirm `clarify.status == "complete"`
+2. Read `$TARGET_DIR/.tasker/clarify-session.md` for ALL discovery content
+3. Read `$TARGET_DIR/.tasker/spec-draft.md` for existing spec sections (Goal, Non-goals, etc.)
+
+**DO NOT rely on conversation context for discovery content. Read from files.**
+
+## Initialize Synthesis State
+
+Update `$TARGET_DIR/.tasker/state.json`:
+```json
+{
+  "phase": {
+    "current": "synthesis",
+    "completed": ["initialization", "scope", "clarify"],
+    "step": "starting"
+  },
+  "updated_at": "<timestamp>",
+  "synthesis": {
+    "status": "in_progress",
+    "spec_sections": {
+      "workflows": false,
+      "invariants": false,
+      "interfaces": false,
+      "open_questions": false
+    },
+    "capability_map": {
+      "domains_count": 0,
+      "capabilities_count": 0,
+      "behaviors_count": 0,
+      "steel_thread_identified": false
+    },
+    "fsm": {
+      "machines_count": 0,
+      "states_count": 0,
+      "transitions_count": 0,
+      "invariants_validated": false
+    }
+  }
+}
+```
+
 ## Process
 
 1. Read `$TARGET_DIR/.tasker/clarify-session.md` completely
-2. Extract and organize into spec sections
+2. Extract and organize into spec sections (update spec-draft.md after each)
 3. Decompose into capabilities using I.P.S.O. taxonomy
 4. Everything must trace to a specific discovery answer
 
@@ -468,6 +845,40 @@ Classified by blocking status:
 
 ### Non-blocking
 - [Question about internal preferences only]
+```
+
+### Part A Output: Update Files (MANDATORY)
+
+After synthesizing each spec section:
+
+**1. Append section to `$TARGET_DIR/.tasker/spec-draft.md`:**
+```markdown
+## Workflows
+[Synthesized workflows content]
+
+## Invariants
+[Synthesized invariants content]
+
+## Interfaces
+[Synthesized interfaces content]
+
+## Open Questions
+[Synthesized open questions content]
+```
+
+**2. Update state.json after EACH section:**
+```json
+{
+  "synthesis": {
+    "spec_sections": {
+      "workflows": true,
+      "invariants": true,
+      "interfaces": false,
+      "open_questions": false
+    }
+  },
+  "updated_at": "<timestamp>"
+}
 ```
 
 ---
@@ -555,13 +966,37 @@ If the compiler detects ambiguous workflow language, use AskUserQuestion:
 }
 ```
 
-### FSM Output Structure
+### FSM Working Files (Written Incrementally)
 
-The FSM artifacts will be exported to `{TARGET}/docs/state-machines/<slug>/`:
+During synthesis, write FSM drafts to `$TARGET_DIR/.tasker/fsm-draft/`:
 - `index.json` - Machine list, hierarchy, primary machine
 - `steel-thread.states.json` - State definitions (S1, S2, ...)
 - `steel-thread.transitions.json` - Transition definitions (TR1, TR2, ...)
-- `steel-thread.mmd` - Mermaid stateDiagram-v2 for visualization
+- `steel-thread.notes.md` - Ambiguity resolutions and rationale
+
+**Update state.json after each FSM file:**
+```json
+{
+  "synthesis": {
+    "fsm": {
+      "machines_count": 1,
+      "states_count": 8,
+      "transitions_count": 12,
+      "files_written": ["index.json", "steel-thread.states.json"],
+      "invariants_validated": false
+    }
+  },
+  "updated_at": "<timestamp>"
+}
+```
+
+### FSM Final Output Structure
+
+Final FSM artifacts are exported to `{TARGET}/docs/state-machines/<slug>/` in Phase 8:
+- `index.json` - Machine list, hierarchy, primary machine
+- `steel-thread.states.json` - State definitions (S1, S2, ...)
+- `steel-thread.transitions.json` - Transition definitions (TR1, TR2, ...)
+- `steel-thread.mmd` - Mermaid stateDiagram-v2 for visualization (DERIVED from JSON)
 - `steel-thread.notes.md` - Ambiguity resolutions and rationale
 
 ### ID Conventions (FSM-specific)
@@ -617,9 +1052,29 @@ Identify the **steel thread** - the minimal end-to-end flow that proves the syst
 - Mark one flow as `is_steel_thread: true`
 - This becomes the critical path for Phase 1 implementation
 
-### Capability Map Output
+### Capability Map Working File
 
-Write to `{TARGET}/docs/specs/<slug>.capabilities.json`:
+During synthesis, write capability map draft to `$TARGET_DIR/.tasker/capability-map-draft.json`.
+
+**Update state.json as you build the map:**
+```json
+{
+  "synthesis": {
+    "capability_map": {
+      "domains_count": 3,
+      "capabilities_count": 8,
+      "behaviors_count": 24,
+      "steel_thread_identified": true,
+      "draft_written": true
+    }
+  },
+  "updated_at": "<timestamp>"
+}
+```
+
+### Capability Map Final Output
+
+In Phase 8, write final to `{TARGET}/docs/specs/<slug>.capabilities.json`:
 
 ```json
 {
@@ -685,12 +1140,66 @@ Write to `{TARGET}/docs/specs/<slug>.capabilities.json`:
 
 Every capability and invariant MUST have a `discovery_ref` pointing to the specific round and question in `$TARGET_DIR/.tasker/clarify-session.md` that established it.
 
+## Synthesis Complete: Update State
+
+After all synthesis outputs are complete, update state.json:
+```json
+{
+  "phase": {
+    "current": "synthesis",
+    "completed": ["initialization", "scope", "clarify"],
+    "step": "complete"
+  },
+  "updated_at": "<timestamp>",
+  "synthesis": {
+    "status": "complete",
+    "completed_at": "<timestamp>",
+    "spec_sections": { "workflows": true, "invariants": true, "interfaces": true, "open_questions": true },
+    "capability_map": { "domains_count": N, "capabilities_count": N, "behaviors_count": N, "steel_thread_identified": true, "draft_written": true },
+    "fsm": { "machines_count": N, "states_count": N, "transitions_count": N, "invariants_validated": true }
+  }
+}
+```
+
+## CRITICAL: Resume From Synthesis
+
+**On resume (after compaction or restart):**
+1. Read `$TARGET_DIR/.tasker/state.json` to get `synthesis` state
+2. If `synthesis.spec_sections` shows incomplete sections, read `spec-draft.md` and continue
+3. If `synthesis.capability_map.draft_written` is false, continue building from `capability-map-draft.json`
+4. If `synthesis.fsm.invariants_validated` is false, continue FSM work from `fsm-draft/`
+
 ---
 
 # Phase 4 — Architecture Sketch
 
 ## Rule
 Architecture MUST come **AFTER** workflows, invariants, interfaces.
+
+## Initialize Architecture State
+
+Update `$TARGET_DIR/.tasker/state.json`:
+```json
+{
+  "phase": {
+    "current": "architecture",
+    "completed": ["initialization", "scope", "clarify", "synthesis"],
+    "step": "starting"
+  },
+  "updated_at": "<timestamp>",
+  "architecture": {
+    "status": "in_progress",
+    "user_provided": false,
+    "agent_proposed": false
+  }
+}
+```
+
+## CRITICAL: Read Prior State
+
+**On entry:**
+1. Read `$TARGET_DIR/.tasker/spec-draft.md` to understand synthesized workflows
+2. Architecture sketch should align with the workflows defined
 
 ## Process
 
@@ -713,7 +1222,9 @@ Present a brief sketch and ask for confirmation/edits.
 
 ## Output
 
-Populate **Architecture sketch** section:
+### 1. Update spec-draft.md
+
+Append **Architecture sketch** section to `$TARGET_DIR/.tasker/spec-draft.md`:
 ```markdown
 ## Architecture sketch
 - **Components touched:** [list]
@@ -723,9 +1234,52 @@ Populate **Architecture sketch** section:
 
 **Keep this SHORT. No essays.**
 
+### 2. Update State
+
+Update `$TARGET_DIR/.tasker/state.json`:
+```json
+{
+  "phase": {
+    "step": "complete"
+  },
+  "updated_at": "<timestamp>",
+  "architecture": {
+    "status": "complete",
+    "completed_at": "<timestamp>",
+    "user_provided": true|false,
+    "agent_proposed": true|false
+  }
+}
+```
+
 ---
 
 # Phase 5 — Decisions & ADRs
+
+## Initialize Decisions State
+
+Update `$TARGET_DIR/.tasker/state.json`:
+```json
+{
+  "phase": {
+    "current": "decisions",
+    "completed": ["initialization", "scope", "clarify", "synthesis", "architecture"],
+    "step": "starting"
+  },
+  "updated_at": "<timestamp>",
+  "decisions": {
+    "status": "in_progress",
+    "count": 0,
+    "pending": 0
+  }
+}
+```
+
+## CRITICAL: Read Prior State
+
+**On entry:**
+1. Read `$TARGET_DIR/.tasker/spec-draft.md` to identify decision points from workflows/invariants
+2. Read `$TARGET_DIR/.tasker/clarify-session.md` for context on requirements
 
 ## ADR Trigger
 
@@ -772,8 +1326,45 @@ questions:
 
 ## Outcomes
 
-- **User chooses option** → Write decision to spec + create ADR (Accepted)
+- **User chooses option** → Write decision to spec-draft.md + create ADR (Accepted)
 - **User says "need more info"** → Add as Blocking Open Question (no ADR yet)
+
+**Update state.json after each decision:**
+```json
+{
+  "decisions": {
+    "count": 2,
+    "pending": 1
+  },
+  "updated_at": "<timestamp>"
+}
+```
+
+### Decision Registry
+
+Write decision index to `$TARGET_DIR/.tasker/decisions.json`:
+```json
+{
+  "decisions": [
+    { "id": "DEC-001", "title": "Authentication method", "adr": "ADR-0001-auth-method.md" },
+    { "id": "DEC-002", "title": "Database choice", "adr": "ADR-0002-database-choice.md" },
+    { "id": "DEC-003", "title": "Error handling strategy", "adr": null }
+  ]
+}
+```
+
+- `adr` is the filename if ADR-worthy, `null` if inline decision only
+- ADR files contain full decision context and rationale
+
+**Usage pattern:** Always consult `decisions.json` first to find relevant decisions by title. Only read a specific ADR file when you need the full details. Never scan `adrs-draft/` directory to discover what decisions exist.
+
+### ADR Working Files
+
+Write ADR drafts to `$TARGET_DIR/.tasker/adrs-draft/`:
+- `ADR-0001-auth-method.md`
+- `ADR-0002-database-choice.md`
+
+Final ADRs are exported to `{TARGET}/docs/adrs/` in Phase 8.
 
 ## ADR Template
 
@@ -816,21 +1407,63 @@ Write ADRs to `{TARGET}/docs/adrs/ADR-####-<slug>.md`:
 - ADRs can apply to multiple specs (many-to-many relationship)
 - When creating a new spec that uses an existing ADR, update the ADR's "Applies To" section
 
+## Decisions Complete: Update State
+
+After all decisions are resolved, update state.json:
+```json
+{
+  "phase": {
+    "step": "complete"
+  },
+  "updated_at": "<timestamp>",
+  "decisions": {
+    "status": "complete",
+    "completed_at": "<timestamp>",
+    "count": 3,
+    "pending": 0
+  }
+}
+```
+
+Also append Decisions section to `$TARGET_DIR/.tasker/spec-draft.md`.
+
 ---
 
 # Phase 6 — Handoff-Ready Gate
 
+## CRITICAL: State-Driven Gate Check
+
+**On entry to Phase 6:**
+1. Read `$TARGET_DIR/.tasker/state.json` to verify all prior phases complete
+2. Read `$TARGET_DIR/.tasker/spec-draft.md` to verify all sections exist
+3. Read `$TARGET_DIR/.tasker/fsm-draft/` to verify FSM compiled
+4. Read `$TARGET_DIR/.tasker/capability-map-draft.json` to verify capability map exists
+
+**DO NOT rely on conversation context. All gate checks use persisted files.**
+
+Update state.json:
+```json
+{
+  "phase": {
+    "current": "gate",
+    "completed": ["initialization", "scope", "clarify", "synthesis", "architecture", "decisions"],
+    "step": "checking"
+  },
+  "updated_at": "<timestamp>"
+}
+```
+
 ## Preliminary Check (ALL must pass)
 
-| Check | Requirement |
-|-------|-------------|
-| Phases complete | All phases 1-5 completed in order |
-| No blocking questions | Zero Blocking Open Questions |
-| Interfaces present | Interfaces section exists (even if "none") |
-| Decisions present | Decisions section exists |
-| Workflows defined | At least one workflow with variants/failures |
-| Invariants stated | At least one invariant |
-| FSM compiled | Steel Thread FSM compiled with I1-I5 passing |
+| Check | Requirement | Verify By |
+|-------|-------------|-----------|
+| Phases complete | All phases 1-5 completed in order | `state.json` phase.completed array |
+| No blocking questions | Zero Blocking Open Questions | `spec-draft.md` Open Questions section |
+| Interfaces present | Interfaces section exists (even if "none") | `spec-draft.md` |
+| Decisions present | Decisions section exists | `spec-draft.md` |
+| Workflows defined | At least one workflow with variants/failures | `spec-draft.md` |
+| Invariants stated | At least one invariant | `spec-draft.md` |
+| FSM compiled | Steel Thread FSM compiled with I1-I5 passing | `fsm-draft/index.json` |
 
 ## Spec Completeness Check (Checklist C1-C11)
 
@@ -871,9 +1504,37 @@ Checklist verification found critical gaps:
 Action: Return to Phase 2 to clarify data constraints and API request formats.
 ```
 
-## Gate Failure
+## Gate Result: Update State
 
-If gate fails:
+### If Gate PASSES:
+```json
+{
+  "phase": {
+    "current": "gate",
+    "step": "passed"
+  },
+  "updated_at": "<timestamp>"
+}
+```
+
+### If Gate FAILS:
+
+Update state.json with blockers:
+```json
+{
+  "phase": {
+    "current": "gate",
+    "step": "failed"
+  },
+  "updated_at": "<timestamp>",
+  "gate_blockers": [
+    { "type": "blocking_question", "detail": "Rate limiting across tenants" },
+    { "type": "missing_section", "detail": "Interfaces" },
+    { "type": "checklist_gap", "detail": "C2.4: No database constraints" }
+  ]
+}
+```
+
 1. List exact blockers
 2. **STOP** - do not proceed to spec review
 3. Tell user what must be resolved
@@ -903,17 +1564,40 @@ Cannot proceed. The following must be resolved:
 ## Purpose
 Run automated weakness detection to catch issues before export. This is the final quality gate.
 
+## Initialize Review State
+
+Update `$TARGET_DIR/.tasker/state.json`:
+```json
+{
+  "phase": {
+    "current": "review",
+    "completed": ["initialization", "scope", "clarify", "synthesis", "architecture", "decisions", "gate"],
+    "step": "starting"
+  },
+  "updated_at": "<timestamp>",
+  "review": {
+    "status": "in_progress",
+    "weaknesses_found": 0,
+    "weaknesses_resolved": 0,
+    "critical_remaining": 0
+  }
+}
+```
+
+## CRITICAL: Read From Files
+
+**On entry to Phase 7:**
+1. The spec draft is already in `$TARGET_DIR/.tasker/spec-draft.md` - use this file
+2. Do NOT build spec from conversation context
+
 ## Process
 
-### Step 1: Write Draft Spec to Temp Location
+### Step 1: Copy Spec Draft for Analysis
 
-Write the current spec draft to a temporary file for analysis:
+The spec draft already exists at `$TARGET_DIR/.tasker/spec-draft.md`. Copy to temp for analysis:
 
 ```bash
-# Write draft spec for analysis
-cat > /tmp/claude/spec-draft.md << 'EOF'
-[Current spec content]
-EOF
+cp "$TARGET_DIR/.tasker/spec-draft.md" /tmp/claude/spec-draft.md
 ```
 
 ### Step 2: Run Weakness Detection
@@ -1042,6 +1726,18 @@ Resolution types:
 tasker spec review /tmp/claude/spec-draft.md
 ```
 
+**Update state.json after each resolution:**
+```json
+{
+  "review": {
+    "weaknesses_found": 6,
+    "weaknesses_resolved": 4,
+    "critical_remaining": 2
+  },
+  "updated_at": "<timestamp>"
+}
+```
+
 **Continue until:**
 - Zero critical weaknesses remain, OR
 - All critical weaknesses have been explicitly accepted by user
@@ -1052,6 +1748,23 @@ Save the final review results:
 
 ```bash
 tasker spec review /tmp/claude/spec-draft.md > $TARGET_DIR/.tasker/spec-review.json
+```
+
+Update state.json:
+```json
+{
+  "phase": {
+    "step": "complete"
+  },
+  "review": {
+    "status": "complete",
+    "completed_at": "<timestamp>",
+    "weaknesses_found": 6,
+    "weaknesses_resolved": 6,
+    "critical_remaining": 0
+  },
+  "updated_at": "<timestamp>"
+}
 ```
 
 ## Spec Review Gate
@@ -1073,6 +1786,28 @@ If critical weaknesses remain unresolved, **STOP** and ask user to resolve.
 
 # Phase 8 — Export
 
+## CRITICAL: Export From Working Files
+
+**On entry to Phase 8:**
+All content comes from working files, NOT conversation context:
+- Spec content: `$TARGET_DIR/.tasker/spec-draft.md`
+- Capability map: `$TARGET_DIR/.tasker/capability-map-draft.json`
+- FSM artifacts: `$TARGET_DIR/.tasker/fsm-draft/`
+- Decision registry: `$TARGET_DIR/.tasker/decisions.json`
+- ADR drafts: `$TARGET_DIR/.tasker/adrs-draft/`
+
+Update state.json:
+```json
+{
+  "phase": {
+    "current": "export",
+    "completed": ["initialization", "scope", "clarify", "synthesis", "architecture", "decisions", "gate", "review"],
+    "step": "starting"
+  },
+  "updated_at": "<timestamp>"
+}
+```
+
 ## Write Files
 
 Only after spec review passes. All permanent artifacts go to the **TARGET project**.
@@ -1084,7 +1819,7 @@ mkdir -p {TARGET}/docs/specs {TARGET}/docs/adrs {TARGET}/docs/state-machines/<sl
 ```
 
 ### 2. Spec Packet
-Write to `{TARGET}/docs/specs/<slug>.md`:
+Copy and finalize `$TARGET_DIR/.tasker/spec-draft.md` to `{TARGET}/docs/specs/<slug>.md`:
 
 ```markdown
 # Spec: {Title}
@@ -1162,7 +1897,7 @@ Summary of key decisions made during specification:
 ```
 
 ### 3. Capability Map
-Write to `{TARGET}/docs/specs/<slug>.capabilities.json` (from Phase 3 Synthesis).
+Copy and validate `$TARGET_DIR/.tasker/capability-map-draft.json` to `{TARGET}/docs/specs/<slug>.capabilities.json`.
 
 Validate against schema:
 ```bash
@@ -1171,20 +1906,17 @@ tasker state validate capability_map --file {TARGET}/docs/specs/<slug>.capabilit
 
 ### 4. Behavior Model (FSM)
 
-Export FSM artifacts to `{TARGET}/docs/state-machines/<slug>/`:
+Copy FSM drafts from `$TARGET_DIR/.tasker/fsm-draft/` to `{TARGET}/docs/state-machines/<slug>/`:
 
 ```bash
-# Compile FSM from capability map and spec
-tasker fsm from-capability-map \
-    {TARGET}/docs/specs/<slug>.capabilities.json \
-    {TARGET}/docs/specs/<slug>.md \
-    --output-dir {TARGET}/docs/state-machines/<slug>
+# Copy FSM drafts to final location
+cp -r "$TARGET_DIR/.tasker/fsm-draft/"* "{TARGET}/docs/state-machines/<slug>/"
 
-# Generate Mermaid diagrams and notes
+# Generate Mermaid diagrams from canonical JSON
 tasker fsm mermaid {TARGET}/docs/state-machines/<slug>
 
 # Validate FSM artifacts (I1-I5 invariants)
-tasker fsm validate validate {TARGET}/docs/state-machines/<slug>
+tasker fsm validate {TARGET}/docs/state-machines/<slug>
 ```
 
 Validate against schemas:
@@ -1193,10 +1925,29 @@ tasker fsm validate {TARGET}/docs/state-machines/<slug>
 ```
 
 ### 6. ADR Files (0..N)
-Write each ADR to `{TARGET}/docs/adrs/ADR-####-<slug>.md`.
+Copy ADR drafts from `$TARGET_DIR/.tasker/adrs-draft/` to `{TARGET}/docs/adrs/`:
+
+```bash
+cp "$TARGET_DIR/.tasker/adrs-draft/"*.md "{TARGET}/docs/adrs/"
+```
 
 ### 7. Spec Review Results
 Verify `$TARGET_DIR/.tasker/spec-review.json` is saved.
+
+## Final State Update
+
+Update `$TARGET_DIR/.tasker/state.json`:
+```json
+{
+  "phase": {
+    "current": "complete",
+    "completed": ["initialization", "scope", "clarify", "synthesis", "architecture", "decisions", "gate", "review", "export"],
+    "step": "done"
+  },
+  "updated_at": "<timestamp>",
+  "completed_at": "<timestamp>"
+}
+```
 
 ## Completion Message
 
@@ -1255,9 +2006,81 @@ Verify `$TARGET_DIR/.tasker/spec-review.json` is saved.
 
 | Command | Action |
 |---------|--------|
-| `/specify` | Start new specification workflow |
-| `/specify resume` | Resume interrupted session from `$TARGET_DIR/.tasker/clarify-session.md` |
+| `/specify` | Start or resume specification workflow (auto-detects from state files) |
 | `/specify status` | Show current phase and progress |
+| `/specify reset` | Discard current session and start fresh |
+
+---
+
+# Context Engineering: Persistence Over Memory
+
+## Design Principle
+
+This skill is designed to **survive context compaction**. All significant state is persisted to files, not held in conversation memory.
+
+## Working Files Summary
+
+| File | Purpose | Lifecycle |
+|------|---------|-----------|
+| `state.json` | Phase progress, granular step tracking | Updated after every significant action |
+| `spec-draft.md` | Accumulated spec sections | Appended after each phase |
+| `clarify-session.md` | Discovery Q&A log | Append-only during Phase 2 |
+| `capability-map-draft.json` | Capability extraction working copy | Written during Phase 3 |
+| `fsm-draft/` | FSM working files | Written during Phase 3 |
+| `decisions.json` | Decision registry (index of ADRs) | Updated during Phase 5 |
+| `adrs-draft/` | ADR working files (full decision details) | Written during Phase 5 |
+| `spec-review.json` | Weakness analysis results | Written during Phase 7 |
+
+## Resume Protocol
+
+**On any `/specify` invocation (including after compaction):**
+
+The skill automatically detects and resumes active sessions. This is NOT optional.
+
+### Detection (Phase 0, Step 1)
+1. Check for `$TARGET_DIR/.tasker/state.json`
+2. If exists and `phase.current != "complete"` → **auto-resume**
+3. If not exists or `phase.current == "complete"` → **new session**
+
+### Resume Steps (when auto-resume triggered)
+1. **Read `state.json`** to get current phase and step
+2. **Inform user** of resume (no confirmation needed)
+3. **Read the appropriate working files** for that phase's context:
+
+| Phase | Files to Read |
+|-------|---------------|
+| scope | `state.json` only |
+| clarify | `clarify-session.md`, `state.json` (category status, pending followups) |
+| synthesis | `clarify-session.md`, `spec-draft.md`, `capability-map-draft.json`, `fsm-draft/` |
+| architecture | `spec-draft.md` |
+| decisions | `spec-draft.md`, `decisions.json` |
+| gate | `spec-draft.md`, `capability-map-draft.json`, `fsm-draft/` |
+| review | `spec-draft.md`, `spec-review.json` |
+| export | All working files |
+
+4. **Jump to the current phase** - do NOT re-run earlier phases
+5. **Resume from `phase.step`** within that phase
+
+## Anti-Patterns (AVOID)
+
+- **DO NOT** accumulate requirements in conversation context during Phase 2 - write to `clarify-session.md`
+- **DO NOT** build spec text in conversation - write sections to `spec-draft.md` immediately
+- **DO NOT** assume prior phase content is in context - always read from files
+- **DO NOT** batch state updates - update `state.json` after every significant action
+- **DO NOT** scan `adrs-draft/` to find decisions - use `decisions.json` as the index, then read specific ADR files only when full details are needed
+
+## State Update Frequency
+
+Update `state.json` after:
+- Completing any user question round
+- Completing any follow-up sub-loop
+- Changing categories in Phase 2
+- Completing any spec section in Phase 3
+- Each decision outcome in Phase 5
+- Each weakness resolution in Phase 7
+- Completing any phase
+
+This ensures the skill can resume from any point with minimal context loss.
 
 ---
 
