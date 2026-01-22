@@ -8,8 +8,7 @@
       "name": "tasker",
       "source": "./",
       "description": "Spec-Driven Development: specifications compiled into executable, verifiable behavior",
-      "keywords": ["spec-driven-development", "workflow", "agents", "planning", "execution"],
-      "skills": ["./skills/specify"]
+      "keywords": ["spec-driven-development", "workflow", "agents", "planning", "execution"]
     }
   ],
   "metadata": {

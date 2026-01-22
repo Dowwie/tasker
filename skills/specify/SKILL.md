@@ -1,11 +1,6 @@
 ---
 name: specify
 description: Interactive specification workflow - design vision, clarify capabilities, extract behaviors. Produces spec packets, capability maps, and ADRs for /plan consumption.
-tools:
-  - AskUserQuestion
-  - file_read
-  - file_write
-  - bash
 ---
 
 # Specify Workflow
