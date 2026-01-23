@@ -19,6 +19,7 @@ An **agent-driven interactive workflow** that transforms ideas into actionable s
 ## Artifacts
 
 ### Required Outputs (in TARGET project)
+- **README** — `{TARGET}/README.md` (project overview - what it is, how to use it)
 - **Spec Packet** — `{TARGET}/docs/specs/<slug>.md` (human-readable)
 - **Capability Map** — `{TARGET}/docs/specs/<slug>.capabilities.json` (machine-readable, for `/plan`)
 - **Behavior Model (FSM)** — `{TARGET}/docs/state-machines/<slug>/` (state machine artifacts, for `/plan` and `/execute`)
@@ -2004,7 +2005,7 @@ Summary of key decisions made during specification:
 
 ## Artifacts
 - **Capability Map:** [<slug>.capabilities.json](./<slug>.capabilities.json)
-- **Behavior Model (FSM):** [fsm/<slug>/](../fsm/<slug>/) - State machine diagrams
+- **Behavior Model (FSM):** [state-machines/<slug>/](../state-machines/<slug>/)
 - **Discovery Log:** Archived in tasker project
 ```
 
@@ -2046,6 +2047,56 @@ cp "$TARGET_DIR/.tasker/adrs-draft/"*.md "{TARGET}/docs/adrs/"
 ### 7. Spec Review Results
 Verify `$TARGET_DIR/.tasker/spec-review.json` is saved.
 
+### 8. Generate README.md
+
+**Purpose:** Ensure anyone encountering the project immediately understands what it is and how to use it.
+
+Generate `{TARGET}/README.md` with:
+
+```markdown
+# {Project Title}
+
+{One-sentence description of what this system does}
+
+## What It Does
+
+{2-3 bullet points explaining the core functionality}
+
+## Installation
+
+{From Installation & Activation section of spec}
+
+## Usage
+
+{Primary entry point and basic usage example}
+
+## How It Works
+
+{Brief explanation of the architecture/workflow - 3-5 bullet points}
+
+## Project Structure
+
+```
+{key directories and files with one-line descriptions}
+```
+
+## License
+
+{License from spec or "TBD"}
+```
+
+**Content Sources:**
+- Title/description: From spec Goal section
+- Installation: From spec Installation & Activation section
+- Usage: From spec Entry Point and Workflows
+- How It Works: From spec Architecture Sketch
+- Project Structure: From capability map domains/files
+
+**IMPORTANT:** The README is the first thing anyone sees. It must clearly answer:
+1. What is this? (one sentence)
+2. What problem does it solve?
+3. How do I use it?
+
 ## Final State Update
 
 Update `$TARGET_DIR/.tasker/state.json`:
@@ -2066,10 +2117,23 @@ Update `$TARGET_DIR/.tasker/state.json`:
 ```markdown
 ## Specification Complete
 
+### What Was Designed
+
+**{Project Title}** — {One-sentence description}
+
+{2-3 sentences explaining what this system does, who it's for, and the key value it provides}
+
+**Entry Point:** {e.g., `/kx`, `mycommand`, `POST /api/start`}
+
+---
+
+**Exported to {TARGET}/:**
+- `README.md` (project overview - start here)
+
 **Exported to {TARGET}/docs/:**
 - `specs/<slug>.md` (human-readable spec)
 - `specs/<slug>.capabilities.json` (machine-readable for /plan)
-- `fsm/<slug>/` (behavior model - state machine)
+- `state-machines/<slug>/` (behavior model - state machine)
   - `index.json`, `steel-thread.states.json`, `steel-thread.transitions.json`
   - `steel-thread.mmd` (Mermaid diagram)
 - `adrs/ADR-####-*.md` (N ADRs)
