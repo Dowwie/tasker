@@ -131,7 +131,7 @@ If no phase markers are found, output:
 }
 ```
 
-## I.P.S.O. Decomposition (Behavior Taxonomy)
+## I.P.S.O.A. Decomposition (Behavior Taxonomy)
 
 For each capability, identify behaviors:
 
@@ -139,6 +139,21 @@ For each capability, identify behaviors:
 - **Process**: Calculations, decisions, transformations
 - **State**: Database reads/writes, cache operations
 - **Output**: Responses, events, notifications
+- **Activation**: Registration, installation, deployment, configuration that makes the system invocable
+
+### Activation Behaviors (CRITICAL for Entry Points)
+
+If the spec describes user invocation (e.g., "user runs /command"), you MUST extract activation behaviors:
+
+| Activation Type | Example Behaviors |
+|-----------------|-------------------|
+| Skill registration | RegisterSkill, ConfigureSkillTrigger |
+| CLI installation | InstallCommand, RegisterCommandAlias |
+| API deployment | DeployEndpoint, RegisterRoute |
+| Plugin loading | LoadPlugin, InitializePlugin |
+| Configuration | WriteConfigFile, SetEnvironmentVariable |
+
+**If spec lacks activation details but describes invocation:** Flag as coverage gap. The capability map's `coverage.gaps` should include: "Missing activation mechanism for [invocation description]"
 
 ## Output Structure
 
@@ -165,6 +180,25 @@ For each capability, identify behaviors:
             {"id": "B2", "name": "VerifyPassword", "type": "process", "description": "Compare hash"},
             {"id": "B3", "name": "CreateSession", "type": "state", "description": "Store session in Redis"},
             {"id": "B4", "name": "ReturnToken", "type": "output", "description": "JWT response"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D2",
+      "name": "System Bootstrap",
+      "description": "Installation and activation",
+      "capabilities": [
+        {
+          "id": "C2",
+          "name": "Skill Registration",
+          "spec_ref": {
+            "quote": "User invokes /myskill to start the workflow",
+            "location": "Entry Point section"
+          },
+          "behaviors": [
+            {"id": "B5", "name": "CreateSkillConfig", "type": "activation", "description": "Write skill definition to .claude/settings.local.json"},
+            {"id": "B6", "name": "RegisterTrigger", "type": "activation", "description": "Configure /myskill as command trigger"}
           ]
         }
       ]

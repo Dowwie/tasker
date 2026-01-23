@@ -62,7 +62,7 @@
                     "properties": {
                       "id": { "type": "string", "pattern": "^B[0-9]+$" },
                       "name": { "type": "string" },
-                      "type": { "enum": ["input", "process", "state", "output"] },
+                      "type": { "enum": ["input", "process", "state", "output", "activation"] },
                       "description": { "type": "string" }
                     }
                   }

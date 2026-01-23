@@ -29,8 +29,8 @@
             "description": "Weakness ID (e.g., W1-001)"
           },
           "category": {
-            "enum": ["non_behavioral", "implicit", "cross_cutting", "missing_ac", "fragmented", "contradiction"],
-            "description": "Weakness category"
+            "enum": ["non_behavioral", "implicit", "cross_cutting", "missing_ac", "fragmented", "contradiction", "ambiguity", "missing_activation"],
+            "description": "Weakness category (W1-W8)"
           },
           "severity": {
             "enum": ["critical", "warning", "info"],

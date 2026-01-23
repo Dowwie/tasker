@@ -143,6 +143,36 @@ Example ambiguities and questions:
 | "may include caching" | "Is caching required or optional? If optional, under what conditions?" |
 | "errors are logged" | "What component performs this action?" |
 
+#### W8: Missing Activation Requirements
+
+Detected when spec describes invocation without activation mechanism:
+
+```json
+{
+  "question": "The spec describes '{invocation}' but doesn't specify how this becomes available. What makes it invocable?",
+  "header": "Activation",
+  "options": [
+    {"label": "Registration", "description": "Specific registration/installation steps are needed"},
+    {"label": "Built-in", "description": "Provided by runtime environment"},
+    {"label": "Out of scope", "description": "Activation is external to this spec"}
+  ]
+}
+```
+
+If user selects "Registration", follow up to capture specific activation requirements:
+- Configuration files needed (format, location)
+- Installation commands
+- Auto-discovery conventions
+- Manual setup steps
+
+Example W8 detections:
+
+| Detected | Question |
+|----------|----------|
+| "User invokes /kx" | "How does /kx become an available command?" |
+| "The skill is triggered by..." | "How is the skill registered/installed?" |
+| "API endpoint /users" | "How is this endpoint deployed/registered?" |
+
 ### Step 5: Record Resolutions
 
 Use the add-resolution command to persist each resolution:
@@ -162,6 +192,9 @@ tasker spec review add-resolution {TASKER_DIR} W7-003 clarified --notes "Retry c
 
 # Record that ambiguous term is not a hard requirement
 tasker spec review add-resolution {TASKER_DIR} W7-005 optional --notes "Caching is optional optimization, not required"
+
+# Record activation requirement for W8
+tasker spec review add-resolution {TASKER_DIR} W8-001 mandatory --notes "Skill must be registered in .claude/settings.local.json with trigger pattern"
 ```
 
 Resolution types:
@@ -222,11 +255,13 @@ tasker spec review status {TASKER_DIR}
 ### Critical (blocks Phase 1)
 - **W6: Contradictions** - Cannot proceed with conflicting requirements
 - **W1: Non-behavioral** - DDL without clear mandate creates gap risk
+- **W8: Missing activation** - Spec describes invocation without activation mechanism (causes "dead" entry points)
 
 ### Warning (proceed with notes)
 - **W2: Implicit** - Flag for explicit confirmation
 - **W3: Cross-cutting** - Create dedicated tasks
 - **W5: Fragmented** - Note cross-references
+- **W7: Ambiguity** - Vague terms that may cause misinterpretation
 
 ### Info (logged only)
 - **W4: Missing AC** - Handled during task verification

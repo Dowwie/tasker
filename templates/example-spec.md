@@ -82,6 +82,29 @@ Copy this file to `$TARGET_DIR/.tasker/inputs/spec.md` and customize for your pr
 |--------|---------|-----------|
 | {{name}} | {{purpose}} | {{how to use}} |
 
+## Installation & Activation
+
+How does this system become available to users? What makes it invocable?
+
+### Activation Mechanism
+{{Choose one or describe custom:}}
+- [ ] **Skill Registration**: Register in `.claude/settings.local.json`
+- [ ] **CLI Installation**: Install via `{{package manager command}}`
+- [ ] **API Deployment**: Deploy to `{{deployment target}}`
+- [ ] **Auto-discovery**: Runtime discovers via `{{convention}}`
+- [ ] **Manual Setup**: Requires manual configuration steps
+
+### Activation Steps
+1. {{Step 1 - e.g., "Copy skill file to ~/.claude/skills/"}}
+2. {{Step 2 - e.g., "Add entry to settings.local.json"}}
+3. {{Step 3 - e.g., "Restart Claude Code"}}
+
+### Verification
+How to verify the system is properly activated:
+```bash
+{{Command to verify activation, e.g., "claude --skill-list | grep myskill"}}
+```
+
 ## Non-Functional Requirements
 
 ### Performance

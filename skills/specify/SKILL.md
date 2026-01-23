@@ -260,6 +260,26 @@ Free-form text input. Examples:
 - Note this for Phase 2 (Clarify) to recommend based on gathered requirements
 - Ask clarifying questions: "Any language preferences?", "Cloud provider constraints?", "Team expertise?"
 
+### Question 5: Entry Point (CRITICAL for W8/I6 compliance)
+```
+How will users invoke this? What makes it available?
+```
+
+Options to present:
+- **CLI command** — User runs a command (specify command name)
+- **API endpoint** — User calls an HTTP endpoint (specify URL pattern)
+- **Claude Code skill** — User invokes /skillname (specify trigger)
+- **Library/module** — No direct invocation, imported by other code
+- **Other** — Custom activation mechanism
+
+**If user selects CLI/API/Skill:**
+Follow up: "What specific steps are needed to make this available to users?"
+
+**If user selects Library/module:**
+Note in spec: "Installation & Activation: N/A - library/module only"
+
+**Why this matters:** Specs that describe invocation without activation mechanism cause W8 weakness and I6 invariant failure. Capturing this early prevents dead entry points.
+
 ## Output
 
 ### 1. Update State (MANDATORY)
@@ -278,6 +298,11 @@ Update `$TARGET_DIR/.tasker/state.json`:
     "non_goals": ["<item1>", "<item2>"],
     "done_means": ["<criterion1>", "<criterion2>"],
     "tech_stack": "<tech-stack-or-TBD>",
+    "entry_point": {
+      "type": "cli|api|skill|library|other",
+      "trigger": "<command-name or /skillname or endpoint>",
+      "activation_steps": ["<step1>", "<step2>"]
+    },
     "completed_at": "<timestamp>"
   }
 }
@@ -301,6 +326,16 @@ Write initial spec sections to `$TARGET_DIR/.tasker/spec-draft.md`:
 
 ## Tech Stack
 {tech_stack from scope}
+
+## Installation & Activation
+**Entry Point:** {entry_point.trigger from scope}
+**Type:** {entry_point.type from scope}
+
+**Activation Steps:**
+{entry_point.activation_steps from scope, numbered list}
+
+**Verification:**
+<!-- To be filled in during Clarify or Synthesis -->
 
 <!-- Remaining sections will be added by subsequent phases -->
 ```
@@ -785,7 +820,7 @@ Update `$TARGET_DIR/.tasker/state.json`:
 
 1. Read `$TARGET_DIR/.tasker/clarify-session.md` completely
 2. Extract and organize into spec sections (update spec-draft.md after each)
-3. Decompose into capabilities using I.P.S.O. taxonomy
+3. Decompose into capabilities using I.P.S.O.A. taxonomy
 4. Everything must trace to a specific discovery answer
 
 ---
@@ -910,7 +945,7 @@ The FSM serves two purposes:
    - Variants: conditional branches with guards
    - Failures: error transitions to failure states
 4. **Link Guards to Invariants**: Map spec invariants to transition guards
-5. **Validate Completeness**: Run I1-I5 checks (see below)
+5. **Validate Completeness**: Run I1-I6 checks (see below)
 6. **Resolve Ambiguity**: Use AskUserQuestion for any gaps
 
 ### Completeness Invariants
@@ -924,6 +959,18 @@ The FSM MUST satisfy these invariants:
 | I3 | Completeness | Initial state, terminals, no dead ends |
 | I4 | Guard-Invariant linkage | Every guard links to an invariant ID |
 | I5 | No silent ambiguity | Vague terms resolved or flagged as Open Questions |
+| I6 | Precondition reachability | If initial transition requires external trigger (e.g., "user invokes X"), the preconditions for that trigger must be specified in the spec |
+
+**I6 Detailed Check:**
+If the first transition's trigger describes user invocation (e.g., "user runs /command", "user invokes skill"):
+1. Check if spec has "Installation & Activation" section
+2. Verify the activation mechanism makes the trigger possible
+3. If missing, flag as W8 weakness (missing activation requirements)
+
+Example I6 failure:
+- FSM starts: `Idle --[user invokes /kx]--> Running`
+- Spec has NO section explaining how `/kx` becomes available
+- **I6 FAILS**: "Precondition for initial transition 'user invokes /kx' not reachable - no activation mechanism specified"
 
 ### Complexity Triggers (Splitting Rules)
 
@@ -1020,9 +1067,9 @@ Every state and transition MUST have a `spec_ref` pointing to the specific workf
 
 ## Part B: Capability Extraction
 
-Extract capabilities from the synthesized workflows using **I.P.S.O. decomposition**.
+Extract capabilities from the synthesized workflows using **I.P.S.O.A. decomposition**.
 
-### I.P.S.O. Behavior Taxonomy
+### I.P.S.O.A. Behavior Taxonomy
 
 For each capability, identify behaviors by type:
 
@@ -1032,6 +1079,17 @@ For each capability, identify behaviors by type:
 | **Process** | Calculations, decisions, transformations | Calculate total, apply discount rules |
 | **State** | Database reads/writes, cache operations | Save order, fetch user profile |
 | **Output** | Responses, events, notifications | Return JSON, emit event, send email |
+| **Activation** | Registration, installation, deployment | Register skill, deploy endpoint, write config |
+
+### Activation Behaviors
+
+If the spec describes user invocation (e.g., "user runs /command"), extract activation behaviors:
+- **Registration**: Skill/plugin registration with runtime
+- **Installation**: CLI or package installation steps
+- **Deployment**: API endpoint or service deployment
+- **Configuration**: Config files or environment setup
+
+**Missing activation = coverage gap.** If spec says "user invokes X" but doesn't specify how X becomes available, add to `coverage.gaps`.
 
 ### Domain Grouping
 
@@ -1458,7 +1516,7 @@ Update state.json:
 | Decisions present | Decisions section exists | `spec-draft.md` |
 | Workflows defined | At least one workflow with variants/failures | `spec-draft.md` |
 | Invariants stated | At least one invariant | `spec-draft.md` |
-| FSM compiled | Steel Thread FSM compiled with I1-I5 passing | `fsm-draft/index.json` |
+| FSM compiled | Steel Thread FSM compiled with I1-I6 passing | `fsm-draft/index.json` |
 
 ## Spec Completeness Check (Checklist C1-C11)
 
@@ -1609,6 +1667,7 @@ This detects:
 - **W5: Fragmented requirements** - Cross-references needing consolidation
 - **W6: Contradictions** - Conflicting statements
 - **W7: Ambiguity** - Vague quantifiers, undefined scope, weak requirements, passive voice
+- **W8: Missing activation requirements** - Spec describes invocation without specifying how to make it invocable (e.g., "user runs /command" without defining how the command becomes available)
 - **CK-*: Checklist gaps** - Critical missing content from C1-C11 categories
 
 W7 Ambiguity patterns include:
@@ -1675,6 +1734,42 @@ Example clarifying questions by ambiguity type:
 - Vague timing: "What is the specific timing? (e.g., <100ms, every 5 minutes)"
 - Passive voice: "What component/system performs this action?"
 
+#### W8: Missing Activation Requirements
+
+Detected when the spec describes invocation (e.g., "user runs /command", "user invokes the skill") without specifying how that invocation becomes possible.
+
+```json
+{
+  "question": "The spec describes '{invocation_description}' but doesn't specify how this becomes invocable. What makes this available to users?",
+  "header": "Activation",
+  "options": [
+    {"label": "Registration required", "description": "I'll specify what registration/installation is needed"},
+    {"label": "Built-in", "description": "This is provided by the runtime environment (document which)"},
+    {"label": "Documentation only", "description": "Activation is out of scope - add to Non-goals"}
+  ]
+}
+```
+
+W8 patterns to detect:
+- "User invokes X" or "User runs X" without installation/registration steps
+- Entry points described without activation mechanism
+- Commands or APIs referenced without deployment/registration
+- Skills or plugins described without installation instructions
+
+If user selects "Registration required", follow up:
+```json
+{
+  "question": "What specific steps or files are needed to make '{invocation}' available?",
+  "header": "Activation Steps",
+  "options": [
+    {"label": "Config file", "description": "A configuration file registers this (specify format/location)"},
+    {"label": "CLI install", "description": "A CLI command installs this (specify command)"},
+    {"label": "Auto-discovery", "description": "The runtime auto-discovers this (specify convention)"},
+    {"label": "Manual setup", "description": "Manual steps are required (I'll document them)"}
+  ]
+}
+```
+
 #### CK-*: Checklist Gaps
 
 For critical checklist gaps that weren't caught in Phase 6 Gate:
@@ -1703,8 +1798,8 @@ tasker spec add-resolution {weakness_id} {resolution_type} \
 ```
 
 Resolution types:
-- `mandatory` - MUST be implemented as specified (W1 DDL requirements)
-- `clarified` - User provided specific value/definition (W7 ambiguity)
+- `mandatory` - MUST be implemented as specified (W1 DDL requirements, W8 activation requirements)
+- `clarified` - User provided specific value/definition (W7 ambiguity, W8 activation mechanism)
 - `not_applicable` - Doesn't apply to this spec (checklist gaps)
 - `defer` - Address in follow-up work
 
@@ -1712,6 +1807,7 @@ Resolution types:
    - If W1 resolved as "mandatory", add explicit behavioral statement
    - If W6 resolved, remove contradictory statement
    - If W7 resolved, replace ambiguous language with specific terms
+   - If W8 resolved as "mandatory" or "clarified", add Installation & Activation section to spec
    - If CK-* resolved as "not_applicable", document rationale
 
 ### Step 5: Re-run Until Clean
@@ -1852,6 +1948,27 @@ Copy and finalize `$TARGET_DIR/.tasker/spec-draft.md` to `{TARGET}/docs/specs/<s
 
 (Remove sections that don't apply)
 
+## Installation & Activation
+[If spec describes user invocation, this section is REQUIRED]
+
+**Entry Point:** [e.g., `/myskill`, `mycommand`, `POST /api/start`]
+
+**Activation Mechanism:**
+- [e.g., "Skill registration in .claude/settings.local.json"]
+- [e.g., "CLI installation via pip install"]
+- [e.g., "API deployment to AWS Lambda"]
+
+**Activation Steps:**
+1. [Step to make the entry point available]
+2. [Step to verify it works]
+
+**Verification Command:**
+```bash
+[Command to verify the system is properly activated and invocable]
+```
+
+(If no user invocation is described, this section can be "N/A - library/module only")
+
 ## Workflows
 [From Phase 3]
 
@@ -1910,7 +2027,7 @@ cp -r "$TARGET_DIR/.tasker/fsm-draft/"* "{TARGET}/docs/state-machines/<slug>/"
 # Generate Mermaid diagrams from canonical JSON
 tasker fsm mermaid {TARGET}/docs/state-machines/<slug>
 
-# Validate FSM artifacts (I1-I5 invariants)
+# Validate FSM artifacts (I1-I6 invariants)
 tasker fsm validate {TARGET}/docs/state-machines/<slug>
 ```
 

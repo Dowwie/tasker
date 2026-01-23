@@ -236,7 +236,55 @@ cat {TASKER_DIR}/artifacts/capability-map.json | jq '.phase_filtering.excluded_p
 4. ✅ Is the verification command **executable** (not manual, not vague)?
 5. ✅ Would the verification command **fail if the criterion isn't met**?
 
-#### G. Refactor Compliance (Required if refactor tasks exist)
+#### G. Integration Point Completeness (Required for entry point/integration tasks)
+
+| Score | Meaning |
+|-------|---------|
+| PASS | Integration point has behaviors OR functional invocation verification |
+| PARTIAL | Integration point has string-based verification but no functional test |
+| FAIL | Integration point has no behaviors AND no functional verification |
+| N/A | Task is not an integration point |
+
+**This section applies to tasks that are entry points, integration points, or have empty `behaviors` arrays.**
+
+**Evidence to check:**
+- [ ] If `behaviors` array is empty, does AC include **functional invocation test**?
+- [ ] AC does NOT rely solely on file existence checks (e.g., `test -f`)
+- [ ] AC does NOT rely solely on string matching (e.g., `grep -q`)
+- [ ] AC includes verification that the integration **actually works** (e.g., command executes, endpoint responds)
+
+**CRITICAL: Empty behaviors + no functional verification = FAIL**
+
+If a task has:
+- `behaviors: []` (empty array)
+- Purpose mentions "entry point", "integration", "bootstrap", or "activation"
+- Acceptance criteria only check file existence or string content
+
+Then: **FAIL** - The task will pass verification without actually working.
+
+**Examples of BAD integration point AC (FAIL):**
+```json
+{"criterion": "kx.md exists with valid skill definition", "verification": "test -f kx.md && head -20 kx.md | grep -q 'kx'"}
+{"criterion": "Config file contains registration", "verification": "grep -q 'register' config.json"}
+{"criterion": "Entry point created", "verification": "ls -la entrypoint.py"}
+```
+
+**Examples of GOOD integration point AC (PASS):**
+```json
+{"criterion": "Skill /kx is invocable", "verification": "claude --skill-list | grep -q '/kx'"}
+{"criterion": "CLI command executes without error", "verification": "mycommand --help && echo 'OK'"}
+{"criterion": "API endpoint responds", "verification": "curl -s localhost:8000/health | jq '.status'"}
+{"criterion": "Plugin loads successfully", "verification": "python -c 'import myplugin; myplugin.verify()'"}
+```
+
+**Quick fix for integration point AC:**
+| Bad Pattern | Good Replacement |
+|-------------|------------------|
+| `test -f entry.md` | `<runtime> --verify entry.md` or actual invocation test |
+| `grep -q trigger` | Invoke the trigger and verify response |
+| `ls -la config.json` | Load config and verify it works |
+
+#### H. Refactor Compliance (Required if refactor tasks exist)
 
 | Score | Meaning |
 |-------|---------|
@@ -314,6 +362,7 @@ This shows which original requirements are superseded by refactor tasks.
 - Preference Compliance: PASS or N/A
 - Viability: PASS
 - Acceptance Criteria Quality: PASS
+- Integration Point Completeness: PASS or N/A
 - Refactor Compliance: PASS or N/A
 
 **CONDITIONAL PASS criteria:**
@@ -324,6 +373,7 @@ This shows which original requirements are superseded by refactor tasks.
 **FAIL criteria:**
 - ANY dimension scores FAIL
 - Phase Compliance FAIL is always blocking (Phase 2+ leakage)
+- Integration Point Completeness FAIL is blocking for entry point tasks (prevents "dead" integrations)
 - Critical issues that block execution
 - Acceptance criteria are untestable or missing verification commands
 
@@ -544,6 +594,15 @@ Your final message MUST include:
 - Estimate outside 2-6 hour range
 - More than 3 implementation files
 - Circular or missing dependencies
+
+### Integration Point Issues (BLOCKING for entry points)
+- Task has `behaviors: []` (empty) AND mentions "entry point", "integration", or "activation"
+- Acceptance criteria only verify file existence (`test -f`, `ls -la`)
+- Acceptance criteria only verify string content (`grep -q`, `head | grep`)
+- No functional verification that the integration actually works
+- Entry point task passes verification without being invocable
+
+**Integration Point failures are BLOCKING for entry point tasks.** Fix by adding functional invocation tests to AC.
 
 ### Acceptance Criteria Quality Issues
 - **Vague criteria**: "works correctly", "is implemented", "handles errors"

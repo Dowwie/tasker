@@ -4,13 +4,14 @@ set -euo pipefail
 
 REPO="Dowwie/tasker"
 BINARY_NAME="tasker"
-DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/bin}/tasker"
+BIN_DIR="${HOME}/.local/bin"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/tasker"
 VERSION_FILE="$DATA_DIR/.version"
 LAST_CHECK_FILE="$DATA_DIR/.last_update_check"
 UPDATE_CHECK_INTERVAL=86400  # 24 hours in seconds
 
-# If binary exists, return it immediately (fast path)
-BINARY_PATH="$DATA_DIR/$BINARY_NAME"
+# Binary goes in standard location, metadata in data dir
+BINARY_PATH="$BIN_DIR/$BINARY_NAME"
 if [[ -x "$BINARY_PATH" ]]; then
     # Check for updates only periodically, not every invocation
     if [[ -f "$LAST_CHECK_FILE" ]]; then
@@ -67,6 +68,7 @@ URL="https://github.com/$REPO/releases/download/v${LATEST}/${BINARY_NAME}-${OS}-
 
 echo "Downloading $BINARY_NAME v$LATEST for $OS/$ARCH..." >&2
 
+mkdir -p "$BIN_DIR"
 if curl -fsSL "$URL" -o "$BINARY_PATH" 2>/dev/null; then
     chmod +x "$BINARY_PATH"
     echo "$LATEST" > "$VERSION_FILE"
