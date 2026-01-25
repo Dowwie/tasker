@@ -29,6 +29,7 @@ An **agent-driven interactive workflow** that transforms ideas into actionable s
 - **Session state** — `$TARGET_DIR/.tasker/state.json` (persistent, primary resume source)
 - **Spec draft** — `$TARGET_DIR/.tasker/spec-draft.md` (working draft, written incrementally)
 - **Discovery file** — `$TARGET_DIR/.tasker/clarify-session.md` (append-only log)
+- **Stock-takes** — `$TARGET_DIR/.tasker/stock-takes.md` (append-only log of vision evolution)
 - **Decision registry** — `$TARGET_DIR/.tasker/decisions.json` (index of decisions/ADRs)
 - **Spec Review** — `$TARGET_DIR/.tasker/spec-review.json` (weakness analysis)
 
@@ -377,6 +378,7 @@ Update `$TARGET_DIR/.tasker/state.json`:
     },
     "pending_followups": [],
     "requirements_count": 0,
+    "stock_takes_count": 0,
     "started_at": "<timestamp>"
   }
 }
@@ -403,6 +405,20 @@ Started: {timestamp}
 | Preferences | ○ Not Started | 0 | — |
 
 ## Discovery Rounds
+
+```
+
+### 3. Create Stock-Takes File
+
+Create `$TARGET_DIR/.tasker/stock-takes.md`:
+
+```markdown
+# Stock-Takes: {TOPIC}
+Started: {timestamp}
+
+This file tracks how the vision evolves as discovery progresses.
+
+---
 
 ```
 
@@ -616,9 +632,107 @@ A category is **complete** when:
 Before moving to a new category:
 1. **Summarize** what was learned in the current category
 2. **Confirm** with user: "I've captured X, Y, Z for [category]. Does that cover everything, or is there more?"
-3. **Only then** move to the next incomplete category
+3. **Run Stock-Take** (see below)
+4. **Only then** move to the next incomplete category
 
 This prevents the feeling of being "rushed" through categories.
+
+## Stock-Taking (Big Picture Synthesis)
+
+### Purpose
+
+As questions are answered and categories complete, periodically synthesize the "big picture" - what's emerging, the shape of the vision. This helps users see how their answers are building toward something coherent and provides calibration moments.
+
+### Trigger
+
+Stock-take is triggered **after each category completes** (before transitioning to the next category). This creates a natural rhythm of ~5-7 stock-takes during Phase 2.
+
+### Content
+
+A stock-take is NOT a list of answers. It's a **synthesis of meaning** - what's taking shape:
+
+1. **What we're building** (1-2 sentences, evolving as understanding deepens)
+2. **Key constraints/boundaries** that have emerged from answers
+3. **The shape becoming visible** (patterns, tensions, tradeoffs surfacing)
+4. **Direction check** - light confirmation the vision still feels right
+
+### Format
+
+```markdown
+**Taking stock** (after {category_name}):
+
+{1-3 sentence synthesis of what's emerging - not a summary of answers, but the picture forming}
+
+{Any notable patterns, tensions, or tradeoffs becoming visible}
+
+Does this still capture where we're heading?
+```
+
+### Example
+
+After completing "Integrations" category:
+
+> **Taking stock** (after Integrations):
+>
+> We're building a CLI skill system where specs drive task decomposition. The emphasis is on preventing incomplete handoffs - every behavior must trace back to stated requirements. The system is self-contained except for Git (for state persistence) and Claude Code (as the execution runtime).
+>
+> There's tension between thoroughness and workflow friction that keeps surfacing - users want comprehensive specs but not interrogation.
+>
+> Does this still capture where we're heading?
+
+### Tone
+
+- **Reflective**, not interrogative
+- **Synthesizing**, not summarizing
+- **Calibrating**, not gate-checking
+
+The question at the end is light - "Does this still feel right?" not "Please confirm items 1-7."
+
+### Process
+
+After category completion:
+
+1. **Read accumulated state** from `spec-draft.md` (scope), `clarify-session.md` (discovery so far)
+2. **Synthesize** the emerging picture (not regurgitate answers)
+3. **Present** the stock-take to user
+4. **Listen** for any course correction or "that's not quite right"
+5. **Append** to `$TARGET_DIR/.tasker/stock-takes.md`
+6. **Update** `state.json` with `stock_takes_count`
+
+### Stock-Takes File Format
+
+Append each stock-take to `$TARGET_DIR/.tasker/stock-takes.md`:
+
+```markdown
+---
+
+## Stock-Take {N} — After {Category Name}
+*{timestamp}*
+
+{The synthesis content}
+
+**User response:** {confirmed | adjusted: brief note}
+
+---
+```
+
+### State Update
+
+After each stock-take, update `state.json`:
+```json
+{
+  "clarify": {
+    "stock_takes_count": N
+  },
+  "updated_at": "<timestamp>"
+}
+```
+
+### When NOT to Stock-Take
+
+- **Early exit**: If user says "move on" mid-category, skip stock-take for that category
+- **Minor category**: If a category yielded very little new information, stock-take can be brief or combined with next
+- **User impatience**: If user explicitly wants to skip calibration, respect that
 
 ## AskUserQuestion Format
 
@@ -2201,6 +2315,7 @@ This skill is designed to **survive context compaction**. All significant state 
 | `state.json` | Phase progress, granular step tracking | Updated after every significant action |
 | `spec-draft.md` | Accumulated spec sections | Appended after each phase |
 | `clarify-session.md` | Discovery Q&A log | Append-only during Phase 2 |
+| `stock-takes.md` | Vision evolution log | Append-only during Phase 2 (after each category) |
 | `capability-map-draft.json` | Capability extraction working copy | Written during Phase 3 |
 | `fsm-draft/` | FSM working files | Written during Phase 3 |
 | `decisions.json` | Decision registry (index of ADRs) | Updated during Phase 5 |
@@ -2226,8 +2341,8 @@ The skill automatically detects and resumes active sessions. This is NOT optiona
 | Phase | Files to Read |
 |-------|---------------|
 | scope | `state.json` only |
-| clarify | `clarify-session.md`, `state.json` (category status, pending followups) |
-| synthesis | `clarify-session.md`, `spec-draft.md`, `capability-map-draft.json`, `fsm-draft/` |
+| clarify | `clarify-session.md`, `stock-takes.md`, `state.json` (category status, pending followups, stock_takes_count) |
+| synthesis | `clarify-session.md`, `stock-takes.md`, `spec-draft.md`, `capability-map-draft.json`, `fsm-draft/` |
 | architecture | `spec-draft.md` |
 | decisions | `spec-draft.md`, `decisions.json` |
 | gate | `spec-draft.md`, `capability-map-draft.json`, `fsm-draft/` |
@@ -2251,6 +2366,7 @@ Update `state.json` after:
 - Completing any user question round
 - Completing any follow-up sub-loop
 - Changing categories in Phase 2
+- Completing any stock-take in Phase 2
 - Completing any spec section in Phase 3
 - Each decision outcome in Phase 5
 - Each weakness resolution in Phase 7
