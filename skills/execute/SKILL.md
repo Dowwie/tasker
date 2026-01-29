@@ -12,6 +12,8 @@ tools:
 
 **CRITICAL: This is the EXECUTE skill. Only use this after /plan has completed and task files exist in .tasker/tasks/. If no tasks exist, tell the user to run /tasker:plan first.**
 
+**IMPORTANT: All tasker working files are in `$TARGET_DIR/.tasker/`. Do NOT create or use any other directories like `project-planning/`, `planning/`, or similar. The `.tasker/` directory is the ONLY location for tasker artifacts.**
+
 Execute a task DAG via isolated subagents. This is Phase 3 of the tasker workflow:
 
 ```
@@ -126,121 +128,70 @@ tasker state checkpoint clear
 
 **CRITICAL CONSTRAINTS:**
 - **Max 3 parallel executors** - More causes orchestrator context exhaustion
-- **Task-executors are self-completing** - They call `tasker state task complete` directly
+- **Task-executors are self-completing** - They update state and write results directly
 - **Checkpoint before spawning** - Track batch for crash recovery
 - **Minimal returns** - Executors return only `T001: SUCCESS` or `T001: FAILED - reason`
 
-```bash
-PARALLEL_LIMIT=3
+### Loop Steps
 
-while true; do
-    # 0. CHECK FOR HALT
-    tasker state check-halt
-    if [ $? -ne 0 ]; then
-        echo "Halt requested. Stopping gracefully."
-        tasker state checkpoint complete
+Repeat until no more tasks or halt requested:
 
-        # Generate evaluation report even on halt
-        tasker evaluate --output $TASKER_DIR/reports/evaluation-report.txt
-        tasker evaluate --format json --output $TASKER_DIR/reports/evaluation-report.json
+**Step 0: Check for Halt**
+- Use Bash: `tasker state check-halt`
+- If exit code is non-zero, halt was requested:
+  - Run `tasker state checkpoint complete`
+  - Generate and display evaluation report (see "Evaluation Report" section)
+  - Run `tasker state confirm-halt`
+  - Exit loop
 
-        tasker state confirm-halt
-        break
-    fi
+**Step 1: Get Ready Tasks**
+- Use Bash: `tasker state ready`
+- If no ready tasks:
+  - Run `tasker state advance`
+  - If successful: all tasks complete! Clear checkpoint, generate and display evaluation report, exit loop
+  - If no progress: check for blockers with `tasker state status`, exit loop
 
-    # 1. Get ready tasks
-    READY=$(tasker state ready)
+**Step 2: Select Batch**
+- Take up to 3 task IDs from ready tasks
 
-    if [ -z "$READY" ]; then
-        tasker state advance
-        if [ $? -eq 0 ]; then
-            echo "All tasks complete!"
-            tasker state checkpoint clear
+**Step 3: Generate and Validate Bundles**
+For each task in batch:
+- Use Bash: `tasker bundle generate {TASK_ID}`
+- Use Bash: `tasker bundle validate-integrity {TASK_ID}`
+- If integrity fails (exit code 1): fail the task with `tasker state task fail {TASK_ID} "Bundle integrity validation failed" --category dependency`
+- If integrity warns (exit code 2): regenerate bundle
 
-            # Generate evaluation report (MANDATORY)
-            tasker evaluate --output $TASKER_DIR/reports/evaluation-report.txt
-            tasker evaluate --format json --output $TASKER_DIR/reports/evaluation-report.json
+**Step 4: Create Checkpoint**
+- Use Bash: `tasker state checkpoint create {TASK_IDs...}`
 
-            break
-        else
-            echo "No ready tasks. Check for blockers."
-            tasker state status
-            break
-        fi
-    fi
+**Step 5: Mark Tasks Started**
+For each valid task:
+- Use Bash: `tasker state task start {TASK_ID}`
 
-    # 2. Select batch (up to PARALLEL_LIMIT tasks)
-    BATCH=$(echo "$READY" | head -$PARALLEL_LIMIT | cut -d: -f1)
-    BATCH_ARRAY=($BATCH)
-    echo "Batch: ${BATCH_ARRAY[@]}"
+**Step 6: Spawn Executors in Parallel**
+Use the Task tool to spawn `task-executor` subagents for ALL valid tasks in a SINGLE message (parallel execution):
 
-    # 3. Generate and validate bundles for all tasks in batch
-    VALID_TASKS=()
-    for TASK_ID in ${BATCH_ARRAY[@]}; do
-        tasker bundle generate $TASK_ID
-        tasker bundle validate-integrity $TASK_ID
-        INTEGRITY_CODE=$?
-
-        if [ $INTEGRITY_CODE -eq 0 ]; then
-            VALID_TASKS+=($TASK_ID)
-        elif [ $INTEGRITY_CODE -eq 2 ]; then
-            # WARNING: Artifacts changed since bundle creation - regenerate
-            ./scripts/log-activity.sh WARN orchestrator validation "$TASK_ID: Bundle drift detected, regenerating"
-            tasker bundle generate $TASK_ID
-            VALID_TASKS+=($TASK_ID)
-        else
-            # CRITICAL: Missing dependencies or validation failure
-            ./scripts/log-activity.sh ERROR orchestrator validation "$TASK_ID: Bundle integrity FAILED"
-            tasker state task fail $TASK_ID "Bundle integrity validation failed" --category dependency
-        fi
-    done
-
-    # Update batch to only include valid tasks
-    if [ ${#VALID_TASKS[@]} -eq 0 ]; then
-        ./scripts/log-activity.sh ERROR orchestrator batch "No valid tasks in batch"
-        continue
-    fi
-    BATCH_ARRAY=(${VALID_TASKS[@]})
-
-    # 4. CREATE CHECKPOINT before spawning (crash recovery)
-    tasker state checkpoint create ${BATCH_ARRAY[@]}
-
-    # 5. Mark all tasks as started
-    for TASK_ID in ${BATCH_ARRAY[@]}; do
-        tasker state task start $TASK_ID
-    done
-
-    # 6. SPAWN EXECUTORS IN PARALLEL
-    # Use Task tool with multiple invocations in single message
-    # Each executor gets: TASKER_DIR and Bundle path
-    # Each executor returns: "T001: SUCCESS" or "T001: FAILED - reason"
-
-    # 7. AS EACH EXECUTOR RETURNS, update checkpoint
-    for TASK_ID in ${BATCH_ARRAY[@]}; do
-        if [ -f "$TASKER_DIR/bundles/${TASK_ID}-result.json" ]; then
-            STATUS=$(tasker bundle result-info "$TASKER_DIR/bundles/${TASK_ID}-result.json" | grep "^status:" | cut -d: -f2)
-            tasker state checkpoint update $TASK_ID $STATUS
-            ./scripts/log-activity.sh INFO orchestrator task-result "$TASK_ID: $STATUS"
-        else
-            ./scripts/log-activity.sh WARN orchestrator task-result "$TASK_ID: no result file"
-        fi
-    done
-
-    # 8. COMPLETE CHECKPOINT for this batch
-    tasker state checkpoint complete
-
-    # 9. Check for halt AFTER batch
-    tasker state check-halt
-    if [ $? -ne 0 ]; then
-        echo "Halt requested after batch. Stopping gracefully."
-        tasker evaluate --output $TASKER_DIR/reports/evaluation-report.txt
-        tasker state confirm-halt
-        break
-    fi
-
-    # 10. Continue to next batch
-done
 ```
+Execute task {TASK_ID}
+
+TASKER_DIR: {absolute path to .tasker directory}
+Bundle: {TASKER_DIR}/bundles/{TASK_ID}-bundle.json
+```
+
+Wait for all executors to return. Each returns only: `{TASK_ID}: SUCCESS` or `{TASK_ID}: FAILED - reason`
+
+**Step 7: Update Checkpoint**
+For each task in batch:
+- Use Bash: `tasker state checkpoint update {TASK_ID} {status}`
+
+**Step 8: Complete Checkpoint**
+- Use Bash: `tasker state checkpoint complete`
+
+**Step 9: Check for Halt After Batch**
+- Use Bash: `tasker state check-halt`
+- If halted: generate and display evaluation report, confirm halt, exit loop
+
+**Step 10: Continue to Next Batch**
 
 ---
 
@@ -448,26 +399,33 @@ This report includes:
 
 ## Evaluation Report (After Completion)
 
-**MANDATORY**: After all tasks complete (or execution halts), generate the evaluation report:
+**MANDATORY**: After all tasks complete (or execution halts), generate AND DISPLAY the evaluation report.
 
-```bash
-tasker evaluate --output {TASKER_DIR}/reports/evaluation-report.txt
-tasker evaluate --format json --output {TASKER_DIR}/reports/evaluation-report.json
-```
+### Step 1: Generate the report
 
-Display the report to the user. The report includes:
-- Planning quality (verdict from task-plan-verifier)
-- Execution summary (completed/failed/blocked/skipped counts)
-- First-attempt success rate (measures spec quality)
-- Verification breakdown (criteria pass/partial/fail, code quality)
-- Cost analysis (total tokens, total cost, per-task cost)
-- Failure analysis (which tasks failed and why)
-- Improvement patterns (common issues for process improvement)
+Use Bash tool:
+- `tasker evaluate --output {TASKER_DIR}/reports/evaluation-report.txt`
+- `tasker evaluate --format json --output {TASKER_DIR}/reports/evaluation-report.json`
 
-For metrics-only summary:
-```bash
-tasker evaluate --metrics-only
-```
+### Step 2: Read and display the report
+
+**CRITICAL:** Use the Read tool to read `{TASKER_DIR}/reports/evaluation-report.txt` and display its full contents to the user. Do NOT just say "report generated" - show the actual report.
+
+The report includes:
+- **Planning Quality** - plan verdict and issues at planning time
+- **Execution Summary** - completed/failed/blocked/skipped counts
+- **First-Attempt Success Rate** - measures spec quality
+- **Verification Breakdown** - criteria pass/partial/fail, code quality scores
+- **Cost Analysis** - total tokens, total cost, per-task cost
+- **Failure Analysis** - which tasks failed and why (if any)
+- **Improvement Patterns** - common issues for process improvement
+
+### Step 3: Summarize key outcomes
+
+After displaying the report, provide a brief summary:
+- Total tasks completed vs failed
+- Any notable failures or issues requiring attention
+- Suggested next steps (e.g., "run tests", "review changes", "check logs")
 
 ---
 

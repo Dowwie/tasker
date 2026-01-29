@@ -18,9 +18,9 @@ set -euo pipefail
 BASE_DIR="${1:-$(pwd)}"
 TASKER_DIR="$BASE_DIR/.tasker"
 
-echo "Initializing planning directories..."
+echo "Initializing .tasker/ directories..."
 echo "Base directory: $BASE_DIR"
-echo "Planning directory: $TASKER_DIR"
+echo "Tasker directory: $TASKER_DIR"
 
 # Create all required directories
 mkdir -p "$TASKER_DIR/artifacts"

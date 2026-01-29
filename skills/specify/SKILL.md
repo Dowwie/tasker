@@ -5,6 +5,8 @@ description: Interactive specification workflow - design vision, clarify capabil
 
 # Specify Workflow
 
+**IMPORTANT: All tasker working files go in `$TARGET_DIR/.tasker/`. Do NOT create any other directories like `project-planning/`, `planning/`, or similar. The `.tasker/` directory is the ONLY location for tasker artifacts.**
+
 An **agent-driven interactive workflow** that transforms ideas into actionable specifications with extracted capabilities, ready for `/plan` to decompose into tasks.
 
 ## Core Principles

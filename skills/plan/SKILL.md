@@ -12,6 +12,8 @@ tools:
 
 **CRITICAL: This is the PLAN skill. Do NOT call Skill(execute) or Skill(tasker:execute). Follow the instructions below directly.**
 
+**IMPORTANT: All tasker working files go in `$TARGET_DIR/.tasker/`. Do NOT create any other directories like `project-planning/`, `planning/`, or similar. The `.tasker/` directory is the ONLY location for tasker artifacts.**
+
 Decompose a specification into an executable task DAG. This is Phase 2 of the tasker workflow:
 
 ```
@@ -288,7 +290,7 @@ if [ -f "$CAPABILITY_MAP" ]; then
     echo "Capability map found from /specify workflow: $CAPABILITY_MAP"
     echo "Copying artifacts and skipping to physical phase..."
 
-    # Copy artifacts to planning directory
+    # Copy artifacts to .tasker/ directory
     cp "$CAPABILITY_MAP" "$TASKER_DIR/artifacts/capability-map.json"
 
     # Check for FSM artifacts from /specify workflow

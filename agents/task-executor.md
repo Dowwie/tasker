@@ -188,31 +188,39 @@ Bundle: {TASKER_DIR}/bundles/T001-bundle.json
 Target: $TARGET_DIR
 ```
 
-The verifier:
+The verifier is **self-completing**:
 - Runs in isolated context (no implementation memory)
 - Executes each `acceptance_criteria[].verification` command
-- Returns structured report with PASS/FAIL per criterion
-- Recommends PROCEED or BLOCK
-- Includes structured JSON block for programmatic parsing
+- Writes detailed results to `{TASKER_DIR}/bundles/T001-verification.json`
+- Returns ONLY `PASS` or `FAIL` (minimal context usage)
 
-**Wait for verifier response.** Parse the result:
-- If `**Verdict:** PASS` and `Recommendation: PROCEED` → continue to step 7
-- If `**Verdict:** FAIL` or `Recommendation: BLOCK` → fail task (step 7 failure path)
+**Wait for verifier response.** The verifier returns a single word:
+- `PASS` → continue to step 6 (success path)
+- `FAIL` → read verification file for details, then fail task (step 6 failure path)
 
-**Extract and persist verification data:**
-
-The verifier includes a JSON block at the end of its report. Extract it and persist:
+**On FAIL, read verification file for failure details:**
 
 ```bash
-# Parse the JSON block from verifier output
-# The JSON contains: task_id, verdict, recommendation, criteria, quality, tests
+# Only read on FAIL to get failure details
+cat {TASKER_DIR}/bundles/T001-verification.json | jq '.failure_details'
+```
+
+The verification file contains:
+- `verdict`, `recommendation`
+- `criteria[]` with scores and evidence
+- `failure_details` with what failed, evidence, and how to fix
+
+**Persist verification data from the file:**
+
+```bash
+# Read verification results and record to state
+VFILE="{TASKER_DIR}/bundles/T001-verification.json"
+VERDICT=$(jq -r '.verdict' "$VFILE")
+RECOMMEND=$(jq -r '.recommendation' "$VFILE")
 
 cd {TASKER_DIR}/.. && tasker state record-verification T001 \
-  --verdict PASS \
-  --recommendation PROCEED \
-  --criteria '[{"name": "...", "score": "PASS", "evidence": "..."}]' \
-  --quality '{"types": "PASS", "docs": "PASS", "patterns": "PASS", "errors": "PASS"}' \
-  --tests '{"coverage": "PASS", "assertions": "PASS", "edge_cases": "PARTIAL"}'
+  --verdict "$VERDICT" \
+  --recommendation "$RECOMMEND"
 ```
 
 ### 6. Complete or Fail (Self-Completion Protocol)
