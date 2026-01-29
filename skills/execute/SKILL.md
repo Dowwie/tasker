@@ -12,7 +12,7 @@ tools:
 
 **CRITICAL: This is the EXECUTE skill. Only use this after /plan has completed and task files exist in .tasker/tasks/. If no tasks exist, tell the user to run /tasker:plan first.**
 
-**IMPORTANT: All tasker working files are in `$TARGET_DIR/.tasker/`. Do NOT create or use any other directories like `project-planning/`, `planning/`, or similar. The `.tasker/` directory is the ONLY location for tasker artifacts.**
+**IMPORTANT: All tasker working files are in `$TARGET_DIR/.tasker/`. Do NOT create or use any other directories like `project-planning/`, `planning/`, or `schemas/` at the target project root. The `.tasker/` directory is the ONLY location for tasker artifacts (including `.tasker/schemas/` for JSON schemas).**
 
 Execute a task DAG via isolated subagents. This is Phase 3 of the tasker workflow:
 

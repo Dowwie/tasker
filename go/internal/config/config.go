@@ -114,27 +114,35 @@ func (c *Config) ResolvePlanningDir() string {
 }
 
 func (c *Config) ResolveSchemaDir() string {
+	// 1. Explicit override via environment
 	if c.SchemaDir != "" {
 		return c.SchemaDir
 	}
 
+	// 2. Inside .tasker/ directory (preferred location)
 	planningDir := c.ResolvePlanningDir()
 	if planningDir != "" {
-		parentDir := filepath.Dir(planningDir)
-		schemaPath := filepath.Join(parentDir, DefaultSchemaDirName)
+		schemaPath := filepath.Join(planningDir, DefaultSchemaDirName)
 		if _, err := os.Stat(schemaPath); err == nil {
 			return schemaPath
 		}
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return ""
+	// 3. Relative to plugin root (Claude Code plugin installation - fallback for copying)
+	if pluginRoot := os.Getenv("CLAUDE_PLUGIN_ROOT"); pluginRoot != "" {
+		schemaPath := filepath.Join(pluginRoot, DefaultSchemaDirName)
+		if _, err := os.Stat(schemaPath); err == nil {
+			return schemaPath
+		}
 	}
 
-	defaultPath := filepath.Join(cwd, DefaultSchemaDirName)
-	if _, err := os.Stat(defaultPath); err == nil {
-		return defaultPath
+	// 4. Relative to executable (for standalone binary installations)
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		schemaPath := filepath.Join(filepath.Dir(execDir), DefaultSchemaDirName)
+		if _, err := os.Stat(schemaPath); err == nil {
+			return schemaPath
+		}
 	}
 
 	return ""

@@ -11,7 +11,8 @@
 #   .tasker/tasks/      - For T001.json, T002.json, etc.
 #   .tasker/reports/    - For task-validation-report.md
 #   .tasker/bundles/    - For execution bundles
-#   .claude/logs/                - For activity logging
+#   .tasker/schemas/    - JSON schemas for validation (copied from plugin)
+#   .claude/logs/       - For activity logging
 
 set -euo pipefail
 
@@ -28,7 +29,18 @@ mkdir -p "$TASKER_DIR/inputs"
 mkdir -p "$TASKER_DIR/tasks"
 mkdir -p "$TASKER_DIR/reports"
 mkdir -p "$TASKER_DIR/bundles"
+mkdir -p "$TASKER_DIR/schemas"
 mkdir -p "$BASE_DIR/.claude/logs"
+
+# Copy schemas from plugin root if available
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+SOURCE_SCHEMAS="$PLUGIN_ROOT/schemas"
+
+if [ -d "$SOURCE_SCHEMAS" ] && [ -z "$(ls -A "$TASKER_DIR/schemas" 2>/dev/null)" ]; then
+    echo "Copying schemas from $SOURCE_SCHEMAS..."
+    cp -r "$SOURCE_SCHEMAS"/*.json "$TASKER_DIR/schemas/" 2>/dev/null || true
+fi
 
 # Verify creation
 echo ""

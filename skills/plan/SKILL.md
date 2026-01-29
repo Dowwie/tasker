@@ -12,7 +12,7 @@ tools:
 
 **CRITICAL: This is the PLAN skill. Do NOT call Skill(execute) or Skill(tasker:execute). Follow the instructions below directly.**
 
-**IMPORTANT: All tasker working files go in `$TARGET_DIR/.tasker/`. Do NOT create any other directories like `project-planning/`, `planning/`, or similar. The `.tasker/` directory is the ONLY location for tasker artifacts.**
+**IMPORTANT: All tasker working files go in `$TARGET_DIR/.tasker/`. Do NOT create any other directories like `project-planning/`, `planning/`, or `schemas/` at the target project root. The `.tasker/` directory is the ONLY location for tasker artifacts (including `.tasker/schemas/` for JSON schemas).**
 
 Decompose a specification into an executable task DAG. This is Phase 2 of the tasker workflow:
 
