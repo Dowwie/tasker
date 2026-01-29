@@ -2,8 +2,10 @@
 
 Execute tasks from a completed plan using isolated subagents.
 
-Use the orchestrator skill in **Execute Mode**.
+**IMPORTANT:** Follow the instructions in the `tasker:execute` skill directly. Do NOT invoke any other skill.
 
-Run: `Skill("orchestrator")`
-
-Then follow the **Execute Mode** instructions (phase 6).
+The execute workflow:
+1. Asks for the target project directory
+2. Verifies planning is complete
+3. Runs task-executor subagents for each ready task
+4. Handles checkpointing and crash recovery
