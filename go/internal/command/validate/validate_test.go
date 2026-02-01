@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dgordon/tasker/internal/validate"
+	"github.com/Dowwie/tasker/internal/validate"
 )
 
 func TestLoadTasksForValidation(t *testing.T) {

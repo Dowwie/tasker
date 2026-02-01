@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dgordon/tasker/internal/command"
-	"github.com/dgordon/tasker/internal/errors"
-	fsmlib "github.com/dgordon/tasker/internal/fsm"
-	"github.com/dgordon/tasker/internal/schema"
+	"github.com/Dowwie/tasker/internal/command"
+	"github.com/Dowwie/tasker/internal/errors"
+	fsmlib "github.com/Dowwie/tasker/internal/fsm"
+	"github.com/Dowwie/tasker/internal/schema"
 	"github.com/spf13/cobra"
 )
 

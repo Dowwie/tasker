@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dgordon/tasker/internal/errors"
+	"github.com/Dowwie/tasker/internal/errors"
 )
 
 // ValidationIssue represents a single validation failure with invariant reference.

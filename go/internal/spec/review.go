@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dgordon/tasker/internal/errors"
+	"github.com/Dowwie/tasker/internal/errors"
 )
 
 type Severity string

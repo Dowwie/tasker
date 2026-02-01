@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dgordon/tasker/internal/command"
-	statelib "github.com/dgordon/tasker/internal/state"
-	"github.com/dgordon/tasker/internal/validate"
+	"github.com/Dowwie/tasker/internal/command"
+	statelib "github.com/Dowwie/tasker/internal/state"
+	"github.com/Dowwie/tasker/internal/validate"
 	"github.com/spf13/cobra"
 )
 

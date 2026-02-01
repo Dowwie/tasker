@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dgordon/tasker/internal/command"
-	"github.com/dgordon/tasker/internal/state"
+	"github.com/Dowwie/tasker/internal/command"
+	"github.com/Dowwie/tasker/internal/state"
 	"github.com/spf13/cobra"
 )
 

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dgordon/tasker/internal/command"
+	"github.com/Dowwie/tasker/internal/command"
 	"github.com/spf13/cobra"
 )
 

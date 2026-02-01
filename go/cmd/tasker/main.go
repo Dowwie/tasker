@@ -3,18 +3,18 @@ package main
 import (
 	"fmt"
 
-	"github.com/dgordon/tasker/internal/command"
-	_ "github.com/dgordon/tasker/internal/command/archive"
-	_ "github.com/dgordon/tasker/internal/command/bundle"
-	_ "github.com/dgordon/tasker/internal/command/evaluate"
-	_ "github.com/dgordon/tasker/internal/command/fsm"
-	_ "github.com/dgordon/tasker/internal/command/hook"
-	_ "github.com/dgordon/tasker/internal/command/spec"
-	_ "github.com/dgordon/tasker/internal/command/state"
-	_ "github.com/dgordon/tasker/internal/command/stop"
-	_ "github.com/dgordon/tasker/internal/command/transform"
-	_ "github.com/dgordon/tasker/internal/command/tui"
-	_ "github.com/dgordon/tasker/internal/command/validate"
+	"github.com/Dowwie/tasker/internal/command"
+	_ "github.com/Dowwie/tasker/internal/command/archive"
+	_ "github.com/Dowwie/tasker/internal/command/bundle"
+	_ "github.com/Dowwie/tasker/internal/command/evaluate"
+	_ "github.com/Dowwie/tasker/internal/command/fsm"
+	_ "github.com/Dowwie/tasker/internal/command/hook"
+	_ "github.com/Dowwie/tasker/internal/command/spec"
+	_ "github.com/Dowwie/tasker/internal/command/state"
+	_ "github.com/Dowwie/tasker/internal/command/stop"
+	_ "github.com/Dowwie/tasker/internal/command/transform"
+	_ "github.com/Dowwie/tasker/internal/command/tui"
+	_ "github.com/Dowwie/tasker/internal/command/validate"
 )
 
 var (

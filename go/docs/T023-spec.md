@@ -74,7 +74,7 @@ Renders a detailed view of a single task showing:
 ## Dependencies
 
 - github.com/charmbracelet/lipgloss - Styling for terminal output
-- github.com/dgordon/tasker/internal/state - State management types
+- github.com/Dowwie/tasker/internal/state - State management types
 
 ## Testing
 

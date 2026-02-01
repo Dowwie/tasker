@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dgordon/tasker/internal/command"
-	speclib "github.com/dgordon/tasker/internal/spec"
+	"github.com/Dowwie/tasker/internal/command"
+	speclib "github.com/Dowwie/tasker/internal/spec"
 	"github.com/spf13/cobra"
 )
 

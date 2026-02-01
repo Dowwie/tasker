@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dgordon/tasker/internal/state"
+	"github.com/Dowwie/tasker/internal/state"
 )
 
 type AcceptanceCriterion struct {

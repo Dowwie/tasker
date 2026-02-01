@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/dgordon/tasker/internal/config"
-	"github.com/dgordon/tasker/internal/errors"
+	"github.com/Dowwie/tasker/internal/config"
+	"github.com/Dowwie/tasker/internal/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 

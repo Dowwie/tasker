@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dgordon/tasker/internal/state"
+	"github.com/Dowwie/tasker/internal/state"
 )
 
 type StateProvider interface {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dgordon/tasker/internal/logging"
+	"github.com/Dowwie/tasker/internal/logging"
 )
 
 const (

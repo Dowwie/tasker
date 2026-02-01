@@ -16,20 +16,35 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
       - name: Build all platforms
         run: make build-all
         working-directory: go
 
+      - name: Create archives
+        run: |
+          cd go/bin
+          VERSION=${GITHUB_REF_NAME#v}
+          for binary in tasker-*; do
+            platform="${binary#tasker-}"
+            os="${platform%-*}"
+            arch="${platform##*-}"
+            archive_name="tasker_${VERSION}_${os}_${arch}.tar.gz"
+            mv "$binary" tasker
+            tar -czf "$archive_name" tasker
+            rm tasker
+          done
+
       - name: Create checksums
         run: |
           cd go/bin
-          sha256sum * > checksums.txt
+          sha256sum *.tar.gz > checksums.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            go/bin/*
+            go/bin/*.tar.gz
+            go/bin/checksums.txt
           generate_release_notes: true

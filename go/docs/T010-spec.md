@@ -87,8 +87,8 @@ tasker fsm mermaid <fsm-dir>
 
 ## Dependencies
 
-- `github.com/dgordon/tasker/internal/errors` - Error types
-- `github.com/dgordon/tasker/internal/schema` - Schema validation for validate command
+- `github.com/Dowwie/tasker/internal/errors` - Error types
+- `github.com/Dowwie/tasker/internal/schema` - Schema validation for validate command
 - `github.com/spf13/cobra` - CLI framework
 
 ## Testing

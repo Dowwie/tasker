@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/dgordon/tasker/internal/state"
+	"github.com/Dowwie/tasker/internal/state"
 )
 
 type mockStateProvider struct {

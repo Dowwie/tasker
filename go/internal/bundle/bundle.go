@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dgordon/tasker/internal/errors"
-	"github.com/dgordon/tasker/internal/schema"
-	"github.com/dgordon/tasker/internal/state"
+	"github.com/Dowwie/tasker/internal/errors"
+	"github.com/Dowwie/tasker/internal/schema"
+	"github.com/Dowwie/tasker/internal/state"
 )
 
 const BundleVersion = "1.3"

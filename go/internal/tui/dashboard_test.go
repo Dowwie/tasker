@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dgordon/tasker/internal/state"
+	"github.com/Dowwie/tasker/internal/state"
 )
 
 func createDashboardTestState() *state.State {

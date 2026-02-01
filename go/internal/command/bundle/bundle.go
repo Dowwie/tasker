@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dgordon/tasker/internal/command"
-	bundlelib "github.com/dgordon/tasker/internal/bundle"
+	"github.com/Dowwie/tasker/internal/command"
+	bundlelib "github.com/Dowwie/tasker/internal/bundle"
 	"github.com/spf13/cobra"
 )
 

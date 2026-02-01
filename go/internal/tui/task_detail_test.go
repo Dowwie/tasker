@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dgordon/tasker/internal/state"
+	"github.com/Dowwie/tasker/internal/state"
 )
 
 func TestRenderTaskDetail(t *testing.T) {

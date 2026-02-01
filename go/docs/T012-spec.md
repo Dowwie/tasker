@@ -87,8 +87,8 @@ taskResult, err := fsm.CheckTaskCoverage(
 
 ## Dependencies
 
-- `github.com/dgordon/tasker/internal/fsm` - FSM types from compiler
-- `github.com/dgordon/tasker/internal/errors` - Error types
+- `github.com/Dowwie/tasker/internal/fsm` - FSM types from compiler
+- `github.com/Dowwie/tasker/internal/errors` - Error types
 
 ## Testing
 

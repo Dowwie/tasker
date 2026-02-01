@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dgordon/tasker/internal/config"
+	"github.com/Dowwie/tasker/internal/config"
 )
 
 func createTestSchema(t *testing.T, dir, name, content string) {

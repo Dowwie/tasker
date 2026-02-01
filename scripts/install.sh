@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Tasker installation script
-# Usage: curl -fsSL https://raw.githubusercontent.com/dgordon/tasker/main/scripts/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/Dowwie/tasker/main/scripts/install.sh | bash
 #
 # This script must be EXECUTED, never SOURCED
 # WRONG: source install.sh (will exit your shell on errors)
@@ -111,7 +111,7 @@ install_from_release() {
     tmp_dir=$(mktemp -d)
 
     log_info "Fetching latest release..."
-    local latest_url="https://api.github.com/repos/dgordon/tasker/releases/latest"
+    local latest_url="https://api.github.com/repos/Dowwie/tasker/releases/latest"
     local version
     local release_json
 
@@ -134,7 +134,7 @@ install_from_release() {
     log_info "Latest version: $version"
 
     local archive_name="tasker_${version#v}_${platform}.tar.gz"
-    local download_url="https://github.com/dgordon/tasker/releases/download/${version}/${archive_name}"
+    local download_url="https://github.com/Dowwie/tasker/releases/download/${version}/${archive_name}"
 
     if ! release_has_asset "$release_json" "$archive_name"; then
         log_warning "No prebuilt archive available for platform ${platform}. Falling back to source installation methods."
@@ -227,7 +227,7 @@ check_go() {
 install_with_go() {
     log_info "Installing tasker using 'go install'..."
 
-    if go install github.com/dgordon/tasker/go/cmd/tasker@latest; then
+    if go install github.com/Dowwie/tasker/go/cmd/tasker@latest; then
         log_success "tasker installed successfully via go install"
 
         local gobin
@@ -265,7 +265,7 @@ build_from_source() {
     cd "$tmp_dir"
     log_info "Cloning repository..."
 
-    if git clone --depth 1 https://github.com/dgordon/tasker.git; then
+    if git clone --depth 1 https://github.com/Dowwie/tasker.git; then
         cd tasker/go
         log_info "Building binary..."
 
@@ -453,12 +453,12 @@ main() {
     log_error "Installation failed"
     echo ""
     echo "Manual installation:"
-    echo "  1. Download from https://github.com/dgordon/tasker/releases/latest"
+    echo "  1. Download from https://github.com/Dowwie/tasker/releases/latest"
     echo "  2. Extract and move 'tasker' to your PATH"
     echo ""
     echo "Or install from source:"
     echo "  1. Install Go from https://go.dev/dl/"
-    echo "  2. Run: go install github.com/dgordon/tasker/go/cmd/tasker@latest"
+    echo "  2. Run: go install github.com/Dowwie/tasker/go/cmd/tasker@latest"
     echo ""
     exit 1
 }

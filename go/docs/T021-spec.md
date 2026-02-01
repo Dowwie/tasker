@@ -58,7 +58,7 @@ Retrieves the current state from the state provider for display in the TUI.
 
 - github.com/charmbracelet/bubbletea - TUI framework
 - github.com/charmbracelet/lipgloss - Styling for terminal output
-- github.com/dgordon/tasker/internal/state - State management
+- github.com/Dowwie/tasker/internal/state - State management
 
 ## Testing
 

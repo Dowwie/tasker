@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dgordon/tasker/internal/command"
-	"github.com/dgordon/tasker/internal/tui"
+	"github.com/Dowwie/tasker/internal/command"
+	"github.com/Dowwie/tasker/internal/tui"
 	"github.com/spf13/cobra"
 )
 

@@ -1,4 +1,4 @@
-module github.com/dgordon/tasker
+module github.com/Dowwie/tasker
 
 go 1.24.0
 

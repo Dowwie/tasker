@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	fsmlib "github.com/dgordon/tasker/internal/fsm"
+	fsmlib "github.com/Dowwie/tasker/internal/fsm"
 )
 
 func withPlanningDir(tmpDir string, fn func()) {

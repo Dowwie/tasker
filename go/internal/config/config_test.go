@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dgordon/tasker/internal/logging"
+	"github.com/Dowwie/tasker/internal/logging"
 )
 
 func TestConfig(t *testing.T) {
