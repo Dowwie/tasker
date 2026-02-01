@@ -2,6 +2,10 @@
 #
 # Tasker installation script
 # Usage: curl -fsSL https://raw.githubusercontent.com/Dowwie/tasker/main/scripts/install.sh | bash
+#        curl -fsSL ... | bash -s -- --easy-mode
+#
+# Options:
+#   --easy-mode    Auto-update PATH in shell rc files and register Claude plugin
 #
 # This script must be EXECUTED, never SOURCED
 # WRONG: source install.sh (will exit your shell on errors)
@@ -10,6 +14,8 @@
 #
 
 set -e
+
+EASY_MODE=0
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -31,6 +37,39 @@ log_warning() {
 
 log_error() {
     echo -e "${RED}Error:${NC} $1" >&2
+}
+
+update_path_in_rc() {
+    local install_dir=$1
+
+    if [[ ":$PATH:" == *":$install_dir:"* ]]; then
+        return 0
+    fi
+
+    if [[ "$EASY_MODE" -eq 1 ]]; then
+        local updated=0
+        for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
+            if [[ -e "$rc" ]] && [[ -w "$rc" ]]; then
+                if ! grep -F "$install_dir" "$rc" >/dev/null 2>&1; then
+                    echo "export PATH=\"\$PATH:$install_dir\"" >> "$rc"
+                    log_success "Updated PATH in $rc"
+                    updated=1
+                fi
+            fi
+        done
+        if [[ "$updated" -eq 1 ]]; then
+            log_warning "Restart your shell or run: source ~/.zshrc (or ~/.bashrc)"
+        fi
+    else
+        log_warning "$install_dir is not in your PATH"
+        echo ""
+        echo "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+        echo "  export PATH=\"\$PATH:$install_dir\""
+        echo ""
+        echo "Or re-run with --easy-mode to update automatically:"
+        echo "  curl -fsSL https://raw.githubusercontent.com/Dowwie/tasker/main/scripts/install.sh | bash -s -- --easy-mode"
+        echo ""
+    fi
 }
 
 release_has_asset() {
@@ -187,13 +226,7 @@ install_from_release() {
 
     log_success "tasker installed to $install_dir/tasker"
 
-    if [[ ":$PATH:" != *":$install_dir:"* ]]; then
-        log_warning "$install_dir is not in your PATH"
-        echo ""
-        echo "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-        echo "  export PATH=\"\$PATH:$install_dir\""
-        echo ""
-    fi
+    update_path_in_rc "$install_dir"
 
     cd - > /dev/null || cd "$HOME"
     rm -rf "$tmp_dir"
@@ -241,13 +274,7 @@ install_with_go() {
 
         resign_for_macos "$bin_dir/tasker"
 
-        if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
-            log_warning "$bin_dir is not in your PATH"
-            echo ""
-            echo "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-            echo "  export PATH=\"\$PATH:$bin_dir\""
-            echo ""
-        fi
+        update_path_in_rc "$bin_dir"
 
         return 0
     else
@@ -296,13 +323,7 @@ build_from_source() {
 
             LAST_INSTALL_PATH="$install_dir/tasker"
 
-            if [[ ":$PATH:" != *":$install_dir:"* ]]; then
-                log_warning "$install_dir is not in your PATH"
-                echo ""
-                echo "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-                echo "  export PATH=\"\$PATH:$install_dir\""
-                echo ""
-            fi
+            update_path_in_rc "$install_dir"
 
             cd - > /dev/null || cd "$HOME"
             rm -rf "$tmp_dir"
@@ -391,18 +412,47 @@ verify_installation() {
     warn_if_multiple_tasker || true
 
     if command -v tasker &> /dev/null; then
-        log_success "tasker is installed and ready!"
-        echo ""
+        log_success "tasker binary installed!"
         tasker --version 2>/dev/null || echo "tasker (development build)"
-        echo ""
-        echo "Get started:"
-        echo "  tasker --help"
-        echo ""
         return 0
     else
         log_error "tasker was installed but is not in PATH"
         return 1
     fi
+}
+
+register_claude_plugin() {
+    if ! command -v claude &> /dev/null; then
+        log_warning "Claude Code CLI not found - skipping plugin registration"
+        echo ""
+        echo "To complete setup, run these commands in Claude Code:"
+        echo "  /plugin marketplace add Dowwie/tasker"
+        echo "  /plugin install tasker"
+        echo ""
+        return 0
+    fi
+
+    log_info "Registering tasker plugin with Claude Code..."
+
+    if claude plugin marketplace add Dowwie/tasker 2>/dev/null; then
+        log_success "Marketplace registered"
+    else
+        log_warning "Marketplace may already be registered (continuing)"
+    fi
+
+    if claude plugin install tasker 2>/dev/null; then
+        log_success "Plugin installed"
+    else
+        log_warning "Plugin may already be installed (continuing)"
+    fi
+
+    log_success "tasker is ready!"
+    echo ""
+    echo "Start a new Claude Code session and use:"
+    echo "  /tasker:specify    - Start a new specification"
+    echo "  /tasker:plan       - Plan tasks from spec"
+    echo "  /tasker:execute    - Execute planned tasks"
+    echo ""
 }
 
 main() {
@@ -416,7 +466,7 @@ main() {
     log_info "Platform: $platform"
 
     if install_from_release "$platform"; then
-        verify_installation
+        verify_installation && register_claude_plugin
         exit 0
     fi
 
@@ -424,7 +474,7 @@ main() {
 
     if check_go; then
         if install_with_go; then
-            verify_installation
+            verify_installation && register_claude_plugin
             exit 0
         fi
     fi
@@ -446,7 +496,7 @@ main() {
     fi
 
     if build_from_source; then
-        verify_installation
+        verify_installation && register_claude_plugin
         exit 0
     fi
 
@@ -463,4 +513,26 @@ main() {
     exit 1
 }
 
-main "$@"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --easy-mode)
+            EASY_MODE=1
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: install.sh [--easy-mode]"
+            echo ""
+            echo "Options:"
+            echo "  --easy-mode    Auto-update PATH in shell rc files and register Claude plugin"
+            echo ""
+            exit 0
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            echo "Usage: install.sh [--easy-mode]"
+            exit 1
+            ;;
+    esac
+done
+
+main

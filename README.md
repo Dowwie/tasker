@@ -12,6 +12,21 @@ Humans define logic. Agents perform translation and execution.
 
 ---
 
+## Installation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Dowwie/tasker/main/scripts/install.sh | bash -s -- --easy-mode
+```
+
+This installs the `tasker` binary, updates your PATH, and registers the Claude Code plugin.
+
+After installation, start a new Claude Code session and use:
+- `/tasker:specify` - Start a new specification
+- `/tasker:plan` - Plan tasks from spec
+- `/tasker:execute` - Execute planned tasks
+
+---
+
 ## Pipeline
 
 Tasker enforces a three-stage pipeline: **specify → plan → execute**.
@@ -55,9 +70,6 @@ Often, you want to pause Tasker development and resume later, and you can gracef
 - to resume: ```tasker resume```
 
 Then run any tasker command again in Claude Code to pick up from where you left off.
-
-
-*Prerequisite: tasker must be in PATH (installed via install.sh to ~/.local/bin/tasker)*
 
 
 
