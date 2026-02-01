@@ -4,11 +4,7 @@
 
 # Tasker
 
-Tasker turns specifications into executable, verifiable behavior for AI-augmented software.
-
-It uses Spec-Driven Development (SDD): precise specifications are produced with agent assistance, then compiled into executable system behavior.
-
-Humans define logic. Agents perform translation and execution.
+Tasker is a *spec-driven development* workflow built for Claude Code.  It covers the entire pipeline:  spec -> plan -> execute.
 
 ---
 
@@ -18,58 +14,42 @@ Humans define logic. Agents perform translation and execution.
 curl -fsSL https://raw.githubusercontent.com/Dowwie/tasker/main/scripts/install.sh | bash -s -- --easy-mode
 ```
 
-This installs the `tasker` binary, updates your PATH, and registers the Claude Code plugin.
-
-After installation, start a new Claude Code session and use:
-- `/tasker:specify` - Start a new specification
-- `/tasker:plan` - Plan tasks from spec
-- `/tasker:execute` - Execute planned tasks
+This installs the `tasker` CLI and registers the Claude Code plugin. After installation, start a new session:
+- `/tasker:specify` — develop a specification
+- `/tasker:plan` — decompose into tasks
+- `/tasker:execute` — implement and verify
 
 ---
 
-## Pipeline
+## Specify → Plan → Execute
 
-Tasker enforces a three-stage pipeline: **specify → plan → execute**.
+Tasker enforces a three-stage pipeline.
 
-### Specify
-Human intent is exhaustively clarified.  
-Edge cases, state transitions, and invariants are made explicit before any implementation begins.
+**Specify** captures intent exhaustively. Edge cases, state transitions, and invariants are resolved before implementation begins.
 
-### Plan
-The specification is decomposed into isolated, context-bounded tasks with explicit inputs, outputs, and dependencies.
+**Plan** decomposes the specification into isolated, verifiable tasks with explicit dependencies.
 
-### Execute
-Agents implement tasks against the plan and verify results against the spec.
+**Execute** implements each task and verifies results against the spec.
 
-By the time code is written:
-- Behavior is defined
-- Edge cases are resolved
-- Logic is verified
-
-Implementation becomes translation, not discovery.
+By the time code is written, behavior is defined and implementation becomes translation.
 
 ---
 
-## A Compiler for Specifications
+## What Makes This Work
 
-Tasker acts as a compiler for requirements.
+**Exhaustive discovery.** Agents naturally stop asking after a few questions. Tasker uses reduce-while loops that continue until all requirement categories are covered. The loop pressure forces comprehensive specifications.
 
-Like a borrow checker, it enforces semantic safety:
-- Agents cannot implement behavior that was not declared
-- Architectural changes require explicit, recorded decisions
-- Undeclared state transitions and logic drift fail early
+**Steel thread first.** Before building features, validate the architecture. The primary end-to-end flow is identified and implemented early; if the foundation is flawed, you discover it in days, not months.
 
-Every artifact is traceable back to a specific requirement.
+**Task decomposition protocol.** Specifications are transformed into a directed acyclic graph through a structured six-phase process: logical decomposition, physical mapping, cross-cutting concerns, task definition, dependency analysis, and completeness audits. Every task is small enough to verify, specific enough to implement without questions.
 
+**Finite state machines as contracts.** State machines serve two purposes: shaping acceptance criteria during implementation, and producing documentation for ongoing understanding. The FSM JSON is canonical; diagrams are derived.
 
+**Decision registry.** Architectural decisions are captured in ADRs alongside specifications. Context is preserved, not lost to chat history.
 
-## Graceful Interrupt Workflow
+---
 
-Often, you want to pause Tasker development and resume later, and you can gracefully do so:
-- to stop (from any terminal): ```tasker stop```
-- to resume: ```tasker resume```
+## Resumable Workflow
 
-Then run any tasker command again in Claude Code to pick up from where you left off.
-
-
+Stop anytime with `tasker stop`, resume with `tasker resume`. Checkpoints are created before each batch; result files track every task outcome; git commits mark progress. Work survives interruptions.
 
