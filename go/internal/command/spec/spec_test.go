@@ -177,10 +177,12 @@ func TestResolveCmd(t *testing.T) {
 }
 
 func TestGenerateCmd(t *testing.T) {
-	t.Run("runs without error", func(t *testing.T) {
-		err := generateCmd.RunE(generateCmd, []string{})
-		if err != nil {
-			t.Errorf("generateCmd should succeed, got: %v", err)
+	t.Run("is a command group with subcommands", func(t *testing.T) {
+		if generateCmd.RunE != nil {
+			t.Error("generateCmd should be a command group without RunE")
+		}
+		if !generateCmd.HasSubCommands() {
+			t.Error("generateCmd should have subcommands")
 		}
 	})
 }

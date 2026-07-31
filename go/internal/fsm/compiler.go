@@ -35,15 +35,38 @@ type State struct {
 	Behaviors   []string `json:"behaviors,omitempty"`
 }
 
+// TriggerValue accepts both trigger forms allowed by
+// fsm-transitions.schema.json: a plain string (legacy) or a structured
+// {"type": ..., "name": ...} object (preferred). It normalizes to the
+// trigger name for rendering and comparison.
+type TriggerValue string
+
+func (t *TriggerValue) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*t = TriggerValue(s)
+		return nil
+	}
+	var obj struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("trigger must be a string or {type, name} object: %w", err)
+	}
+	*t = TriggerValue(obj.Name)
+	return nil
+}
+
 type Transition struct {
-	ID            string   `json:"id"`
-	FromState     string   `json:"from_state"`
-	ToState       string   `json:"to_state"`
-	Trigger       string   `json:"trigger"`
-	Guards        []Guard  `json:"guards,omitempty"`
-	Behaviors     []string `json:"behaviors,omitempty"`
-	SpecRef       *SpecRef `json:"spec_ref,omitempty"`
-	IsFailurePath bool     `json:"is_failure_path,omitempty"`
+	ID            string       `json:"id"`
+	FromState     string       `json:"from_state"`
+	ToState       string       `json:"to_state"`
+	Trigger       TriggerValue `json:"trigger"`
+	Guards        []Guard      `json:"guards,omitempty"`
+	Behaviors     []string     `json:"behaviors,omitempty"`
+	SpecRef       *SpecRef     `json:"spec_ref,omitempty"`
+	IsFailurePath bool         `json:"is_failure_path,omitempty"`
 }
 
 type Machine struct {
@@ -326,7 +349,7 @@ func (c *Compiler) compileWorkflow(workflow *Workflow, level string) (*Machine, 
 			ID:        c.nextTransitionID(),
 			FromState: prevState.ID,
 			ToState:   state.ID,
-			Trigger:   stepName,
+			Trigger:   TriggerValue(stepName),
 			Behaviors: step.Behaviors,
 			SpecRef: &SpecRef{
 				Quote:    coalesce(step.Description, stepName),
@@ -439,7 +462,7 @@ func (c *Compiler) addVariantTransitions(variant *WorkflowVariant, states *[]Sta
 		ID:        c.nextTransitionID(),
 		FromState: fromState.ID,
 		ToState:   toState.ID,
-		Trigger:   condition,
+		Trigger:   TriggerValue(condition),
 		Guards:    guards,
 		SpecRef: &SpecRef{
 			Quote:    fmt.Sprintf("If %s, then %s", condition, outcome),
@@ -508,7 +531,7 @@ func (c *Compiler) addFailureTransitions(failure *WorkflowFailure, states *[]Sta
 			ID:            c.nextTransitionID(),
 			FromState:     fromState.ID,
 			ToState:       failureState.ID,
-			Trigger:       condition,
+			Trigger:       TriggerValue(condition),
 			Guards:        guards,
 			IsFailurePath: true,
 			SpecRef: &SpecRef{

@@ -76,7 +76,7 @@ func TestConfig(t *testing.T) {
 		clearEnv()
 
 		tmpDir := t.TempDir()
-		planningDir := filepath.Join(tmpDir, DefaultPlanningDirName)
+		planningDir := filepath.Join(tmpDir, DefaultTaskerDirName)
 		if err := os.MkdirAll(planningDir, 0755); err != nil {
 			t.Fatalf("failed to create planning dir: %v", err)
 		}
@@ -114,9 +114,8 @@ func TestConfig(t *testing.T) {
 		clearEnv()
 
 		tmpDir := t.TempDir()
-		planningDir := filepath.Join(tmpDir, DefaultPlanningDirName)
-		schemaDir := filepath.Join(tmpDir, DefaultSchemaDirName)
-		os.MkdirAll(planningDir, 0755)
+		planningDir := filepath.Join(tmpDir, DefaultTaskerDirName)
+		schemaDir := filepath.Join(planningDir, DefaultSchemaDirName)
 		os.MkdirAll(schemaDir, 0755)
 
 		os.Setenv(EnvPlanningDir, planningDir)
@@ -324,7 +323,7 @@ func TestResolveSchemaDirFromCwd(t *testing.T) {
 	clearEnv()
 
 	tmpDir := t.TempDir()
-	schemaDir := filepath.Join(tmpDir, DefaultSchemaDirName)
+	schemaDir := filepath.Join(tmpDir, DefaultTaskerDirName, DefaultSchemaDirName)
 	os.MkdirAll(schemaDir, 0755)
 
 	origWd, _ := os.Getwd()

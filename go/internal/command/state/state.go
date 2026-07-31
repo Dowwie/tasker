@@ -313,6 +313,10 @@ var loadTasksCmd = &cobra.Command{
 			return fmt.Errorf("failed to load state: %w", err)
 		}
 
+		if state.Tasks == nil {
+			state.Tasks = make(map[string]statelib.Task)
+		}
+
 		for id, task := range tasks {
 			if _, exists := state.Tasks[id]; !exists {
 				state.Tasks[id] = task
@@ -609,8 +613,8 @@ var validateCmd = &cobra.Command{
 		}
 
 		schemaMap := map[string]string{
-			"capability_map": "../schemas/capability-map.schema.json",
-			"physical_map":   "../schemas/physical-map.schema.json",
+			"capability_map": "schemas/capability-map.schema.json",
+			"physical_map":   "schemas/physical-map.schema.json",
 		}
 
 		artifactPath, ok := pathMap[artifactType]

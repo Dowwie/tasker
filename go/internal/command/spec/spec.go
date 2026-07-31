@@ -711,8 +711,10 @@ Resolution types:
 
 		fmt.Printf("Added resolution: %s -> %s\n", weaknessID, resTypeStr)
 
-		ready, remaining, _ := speclib.IsReadyToProceed(planningDir)
-		if ready {
+		ready, remaining, err := speclib.IsReadyToProceed(planningDir)
+		if err != nil {
+			fmt.Printf("Status: UNKNOWN - could not evaluate readiness: %v (run 'tasker spec review <spec> --save' first)\n", err)
+		} else if ready {
 			fmt.Println("Status: READY - all critical weaknesses resolved")
 		} else {
 			fmt.Printf("Status: BLOCKED - %d unresolved critical weaknesses\n", remaining)

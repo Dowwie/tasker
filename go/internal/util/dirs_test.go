@@ -19,7 +19,7 @@ func TestInitDirectories(t *testing.T) {
 			t.Fatalf("InitDirectories failed: %v", err)
 		}
 
-		expectedPath := filepath.Join(tmpDir, PlanningDirName)
+		expectedPath := filepath.Join(tmpDir, TaskerDirName)
 		if planningPath != expectedPath {
 			t.Errorf("unexpected planning path: got %s, want %s", planningPath, expectedPath)
 		}

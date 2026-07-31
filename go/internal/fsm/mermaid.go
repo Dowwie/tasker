@@ -40,7 +40,7 @@ func GenerateMermaid(machineName string, states *StatesFile, transitions *Transi
 	sb.WriteString("\n")
 
 	for _, t := range transitions.Transitions {
-		safeTrigger := strings.ReplaceAll(t.Trigger, "\"", "'")
+		safeTrigger := strings.ReplaceAll(string(t.Trigger), "\"", "'")
 		if len(safeTrigger) > 30 {
 			safeTrigger = safeTrigger[:27] + "..."
 		}
@@ -127,7 +127,7 @@ func GenerateNotes(machineName string, states *StatesFile, transitions *Transiti
 			guards = "-"
 		}
 
-		trigger := t.Trigger
+		trigger := string(t.Trigger)
 		if len(trigger) > 25 {
 			trigger = trigger[:22] + "..."
 		}
